@@ -477,3 +477,29 @@ html.theme-onyx .sub-bar {
   background: rgba(0,0,0,0.85) !important;
   border-color: rgba(255,255,255,0.14) !important;
 }
+
+/* ── MINI MAP ─────────────────────────────────────────────── */
+.mini-map-ring {
+  border: 1px dashed rgba(103, 232, 249, 0.6);
+}
+.mini-map-circle {
+  border: 2px solid rgba(103, 232, 249, 0.55);
+  box-shadow: 0 0 22px rgba(62, 224, 255, 0.45);
+}
+
+html.theme-onyx .mini-map-ring {
+  border: 1px dashed rgba(255, 255, 255, 0.35) !important;
+}
+html.theme-onyx .mini-map-circle {
+  border: 2px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: none !important;
+}
+
+/* ── COLOR PICKER CANVAS SAFETY ──────────────────────────── */
+.color-picker-wheel {
+  display: block;
+  width: 240px !important;
+  height: 240px !important;
+  max-width: 240px !important;
+  border-radius: 50%;
+}
