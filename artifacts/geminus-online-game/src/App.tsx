@@ -584,7 +584,7 @@ export default function App() {
                     const base = BASE_ITEMS.find(b => b.id === item.baseItemId)
                     const gems = item.socketedGems || []
                     return (
-                      <div key={item.instanceId} style={{ position: 'relative' }}>
+                      <div key={item.instanceId} style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
                         <div className="inventory-slot" onClick={() => setEquipPopup(prev => prev === item.instanceId ? null : item.instanceId)}>
                           {gems.length > 0 && (
                             <div className="gem-overlays-container">
@@ -596,12 +596,12 @@ export default function App() {
                           <span className="item-tier-label">T{item.tier}</span>
                         </div>
                         {equipPopup === item.instanceId && (
-                          <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'rgba(3,12,20,0.97)', border: '1px solid rgba(62,224,255,0.5)', borderRadius: '10px', padding: '8px', minWidth: '120px', boxShadow: '0 4px 20px rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textAlign: 'center', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{base?.name || 'Item'}</span>
+                          <div style={{ marginTop: '4px', zIndex: 200, background: 'rgba(3,12,20,0.97)', border: '1px solid rgba(62,224,255,0.5)', borderRadius: '10px', padding: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{base?.name || 'Item'}</span>
                             <span style={{ fontSize: '9px', color: '#64748b' }}>T{item.tier} · {base?.subType}</span>
                             <button
                               onClick={(e) => { e.stopPropagation(); equipItem(item.instanceId) }}
-                              style={{ marginTop: '4px', width: '100%', padding: '6px 0', borderRadius: '6px', background: 'rgba(62,224,255,0.15)', border: '1px solid rgba(62,224,255,0.6)', color: '#3EE0FF', fontSize: '11px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}
+                              style={{ marginTop: '2px', width: '100%', padding: '6px 0', borderRadius: '6px', background: 'rgba(62,224,255,0.15)', border: '1px solid rgba(62,224,255,0.6)', color: '#3EE0FF', fontSize: '11px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}
                             >{Object.values(player.equipment).includes(item.instanceId) ? '✓ Equipped' : '[Equip]'}</button>
                             <button
                               onClick={(e) => { e.stopPropagation(); setEquipPopup(null) }}
@@ -1012,23 +1012,16 @@ export default function App() {
 
               {/* Attribute Focus Selector — shows when free levels available */}
               {canAllocate && (
-                <div style={{ flexShrink: 0, padding: '6px 8px', background: 'rgba(20,12,0,0.9)', borderRadius: '8px', border: '1px solid rgba(255,159,10,0.45)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ fontSize: '10px', color: '#FF9F0A', fontWeight: 700, letterSpacing: '0.04em' }}>Select Attribute Focus</span>
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%', justifyContent: 'center' }}>
+                <div style={{ flexShrink: 0, paddingTop: '4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <span style={{ fontSize: '10px', color: '#FF6B00', fontWeight: 700, letterSpacing: '0.04em' }}>Select:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'center' }}>
                     {getAttributeFocusOrder(player.race).map((stat, idx, arr) => (
                       <span key={stat} style={{ display: 'flex', alignItems: 'center' }}>
                         <button
                           onClick={() => spendPoint(stat)}
-                          style={{
-                            background: 'none', border: 'none', cursor: 'pointer', padding: '2px 5px',
-                            color: idx === arr.length - 1 ? '#FFD60A' : '#FF9F0A',
-                            fontSize: idx === arr.length - 1 ? '12px' : '11px',
-                            fontWeight: 800,
-                            fontFamily: 'monospace',
-                            textShadow: idx === arr.length - 1 ? '0 0 12px rgba(255,214,10,0.9)' : '0 0 6px rgba(255,159,10,0.5)'
-                          }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 3px', color: '#FF6B00', fontSize: '11.5px', fontWeight: 800, fontFamily: 'monospace' }}
                         >{stat} ({freeLevels})</button>
-                        {idx < arr.length - 1 && <span style={{ color: 'rgba(255,159,10,0.35)', fontSize: '11px', margin: '0' }}>|</span>}
+                        {idx < arr.length - 1 && <span style={{ color: '#FF6B00', fontSize: '11px', opacity: 0.5 }}>|</span>}
                       </span>
                     ))}
                   </div>
