@@ -12,6 +12,26 @@ const races: Record<string, any> = {
 
 const GDD = { XP_BASE: 200, XP_GROWTH: 1.12, AP_PER_LEVEL: 40, DAMAGE_CONST: 90, AC_REDUCTION: 0.5 }
 
+// Every 50 levels the bank limit goes up by 1 (starts at 1)
+// Returns stats ordered so primary stat is rightmost
+function getAttributeFocusOrder(raceKey: string): string[] {
+  const rd = races[raceKey] || races.human
+  const primaryStat = rd.primaryStat // DEX for fighters, WIS for casters
+  const allStats = ['DEX', 'STR', 'NTL', 'WIS', 'VIT']
+  // Remove primary stat and put it last (rightmost)
+  const others = allStats.filter(s => s !== primaryStat)
+  return [...others, primaryStat]
+}
+
+function getLevelBank(level: number): number {
+  return 1 + Math.floor(level / 50)
+}
+
+// Returns banked free levels (each AP_PER_LEVEL = 1 free level)
+function getBankedLevels(attributePoints: number): number {
+  return Math.floor(attributePoints / GDD.AP_PER_LEVEL)
+}
+
 const BESTIARY: Record<string, any> = {
   Z01: {
     zoneName: 'Aether Silver Cavern', minLevel: 1,
@@ -251,6 +271,8 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<Record<string, any[]>>({ main: [], sales: [], clan: [], groups: [], g1: [], g2: [], g3: [], g4: [] })
   const [chatInput, setChatInput] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
+  const [equipPopup, setEquipPopup] = useState<string | null>(null)
+  const [pendingLevelUp, setPendingLevelUp] = useState(false) // blocked from killing until free levels spent
   const [chatNameColor, setChatNameColor] = useState('#3EE0FF')
   const [inboxOpen, setInboxOpen] = useState(false)
   const [groupNames, setGroupNames] = useState<Record<string, string>>({ g1: 'Group-1', g2: 'Group-2', g3: 'Group-3', g4: 'Group-4' })
@@ -264,6 +286,15 @@ export default function App() {
   const showToast = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(''), 2800)
+  }, [])
+
+  // Theme-color meta tag for Safari status bar
+  useEffect(() => {
+    const meta = document.createElement('meta')
+    meta.name = 'theme-color'
+    meta.content = '#03080c'
+    document.head.appendChild(meta)
+    return () => { document.head.removeChild(meta) }
   }, [])
 
   // Init
@@ -388,6 +419,10 @@ export default function App() {
     p.attributePoints -= GDD.AP_PER_LEVEL
     calcDerived(p)
     setPlayer(p); savePlayer(p)
+    // Clear pending level up block if now under bank limit
+    const remaining = getBankedLevels(p.attributePoints)
+    const max = getLevelBank(p.level)
+    if (remaining < max) setPendingLevelUp(false)
     showToast('Core attributes upgraded.')
   }
 
@@ -424,6 +459,16 @@ export default function App() {
 
     if (m.currentHP <= 0) {
       m.currentHP = 0
+      // Check level bank — if player has too many banked levels, block the kill
+      const bankedLevels = getBankedLevels(p.attributePoints || 0)
+      const maxBank = getLevelBank(p.level)
+      if (bankedLevels >= maxBank) {
+        setPendingLevelUp(true)
+        setCombatLog({ l1: 'Level Bank Full — spend your free levels!', l2: 'Select an attribute to continue.', l3: `Bank limit: ${maxBank} at Level ${p.level}` })
+        setEngaged(false)
+        calcDerived(p); setPlayer(p); savePlayer(p)
+        return
+      }
       const newStats = { ...battleStats, kills: battleStats.kills + 1, rounds: battleStats.rounds + 1, oneHitKills: battleStats.oneHitKills + (newTurn === 1 ? 1 : 0) }
       setBattleStats(newStats)
       try { localStorage.setItem('geminus_battle_stats', JSON.stringify(newStats)) } catch {}
@@ -445,6 +490,10 @@ export default function App() {
         setBattleStats(ls)
         try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ls)) } catch {}
         showToast(`⬆ Level Up! Level ${p.level}`)
+        // Check if now over bank limit after leveling
+        const newBanked = getBankedLevels(p.attributePoints)
+        const newMax = getLevelBank(p.level)
+        if (newBanked >= newMax) setPendingLevelUp(true)
       }
       setCombatLog({ l1: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, l2: '', l3: '⚔ Enemy is dead! Press BATTLE' })
       setEngaged(false)
@@ -535,15 +584,31 @@ export default function App() {
                     const base = BASE_ITEMS.find(b => b.id === item.baseItemId)
                     const gems = item.socketedGems || []
                     return (
-                      <div key={item.instanceId} className="inventory-slot" onClick={() => handleItemTap(item.instanceId)}>
-                        {gems.length > 0 && (
-                          <div className="gem-overlays-container">
-                            {gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}
-                            {gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}
+                      <div key={item.instanceId} style={{ position: 'relative' }}>
+                        <div className="inventory-slot" onClick={() => setEquipPopup(prev => prev === item.instanceId ? null : item.instanceId)}>
+                          {gems.length > 0 && (
+                            <div className="gem-overlays-container">
+                              {gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}
+                              {gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}
+                            </div>
+                          )}
+                          <div className="item-icon-wrapper"><ItemIcon subType={base?.subType || ''} /></div>
+                          <span className="item-tier-label">T{item.tier}</span>
+                        </div>
+                        {equipPopup === item.instanceId && (
+                          <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'rgba(3,12,20,0.97)', border: '1px solid rgba(62,224,255,0.5)', borderRadius: '10px', padding: '8px', minWidth: '120px', boxShadow: '0 4px 20px rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textAlign: 'center', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{base?.name || 'Item'}</span>
+                            <span style={{ fontSize: '9px', color: '#64748b' }}>T{item.tier} · {base?.subType}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); equipItem(item.instanceId) }}
+                              style={{ marginTop: '4px', width: '100%', padding: '6px 0', borderRadius: '6px', background: 'rgba(62,224,255,0.15)', border: '1px solid rgba(62,224,255,0.6)', color: '#3EE0FF', fontSize: '11px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}
+                            >{Object.values(player.equipment).includes(item.instanceId) ? '✓ Equipped' : '[Equip]'}</button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEquipPopup(null) }}
+                              style={{ width: '100%', padding: '4px 0', borderRadius: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#64748b', fontSize: '10px', cursor: 'pointer' }}
+                            >Cancel</button>
                           </div>
                         )}
-                        <div className="item-icon-wrapper"><ItemIcon subType={base?.subType || ''} /></div>
-                        <span className="item-tier-label">T{item.tier}</span>
                       </div>
                     )
                   })}
@@ -569,22 +634,34 @@ export default function App() {
     )
   }
 
-  const handleItemTap = (instanceId: string) => {
+  const unequipItem = (instanceId: string) => {
     if (!instanceId) return
     const item = player.inventory.find((i: any) => i.instanceId === instanceId); if (!item) return
     const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
-    const isEquipped = Object.values(player.equipment).includes(instanceId)
     const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
-    if (isEquipped) {
-      for (const slot in p.equipment) if (p.equipment[slot] === instanceId) p.equipment[slot] = null
-      showToast(`${base.name} unequipped.`)
-    } else {
-      const slotMap: Record<string, string> = { Sword: 'Weapon 1', Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves', Leggings: 'Leggings', Boots: 'Boots', Fire: 'Spell 1', Air: 'Spell 2', Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory' }
-      const slot = slotMap[base.subType]
-      if (slot) { p.equipment[slot] = instanceId; showToast(`${base.name} equipped to ${slot}.`) }
-    }
+    for (const slot in p.equipment) if (p.equipment[slot] === instanceId) p.equipment[slot] = null
     calcDerived(p); setPlayer(p); savePlayer(p)
-    if (activeTab === 'equipment' || activeTab === 'inventory') setActiveTab(activeTab)
+    showToast(`${base.name} unequipped.`)
+  }
+
+  const equipItem = (instanceId: string) => {
+    if (!instanceId) return
+    const item = player.inventory.find((i: any) => i.instanceId === instanceId); if (!item) return
+    const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
+    const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
+    const slotMap: Record<string, string> = { Sword: 'Weapon 1', Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves', Leggings: 'Leggings', Boots: 'Boots', Fire: 'Spell 1', Air: 'Spell 2', Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory' }
+    const slot = slotMap[base.subType]
+    if (slot) {
+      p.equipment[slot] = instanceId
+      calcDerived(p); setPlayer(p); savePlayer(p)
+      showToast(`${base.name} equipped to ${slot}.`)
+    }
+    setEquipPopup(null)
+  }
+
+  const handleItemTap = (instanceId: string) => {
+    // Legacy — only used by inventory now to show popup
+    setEquipPopup(prev => prev === instanceId ? null : instanceId)
   }
 
   const resetSave = () => {
@@ -604,7 +681,7 @@ export default function App() {
     <>
       <canvas ref={smokeRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, pointerEvents: 'none', opacity: 0.9 }} />
 
-      <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column' }} onClick={(e) => { if (equipPopup && !(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null) }}>
         <div style={{ position: 'relative', zIndex: 10, width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', padding: '10px', gap: '10px', paddingBottom: '112px' }}>
 
@@ -626,19 +703,11 @@ export default function App() {
                         <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Race:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{races[player.race]?.raceName || player.race}</span></p>
                         <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>A-Spec:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.archetype} · {player.cci}</span></p>
 
-                        <div style={{ paddingTop: '4px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 10px' }}>
+                        <div style={{ paddingTop: '4px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px' }}>
                           {(['DEX', 'STR', 'WIS', 'NTL', 'VIT'] as const).map(stat => (
-                            <div key={stat} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-                                <span style={{ color: '#fff', fontWeight: 700 }}>{stat.charAt(0) + stat.slice(1).toLowerCase()}:</span>
-                                <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{fmt(player.baseStats[stat])}</span>
-                              </div>
-                              <button
-                                className={`attr-btn${canAllocate ? ' glow-white' : ''}`}
-                                disabled={!canAllocate}
-                                onClick={() => spendPoint(stat)}
-                                title={canAllocate ? `Spend 1 Level (${GDD.AP_PER_LEVEL} AP)` : 'No attribute levels available'}
-                              >+</button>
+                            <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                              <span style={{ color: '#fff', fontWeight: 700 }}>{stat.charAt(0) + stat.slice(1).toLowerCase()}:</span>
+                              <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{fmt(player.baseStats[stat])}</span>
                             </div>
                           ))}
                           <div style={{ display: 'flex', alignItems: 'center', fontSize: '12px' }}>
@@ -762,8 +831,16 @@ export default function App() {
                           const gems = item?.socketedGems || []
                           return (
                             <div key={slot.name} className="equipment-slot-wrapper">
-                              <div className="equipment-slot-title"><span>{slot.name}</span></div>
-                              <div className="equipment-slot-content" onClick={() => instId && handleItemTap(instId)}>
+                              <div className="equipment-slot-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span>{slot.name}</span>
+                                {instId && (
+                                  <button
+                                    onClick={() => unequipItem(instId)}
+                                    style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.02em', flexShrink: 0 }}
+                                  >Unequip</button>
+                                )}
+                              </div>
+                              <div className="equipment-slot-content" style={{ cursor: 'default' }}>
                                 {gems.length > 0 && (
                                   <div className="gem-overlays-container">
                                     {gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}
@@ -881,7 +958,7 @@ export default function App() {
             </div>
 
             {/* ── COMBAT CONSOLE ── */}
-            <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20, minHeight: '182px', height: '182px', justifyContent: 'space-between' }}>
+            <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20, minHeight: '182px', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '9.5px', gap: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flex: 1, minWidth: 0 }}>
                   <span style={{ color: '#fff', fontWeight: 600, flexShrink: 0 }}>Last Item:</span>
@@ -932,6 +1009,31 @@ export default function App() {
                 <div style={{ fontSize: '10.5px', lineHeight: '1.3', fontWeight: 700, color: '#fff', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{combatLog.l2}</div>
                 <div style={{ fontSize: '10.5px', lineHeight: '1.3', fontWeight: 800, color: '#fbbf24', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{combatLog.l3}</div>
               </div>
+
+              {/* Attribute Focus Selector — shows when free levels available */}
+              {canAllocate && (
+                <div style={{ flexShrink: 0, padding: '6px 8px', background: 'rgba(20,12,0,0.9)', borderRadius: '8px', border: '1px solid rgba(255,159,10,0.45)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#FF9F0A', fontWeight: 700, letterSpacing: '0.04em' }}>Select Attribute Focus</span>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', width: '100%', justifyContent: 'center' }}>
+                    {getAttributeFocusOrder(player.race).map((stat, idx, arr) => (
+                      <span key={stat} style={{ display: 'flex', alignItems: 'center' }}>
+                        <button
+                          onClick={() => spendPoint(stat)}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer', padding: '2px 5px',
+                            color: idx === arr.length - 1 ? '#FFD60A' : '#FF9F0A',
+                            fontSize: idx === arr.length - 1 ? '12px' : '11px',
+                            fontWeight: 800,
+                            fontFamily: 'monospace',
+                            textShadow: idx === arr.length - 1 ? '0 0 12px rgba(255,214,10,0.9)' : '0 0 6px rgba(255,159,10,0.5)'
+                          }}
+                        >{stat} ({freeLevels})</button>
+                        {idx < arr.length - 1 && <span style={{ color: 'rgba(255,159,10,0.35)', fontSize: '11px', margin: '0' }}>|</span>}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* ── CHAT CONSOLE ── */}
