@@ -407,3 +407,73 @@ html.theme-onyx {
   --liquid-rim-glow: inset 0 1px 1.5px 0 rgba(255,255,255,0.25), inset 0 -1px 1px 0 rgba(0,0,0,0.8), 0 8px 26px rgba(0,0,0,0.9);
 }
 html.theme-onyx body { background: radial-gradient(circle at 50% 15%, #121216 0%, #08080a 45%, #000000 100%) !important; }
+
+/* ── ONYX THEME — ALL BUTTON OVERRIDES ─────────────────────── */
+html.theme-onyx .hud-nav-pill,
+html.theme-onyx .game-key,
+html.theme-onyx .battle-mode-btn,
+html.theme-onyx .footer-tab-button,
+html.theme-onyx .chat-expand-btn,
+html.theme-onyx .icon-btn,
+html.theme-onyx .sub-btn {
+  background: linear-gradient(180deg, #18181c 0%, #060608 100%) !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.8), inset 0 1px 1px rgba(255,255,255,0.14) !important;
+  color: #ffffff !important;
+}
+html.theme-onyx .hud-nav-pill:hover,
+html.theme-onyx .game-key:hover,
+html.theme-onyx .footer-tab-button:hover,
+html.theme-onyx .chat-expand-btn:hover {
+  background: linear-gradient(180deg, #24242a 0%, #0d0d12 100%) !important;
+  border-color: rgba(255,255,255,0.45) !important;
+  box-shadow: 0 0 14px rgba(255,255,255,0.25), inset 0 1px 2px rgba(255,255,255,0.3) !important;
+}
+html.theme-onyx .hud-nav-pill.tab-active,
+html.theme-onyx .game-key:active,
+html.theme-onyx .footer-tab-button.active,
+html.theme-onyx .chat-expand-btn.active,
+html.theme-onyx .inbox-btn.active,
+html.theme-onyx .sub-btn.active {
+  background: #000000 !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 18px rgba(255,255,255,0.4), inset 0 1px 2px rgba(255,255,255,0.7) !important;
+}
+html.theme-onyx .info-cell {
+  background: rgba(0,0,0,0.65) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+}
+html.theme-onyx .glass-panel {
+  --liquid-glass-bg: rgba(6,7,10,0.72);
+  --liquid-glass-border: rgba(255,255,255,0.14);
+  --liquid-glass-specular: linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(0,0,0,0.5) 24%, rgba(255,255,255,0.02) 55%, rgba(0,0,0,0.85) 100%);
+  --liquid-rim-glow: inset 0 1px 1.5px 0 rgba(255,255,255,0.25), inset 0 -1px 1px 0 rgba(0,0,0,0.8), 0 8px 26px rgba(0,0,0,0.9);
+}
+html.theme-onyx .combat-engage-btn {
+  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%) !important;
+  border: 1px solid #ffffff !important;
+  color: #000000 !important;
+  box-shadow: 0 0 16px rgba(255,255,255,0.45), inset 0 1px 1.5px rgba(255,255,255,0.9) !important;
+}
+html.theme-onyx .combat-engage-btn.active {
+  background: linear-gradient(180deg, #18181c 0%, #000000 100%) !important;
+  border: 1.5px solid rgba(255,255,255,0.45) !important;
+  color: #ffffff !important;
+}
+html.theme-onyx .attr-btn.glow-white,
+html.theme-onyx .attr-btn:not(:disabled) {
+  background: #000000 !important;
+  border: 1.5px solid #ffffff !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 12px rgba(255,255,255,0.45) !important;
+  animation: onyxPulseGlow 1.8s infinite alternate ease-in-out !important;
+}
+@keyframes onyxPulseGlow {
+  0% { box-shadow: 0 0 8px rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.55); }
+  100% { box-shadow: 0 0 16px rgba(255,255,255,0.7); border-color: #fff; }
+}
+html.theme-onyx .sub-bar {
+  background: rgba(0,0,0,0.85) !important;
+  border-color: rgba(255,255,255,0.14) !important;
+}
