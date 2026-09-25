@@ -250,8 +250,10 @@ export default function App() {
   const [chatSub, setChatSub] = useState<Record<string, string>>({ main: 'feed', sales: 'chat', clan: 'chat', groups: 'g1' })
   const [chatMessages, setChatMessages] = useState<Record<string, any[]>>({ main: [], sales: [], clan: [], groups: [], g1: [], g2: [], g3: [], g4: [] })
   const [chatInput, setChatInput] = useState('')
+  const [emojiOpen, setEmojiOpen] = useState(false)
+  const [chatNameColor, setChatNameColor] = useState('#3EE0FF')
   const [inboxOpen, setInboxOpen] = useState(false)
-  const [nameColor] = useState('#3EE0FF')
+  // nameColor now managed as chatNameColor state above
   const [groupNames, setGroupNames] = useState<Record<string, string>>({ g1: 'Group-1', g2: 'Group-2', g3: 'Group-3', g4: 'Group-4' })
   const [filterState, setFilterState] = useState({ category: 'All', subType: 'All', tier: 'All', quality: 'All', sortBy: 'tier', order: 'desc' })
   const [turnCount, setTurnCount] = useState(0)
@@ -372,6 +374,11 @@ export default function App() {
 
   const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL
 
+  const handleColorChange = (color: string) => {
+    setChatNameColor(color)
+    localStorage.setItem('g_name', color)
+  }
+
   const spendPoint = (attr: string) => {
     if (!canAllocate) return
     const p = { ...player, baseStats: { ...player.baseStats }, derivedStats: {} }
@@ -467,7 +474,7 @@ export default function App() {
     if (!chatInput.trim()) return
     const ch = chatChannel; const sub = chatSub[ch]
     const key = ch === 'groups' ? sub : ch
-    const msg = { sender: player.name || 'Jeff', text: chatInput.trim(), color: nameColor }
+    const msg = { sender: player.name || 'Jeff', text: chatInput.trim(), color: chatNameColor }
     setChatMessages(prev => ({ ...prev, [key]: [...(prev[key] || []).slice(-149), msg] }))
     setChatInput('')
   }
@@ -481,23 +488,14 @@ export default function App() {
 
   const renderChatContent = () => {
     const sub = chatSub[chatChannel]
-    if (chatChannel === 'main' && sub === 'settings') return (
-      <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.12)', fontSize: '12px', color: '#fff' }}>
-        <div style={{ marginBottom: '8px', fontWeight: 700 }}>Name Color</div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {['#3EE0FF', '#FFD60A', '#FF375F', '#30D158', '#BF5AF2', '#FF9F0A', '#ffffff', '#0A84FF'].map(c => (
-            <button key={c} onClick={() => showToast(`Color: ${c}`)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: '2px solid rgba(255,255,255,0.3)', cursor: 'pointer' }} />
-          ))}
-        </div>
-      </div>
-    )
+    if (chatChannel === 'main' && sub === 'settings') return <NameColorPicker nameColor={nameColor} onColorChange={handleColorChange} />
     const key = chatChannel === 'groups' ? sub : chatChannel
     const msgs = chatMessages[key] || []
     return msgs.length === 0 ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#475569', fontSize: '12px' }}></div> : (
       <>
         {msgs.map((m: any, i: number) => (
           <div key={i} style={{ margin: '4px 0', fontSize: '12px' }}>
-            <span style={{ color: m.color || nameColor, fontWeight: 800 }}>{m.sender}:</span>{' '}
+            <span style={{ color: m.color || chatNameColor, fontWeight: 800 }}>{m.sender}:</span>{' '}
             <span style={{ color: '#fff' }}>{m.text}</span>
           </div>
         ))}
@@ -691,13 +689,7 @@ export default function App() {
                             </div>
                           </div>
                         </div>
-                        <div className="d-pad-controls" style={{ marginTop: '4px', marginBottom: '2px' }}>
-                          <div className="game-key move-key" data-key="up" onClick={() => move(0, -1)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg></div>
-                          <div className="game-key move-key" data-key="left" onClick={() => move(-1, 0)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg></div>
-                          <div className="game-key move-key key-enter-btn" data-key="enter" onClick={() => showToast('Interacting with sector waypoint.')}>Enter</div>
-                          <div className="game-key move-key" data-key="right" onClick={() => move(1, 0)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg></div>
-                          <div className="game-key move-key" data-key="down" onClick={() => move(0, 1)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg></div>
-                        </div>
+                        <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
                       </section>
                     )}
                   </div>
@@ -996,7 +988,7 @@ export default function App() {
 
                 {!inboxOpen && (
                   <form onSubmit={sendMessage} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                    <button type="button" className="icon-btn">😀</button>
+                    <button type="button" className="icon-btn" onClick={() => setEmojiOpen(prev => !prev)}>😀</button>
                     <input type="text" className="editor-input" value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Type To Chat…" style={{ flex: 1, padding: '8px', fontSize: '12px' }} />
                     <button type="submit" className="footer-tab-button" style={{ padding: '8px 16px', fontWeight: 600 }}>Send</button>
                   </form>
@@ -1008,6 +1000,24 @@ export default function App() {
         </div>
       </div>
 
+      {/* ── EMOJI PANEL ── */}
+      {emojiOpen && (
+        <div style={{ position: 'fixed', bottom: '80px', left: '16px', right: '16px', zIndex: 300, background: '#061018', border: '1px solid rgba(62,224,255,0.4)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.75)' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px', background: '#061018' }}>
+            <button className="chat-expand-btn" style={{ width: 28, height: 28 }} onClick={() => setEmojiOpen(false)}>✕</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '4px', padding: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+            {['😀','😂','😍','🥰','😎','🤩','😏','😤','😡','💀','👻','👾','⚔️','🛡️','💎','🔥','⚡','❄️','🌟','💫','🏆','💰','🎯','🎮','👑','🐉','⚗️','🗡️','🏹','🪄','💥','🌀'].map(em => (
+              <button key={em} onClick={() => { setChatInput(prev => prev + em); setEmojiOpen(false) }}
+                style={{ fontSize: '20px', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              >{em}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── WORLD MAP OVERLAY ── */}
       {mapOverlay && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(12px)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}>
@@ -1017,13 +1027,7 @@ export default function App() {
               <canvas ref={zoneCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
             </div>
           </div>
-          <div className="d-pad-controls" style={{ marginBottom: '8px' }}>
-            <div className="game-key move-key" onClick={() => move(0, -1)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg></div>
-            <div className="game-key move-key" onClick={() => move(-1, 0)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg></div>
-            <div className="game-key move-key key-enter-btn" onClick={() => showToast('Interacting with sector waypoint.')}>Enter</div>
-            <div className="game-key move-key" onClick={() => move(1, 0)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg></div>
-            <div className="game-key move-key" onClick={() => move(0, 1)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg></div>
-          </div>
+          <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} style={{ marginBottom: '8px' }} />
           <button onClick={() => setMapOverlay(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '24px', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
         </div>
       )}
@@ -1057,7 +1061,7 @@ export default function App() {
               {renderChatContent()}
             </div>
             <form onSubmit={sendMessage} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-              <button type="button" className="icon-btn">😀</button>
+              <button type="button" className="icon-btn" onClick={() => setEmojiOpen(prev => !prev)}>😀</button>
               <input type="text" className="editor-input" value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Type To Chat…" style={{ flex: 1, padding: '10px', fontSize: '12px' }} />
               <button type="submit" className="footer-tab-button" style={{ padding: '10px 20px', fontWeight: 600 }}>Send</button>
             </form>
@@ -1085,6 +1089,187 @@ function AccordionItem({ title, children }: { title: React.ReactNode; children: 
         <svg className="accordion-arrow" style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
       </button>
       <div className="stat-accordion-content">{children}</div>
+    </div>
+  )
+}
+
+// ─── D-PAD COMPONENT ─────────────────────────────────────────
+function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => void; onEnter: () => void; style?: React.CSSProperties }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridTemplateRows: 'repeat(3, 40px)', gridTemplateAreas: '". up ." "left enter right" ". down ."', gap: '5.5px', justifyContent: 'center', ...style }}>
+      <div className="game-key move-key" style={{ gridArea: 'up' }} onClick={() => onMove(0, -1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
+      </div>
+      <div className="game-key move-key" style={{ gridArea: 'left' }} onClick={() => onMove(-1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
+      </div>
+      <div className="game-key move-key key-enter-btn" style={{ gridArea: 'enter' }} onClick={onEnter}>Enter</div>
+      <div className="game-key move-key" style={{ gridArea: 'right' }} onClick={() => onMove(1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
+      </div>
+      <div className="game-key move-key" style={{ gridArea: 'down' }} onClick={() => onMove(0, 1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
+      </div>
+    </div>
+  )
+}
+
+// ─── NAME COLOR PICKER ────────────────────────────────────────
+function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onColorChange: (color: string) => void }) {
+  const [tab, setTab] = useState<'grid' | 'spectrum' | 'sliders'>('grid')
+  const [rgb, setRgb] = useState({ r: 62, g: 224, b: 255 })
+  const [opacity, setOpacity] = useState(100)
+  const wheelRef = useRef<HTMLCanvasElement>(null)
+
+  const hsvToHex = (h: number, s: number, v: number) => {
+    const f = (n: number, k = (n + h / 60) % 6) => v - v * s * Math.max(Math.min(k, 4 - k, 1), 0)
+    const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, '0')
+    return `#${toHex(f(5))}${toHex(f(3))}${toHex(f(1))}`
+  }
+
+  const rgbToHex = (r: number, g: number, b: number) =>
+    '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('')
+
+  const applyColor = (hex: string) => {
+    onColorChange(hex)
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    setRgb({ r, g, b })
+  }
+
+  // Build color grid
+  const hues = [205, 225, 255, 280, 320, 0, 22, 35, 48, 72, 118, 150]
+  const gridColors: string[] = []
+  for (let row = 0; row < 10; row++) {
+    for (let col = 0; col < 12; col++) {
+      if (row === 0) {
+        const steps = [255, 235, 209, 199, 174, 142, 99, 72, 58, 44, 28, 0]
+        gridColors.push(rgbToHex(steps[col], steps[col], steps[col]))
+      } else {
+        const v = [0.28, 0.38, 0.48, 0.58, 0.70, 0.82, 0.92, 0.97, 1][row - 1]
+        const s = [1, 1, 1, 1, 1, 0.95, 0.72, 0.45, 0.28][row - 1]
+        gridColors.push(hsvToHex(hues[col], s, v))
+      }
+    }
+  }
+
+  // Draw spectrum wheel
+  useEffect(() => {
+    if (tab !== 'spectrum' || !wheelRef.current) return
+    const canvas = wheelRef.current
+    const ctx = canvas.getContext('2d')!
+    const size = canvas.width; const cx = size / 2; const cy = size / 2; const radius = size / 2 - 4
+    const img = ctx.createImageData(size, size)
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = x - cx; const dy = y - cy; const dist = Math.sqrt(dx * dx + dy * dy)
+        const i = (y * size + x) * 4
+        if (dist > radius) { img.data[i + 3] = 0; continue }
+        let hue = Math.atan2(dy, dx) * 180 / Math.PI; if (hue < 0) hue += 360
+        const hex = hsvToHex(hue, dist / radius, 1)
+        img.data[i] = parseInt(hex.slice(1, 3), 16)
+        img.data[i + 1] = parseInt(hex.slice(3, 5), 16)
+        img.data[i + 2] = parseInt(hex.slice(5, 7), 16)
+        img.data[i + 3] = 255
+      }
+    }
+    ctx.putImageData(img, 0, 0)
+  }, [tab])
+
+  const handleWheelClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = wheelRef.current!; const rect = canvas.getBoundingClientRect()
+    const scale = canvas.width / rect.width
+    const x = (e.clientX - rect.left) * scale; const y = (e.clientY - rect.top) * scale
+    const cx = canvas.width / 2; const cy = canvas.height / 2; const radius = canvas.width / 2 - 4
+    const dx = x - cx; const dy = y - cy; const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist > radius) return
+    let hue = Math.atan2(dy, dx) * 180 / Math.PI; if (hue < 0) hue += 360
+    applyColor(hsvToHex(hue, dist / radius, 1))
+  }
+
+  const presets = ['#000000', '#0A84FF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#FF9F0A', '#FFFFFF', '#FF375F', '#A2845E']
+
+  return (
+    <div style={{ background: '#1c1c1e', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', padding: '14px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <button style={{ width: 32, height: 32, borderRadius: '50%', background: '#2c2c2e', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" strokeWidth="2"><path d="M2 22l5.5-5.5"/><path d="M18.4 3.6a2.8 2.8 0 014 4L8 22H4v-4L18.4 3.6z"/></svg>
+        </button>
+        <span style={{ fontSize: '17px', fontWeight: 600, color: '#fff' }}>Colors</span>
+        <div style={{ width: 32 }} />
+      </div>
+
+      {/* Segmented control */}
+      <div style={{ background: '#2c2c2e', borderRadius: '9px', padding: '2px', display: 'flex', marginBottom: '12px' }}>
+        {(['grid', 'spectrum', 'sliders'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{ flex: 1, border: 'none', background: tab === t ? '#636366' : 'transparent', color: '#fff', fontSize: '13px', fontWeight: 600, padding: '6px 0', borderRadius: '7px', cursor: 'pointer' }}>
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Grid */}
+      {tab === 'grid' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 0, borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}>
+          {gridColors.map((c, i) => (
+            <button key={i} onClick={() => applyColor(c)} style={{ aspectRatio: '1', background: c, border: 'none', cursor: 'pointer', padding: 0, display: 'block' }} />
+          ))}
+        </div>
+      )}
+
+      {/* Spectrum */}
+      {tab === 'spectrum' && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '12px' }}>
+          <canvas ref={wheelRef} width={280} height={280} style={{ width: '100%', maxWidth: '280px', borderRadius: '50%', cursor: 'crosshair', touchAction: 'none' }}
+            onClick={handleWheelClick} onMouseMove={e => { if (e.buttons) handleWheelClick(e) }} />
+        </div>
+      )}
+
+      {/* Sliders */}
+      {tab === 'sliders' && (
+        <div style={{ marginBottom: '12px' }}>
+          {(['r', 'g', 'b'] as const).map(ch => (
+            <div key={ch} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '8px 0', fontSize: '13px', color: '#fff' }}>
+              <span style={{ width: '12px' }}>{ch.toUpperCase()}</span>
+              <input type="range" min="0" max="255" value={rgb[ch]} onChange={e => {
+                const v = parseInt(e.target.value)
+                const nr = { ...rgb, [ch]: v }
+                setRgb(nr)
+                applyColor(rgbToHex(nr.r, nr.g, nr.b))
+              }} style={{ flex: 1 }} />
+              <input type="number" min="0" max="255" value={rgb[ch]} onChange={e => {
+                const v = Math.max(0, Math.min(255, parseInt(e.target.value) || 0))
+                const nr = { ...rgb, [ch]: v }
+                setRgb(nr)
+                applyColor(rgbToHex(nr.r, nr.g, nr.b))
+              }} style={{ width: '52px', background: '#2c2c2e', border: 'none', color: '#fff', borderRadius: '8px', padding: '4px', textAlign: 'center', fontSize: '13px' }} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Opacity */}
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{ fontSize: '11px', letterSpacing: '0.05em', color: '#8e8e93', marginBottom: '4px' }}>OPACITY</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input type="range" min="0" max="100" value={opacity} onChange={e => setOpacity(parseInt(e.target.value))} style={{ flex: 1 }} />
+          <span style={{ fontSize: '12px', background: '#2c2c2e', borderRadius: '8px', padding: '4px 8px', color: '#fff', minWidth: '48px', textAlign: 'center' }}>{opacity}%</span>
+        </div>
+      </div>
+
+      <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }} />
+
+      {/* Preview + presets */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: 48, height: 48, borderRadius: '8px', background: nameColor, border: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }} />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {presets.map(c => (
+            <button key={c} onClick={() => applyColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer' }} />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
