@@ -12,13 +12,10 @@ const races: Record<string, any> = {
 
 const GDD = { XP_BASE: 200, XP_GROWTH: 1.12, AP_PER_LEVEL: 40, DAMAGE_CONST: 90, AC_REDUCTION: 0.5 }
 
-// Every 50 levels the bank limit goes up by 1 (starts at 1)
-// Returns stats ordered so primary stat is rightmost
 function getAttributeFocusOrder(raceKey: string): string[] {
   const rd = races[raceKey] || races.human
-  const primaryStat = rd.primaryStat // DEX for fighters, WIS for casters
+  const primaryStat = rd.primaryStat
   const allStats = ['DEX', 'STR', 'NTL', 'WIS', 'VIT']
-  // Remove primary stat and put it last (rightmost)
   const others = allStats.filter(s => s !== primaryStat)
   return [...others, primaryStat]
 }
@@ -27,7 +24,6 @@ function getLevelBank(level: number): number {
   return 1 + Math.floor(level / 50)
 }
 
-// Returns banked free levels (each AP_PER_LEVEL = 1 free level)
 function getBankedLevels(attributePoints: number): number {
   return Math.floor(attributePoints / GDD.AP_PER_LEVEL)
 }
@@ -272,7 +268,7 @@ export default function App() {
   const [chatInput, setChatInput] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [equipPopup, setEquipPopup] = useState<string | null>(null)
-  const [pendingLevelUp, setPendingLevelUp] = useState(false) // blocked from killing until free levels spent
+  const [pendingLevelUp, setPendingLevelUp] = useState(false)
   const [chatNameColor, setChatNameColor] = useState('#3EE0FF')
   const [inboxOpen, setInboxOpen] = useState(false)
   const [groupNames, setGroupNames] = useState<Record<string, string>>({ g1: 'Group-1', g2: 'Group-2', g3: 'Group-3', g4: 'Group-4' })
@@ -280,7 +276,6 @@ export default function App() {
   const [turnCount, setTurnCount] = useState(0)
   const smokeRef = useRef<HTMLCanvasElement>(null)
   const miniMapRef = useRef<HTMLCanvasElement>(null)
-  const zoneCanvasRef = useRef<HTMLCanvasElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   const showToast = useCallback((msg: string) => {
@@ -288,7 +283,6 @@ export default function App() {
     setTimeout(() => setToast(''), 2800)
   }, [])
 
-  // Theme-color meta tag for Safari status bar
   useEffect(() => {
     const meta = document.createElement('meta')
     meta.name = 'theme-color'
@@ -297,7 +291,6 @@ export default function App() {
     return () => { document.head.removeChild(meta) }
   }, [])
 
-  // Init
   useEffect(() => {
     let p = loadPlayer()
     if (!p) p = createPlayer()
@@ -310,17 +303,14 @@ export default function App() {
       const bs = localStorage.getItem('geminus_battle_stats')
       if (bs) setBattleStats(JSON.parse(bs))
     } catch {}
-    // Seed welcome message
     setChatMessages(prev => ({ ...prev, main: [{ sender: 'System', text: 'Welcome to Geminus client core. Transmission systems operational.', color: '#3EE0FF' }] }))
   }, [])
 
-  // Theme
   useEffect(() => {
     document.documentElement.classList.toggle('theme-onyx', theme === 'onyx')
     localStorage.setItem('g_theme', theme)
   }, [theme])
 
-  // Smoke
   useEffect(() => {
     const canvas = smokeRef.current; if (!canvas) return
     const ctx = canvas.getContext('2d')!
@@ -360,7 +350,6 @@ export default function App() {
     return () => { cancelAnimationFrame(id); window.removeEventListener('resize', onResize) }
   }, [])
 
-  // Mini map
   useEffect(() => {
     if (!miniMapRef.current || !player) return
     const canvas = miniMapRef.current; const ctx = canvas.getContext('2d')!
@@ -373,29 +362,6 @@ export default function App() {
     ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight); ctx.restore()
   }, [player, activeTab])
 
-  // Zone canvas
-  useEffect(() => {
-    if (!zoneCanvasRef.current || !player || !mapOverlay) return
-    const canvas = zoneCanvasRef.current; const ctx = canvas.getContext('2d')!
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
-    ctx.scale(dpr, dpr)
-    const w = canvas.offsetWidth; const h = canvas.offsetHeight
-    ctx.clearRect(0, 0, w, h)
-    const t = 28; const pos = player.pos
-    const ox = w / 2 - pos.x * t - t / 2; const oy = h / 2 - pos.y * t - t / 2
-    ctx.save(); ctx.translate(ox, oy)
-    for (let x = 0; x < 16; x++) {
-      for (let y = 0; y < 16; y++) {
-        const cur = x === pos.x && y === pos.y
-        if (cur) { ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(x * t, y * t, t, t) }
-        ctx.strokeStyle = cur ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.strokeRect(x * t, y * t, t, t)
-      }
-    }
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(pos.x * t + t / 2, pos.y * t + t / 2, t * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.restore()
-  }, [player, mapOverlay])
-
-  // Chat scroll
   useEffect(() => {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
   }, [chatMessages, chatChannel, chatSub])
@@ -419,7 +385,6 @@ export default function App() {
     p.attributePoints -= GDD.AP_PER_LEVEL
     calcDerived(p)
     setPlayer(p); savePlayer(p)
-    // Clear pending level up block if now under bank limit
     const remaining = getBankedLevels(p.attributePoints)
     const max = getLevelBank(p.level)
     if (remaining < max) setPendingLevelUp(false)
@@ -459,7 +424,6 @@ export default function App() {
 
     if (m.currentHP <= 0) {
       m.currentHP = 0
-      // Check level bank — if player has too many banked levels, block the kill
       const bankedLevels = getBankedLevels(p.attributePoints || 0)
       const maxBank = getLevelBank(p.level)
       if (bankedLevels >= maxBank) {
@@ -490,7 +454,6 @@ export default function App() {
         setBattleStats(ls)
         try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ls)) } catch {}
         showToast(`⬆ Level Up! Level ${p.level}`)
-        // Check if now over bank limit after leveling
         const newBanked = getBankedLevels(p.attributePoints)
         const newMax = getLevelBank(p.level)
         if (newBanked >= newMax) setPendingLevelUp(true)
@@ -645,11 +608,6 @@ export default function App() {
     setEquipPopup(null)
   }
 
-  const handleItemTap = (instanceId: string) => {
-    // Legacy — only used by inventory now to show popup
-    setEquipPopup(prev => prev === instanceId ? null : instanceId)
-  }
-
   const resetSave = () => {
     if (!confirm('Reset all progress? This cannot be undone.')) return
     localStorage.removeItem('geminus_player_save'); localStorage.removeItem('geminus_battle_stats')
@@ -781,7 +739,6 @@ export default function App() {
                   )}
                 </header>
               ) : (
-                // Inline Panel
                 <div className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
@@ -807,7 +764,6 @@ export default function App() {
                   </div>
 
                   <div style={{ flex: 1, overflowY: 'auto', maxHeight: '480px' }}>
-                    {/* Equipment */}
                     {activeTab === 'equipment' && (
                       <div className="equipment-grid">
                         {EQUIP_SLOTS.map(slot => {
@@ -820,10 +776,7 @@ export default function App() {
                               <div className="equipment-slot-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <span>{slot.name}</span>
                                 {instId && (
-                                  <button
-                                    onClick={() => unequipItem(instId)}
-                                    style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.02em', flexShrink: 0 }}
-                                  >Unequip</button>
+                                  <button onClick={() => unequipItem(instId)} style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.02em', flexShrink: 0 }}>Unequip</button>
                                 )}
                               </div>
                               <div className="equipment-slot-content" style={{ cursor: 'default' }}>
@@ -846,7 +799,6 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Inventory */}
                     {activeTab === 'inventory' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ paddingBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
@@ -875,7 +827,6 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Player Info */}
                     {activeTab === 'stats' && (
                       <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
                         <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Combat Attributes</span>
@@ -890,7 +841,6 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Training */}
                     {activeTab === 'training' && (
                       <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)', fontSize: '12px' }}>
                         <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', textDecoration: 'underline', textUnderlineOffset: '4px', marginBottom: '12px' }}>Battle Statistics</h3>
@@ -905,7 +855,6 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Settings */}
                     {activeTab === 'settings' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
                         <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
@@ -996,17 +945,13 @@ export default function App() {
                 <div style={{ fontSize: '10.5px', lineHeight: '1.3', fontWeight: 800, color: '#fbbf24', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{combatLog.l3}</div>
               </div>
 
-              {/* Attribute Focus Selector — shows when free levels available */}
               {canAllocate && (
                 <div style={{ flexShrink: 0, paddingTop: '4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                   <span style={{ fontSize: '10px', color: '#FF6B00', fontWeight: 700, letterSpacing: '0.04em' }}>Select:</span>
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'center' }}>
                     {getAttributeFocusOrder(player.race).map((stat, idx, arr) => (
                       <span key={stat} style={{ display: 'flex', alignItems: 'center' }}>
-                        <button
-                          onClick={() => spendPoint(stat)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 3px', color: '#FF6B00', fontSize: '11.5px', fontWeight: 800, fontFamily: 'monospace' }}
-                        >{stat} ({freeLevels})</button>
+                        <button onClick={() => spendPoint(stat)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 3px', color: '#FF6B00', fontSize: '11.5px', fontWeight: 800, fontFamily: 'monospace' }}>{stat} ({freeLevels})</button>
                         {idx < arr.length - 1 && <span style={{ color: '#FF6B00', fontSize: '11px', opacity: 0.5 }}>|</span>}
                       </span>
                     ))}
@@ -1035,7 +980,6 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Subs */}
                 {!inboxOpen && (
                   <div className="sub-bar" style={{ flexShrink: 0, marginBottom: '8px' }}>
                     {(CHAT_SUBS[chatChannel] || []).map(([id, label]) => {
@@ -1100,15 +1044,37 @@ export default function App() {
 
       {/* ── WORLD MAP OVERLAY ── */}
       {mapOverlay && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(12px)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}>
-          <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '20px', color: '#fff', marginTop: '8px' }}>World Exploration</h3>
-          <div style={{ width: '100%', maxWidth: '420px', maxHeight: '400px', aspectRatio: '1/1', position: 'relative' }}>
-            <div className="glass-panel" style={{ width: '100%', height: '100%', borderRadius: '16px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.25)' }}>
-              <canvas ref={zoneCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
-            </div>
-          </div>
-          <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} style={{ marginBottom: '8px' }} />
-          <button onClick={() => setMapOverlay(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '24px', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column' }}>
+          <iframe
+            src="https://geminus-map-editor.pages.dev"
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+              display: 'block',
+            }}
+            allow="fullscreen"
+          />
+          <button
+            onClick={() => setMapOverlay(false)}
+            style={{
+              position: 'absolute',
+              top: '16px',
+              right: '16px',
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'rgba(0,0,0,0.8)',
+              border: '1px solid rgba(255,255,255,0.3)',
+              color: '#fff',
+              fontSize: '20px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 51,
+            }}
+          >×</button>
         </div>
       )}
 
@@ -1156,37 +1122,24 @@ export default function App() {
         if (!modalItem || !modalBase) return null
         const modalGems = modalItem.socketedGems || []
         const isEquipped = Object.values(player.equipment).includes(equipPopup)
-
-        // Calculate item stat value
-        const mod = { Weapon: { stat: 'WC' }, Spell: { stat: 'SC' }, Armor: { stat: 'AC' }, Helmet: { stat: 'AC' }, Boots: { stat: 'AC' }, Leggings: { stat: 'AC' }, Gauntlets: { stat: 'AC' } } as any
         const tierData = DROPPER_TIERS.find(t => t.tier === modalItem.tier) || DROPPER_TIERS[0]
         const slotMod = SLOT_MODS[modalBase.subType] || {}
         const statVal = (tierData.cv * (slotMod.prop || 0.8)).toFixed(2)
         const statLabel = slotMod.stat || 'AC'
-
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
             onClick={() => setEquipPopup(null)}>
             <div className="glass-panel" style={{ width: '100%', maxWidth: '340px', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }}
               onClick={e => e.stopPropagation()}>
-
-              {/* Close X */}
-              <button onClick={() => setEquipPopup(null)}
-                style={{ position: 'absolute', top: '14px', right: '14px', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-
-              {/* Item name */}
+              <button onClick={() => setEquipPopup(null)} style={{ position: 'absolute', top: '14px', right: '14px', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               <div>
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#fff' }}>{modalBase.name}</h3>
                 <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3EE0FF', fontWeight: 700 }}>Tier {modalItem.tier} · {modalBase.subType}</p>
               </div>
-
-              {/* Item icon */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
                 <ItemIcon subType={modalBase.subType} />
                 <span style={{ position: 'absolute', bottom: '8px', right: '10px', background: 'rgba(255,214,10,0.95)', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '5px', color: '#09090b' }}>T{modalItem.tier}</span>
               </div>
-
-              {/* Stats */}
               <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                   <span style={{ fontSize: '13px', color: '#94a3b8' }}>Type</span>
@@ -1197,8 +1150,7 @@ export default function App() {
                   <span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{statVal}</span>
                 </div>
                 {modalGems.map((g: any, i: number) => {
-                  const gd = GEMS[g.id]
-                  if (!gd) return null
+                  const gd = GEMS[g.id]; if (!gd) return null
                   const gemColor = gd.category === 'Fighter' ? '#FF375F' : gd.category === 'Caster' ? '#0A84FF' : '#30D158'
                   return (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
@@ -1211,15 +1163,11 @@ export default function App() {
                   )
                 })}
               </div>
-
-              {/* Buttons */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <button onClick={() => equipItem(equipPopup)}
-                  style={{ padding: '14px 0', borderRadius: '12px', background: isEquipped ? 'rgba(48,209,88,0.15)' : 'rgba(62,224,255,0.15)', border: `1.5px solid ${isEquipped ? '#30D158' : '#3EE0FF'}`, color: isEquipped ? '#30D158' : '#3EE0FF', fontSize: '14px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>
+                <button onClick={() => equipItem(equipPopup)} style={{ padding: '14px 0', borderRadius: '12px', background: isEquipped ? 'rgba(48,209,88,0.15)' : 'rgba(62,224,255,0.15)', border: `1.5px solid ${isEquipped ? '#30D158' : '#3EE0FF'}`, color: isEquipped ? '#30D158' : '#3EE0FF', fontSize: '14px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>
                   {isEquipped ? '✓ EQUIPPED' : 'EQUIP'}
                 </button>
-                <button onClick={() => setEquipPopup(null)}
-                  style={{ padding: '14px 0', borderRadius: '12px', background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
+                <button onClick={() => setEquipPopup(null)} style={{ padding: '14px 0', borderRadius: '12px', background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
                   CANCEL
                 </button>
               </div>
@@ -1297,7 +1245,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
     setRgb({ r, g, b })
   }
 
-  // Build color grid
   const hues = [205, 225, 255, 280, 320, 0, 22, 35, 48, 72, 118, 150]
   const gridColors: string[] = []
   for (let row = 0; row < 10; row++) {
@@ -1313,7 +1260,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
     }
   }
 
-  // Draw spectrum wheel
   useEffect(() => {
     if (tab !== 'spectrum' || !wheelRef.current) return
     const canvas = wheelRef.current
@@ -1351,7 +1297,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
 
   return (
     <div style={{ background: '#1c1c1e', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', padding: '14px', overflow: 'hidden' }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
         <button style={{ width: 32, height: 32, borderRadius: '50%', background: '#2c2c2e', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" strokeWidth="2"><path d="M2 22l5.5-5.5"/><path d="M18.4 3.6a2.8 2.8 0 014 4L8 22H4v-4L18.4 3.6z"/></svg>
@@ -1359,8 +1304,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
         <span style={{ fontSize: '17px', fontWeight: 600, color: '#fff' }}>Colors</span>
         <div style={{ width: 32 }} />
       </div>
-
-      {/* Segmented control */}
       <div style={{ background: '#2c2c2e', borderRadius: '9px', padding: '2px', display: 'flex', marginBottom: '12px' }}>
         {(['grid', 'spectrum', 'sliders'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ flex: 1, border: 'none', background: tab === t ? '#636366' : 'transparent', color: '#fff', fontSize: '13px', fontWeight: 600, padding: '6px 0', borderRadius: '7px', cursor: 'pointer' }}>
@@ -1368,8 +1311,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
           </button>
         ))}
       </div>
-
-      {/* Grid */}
       {tab === 'grid' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 0, borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}>
           {gridColors.map((c, i) => (
@@ -1377,16 +1318,12 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
           ))}
         </div>
       )}
-
-      {/* Spectrum */}
       {tab === 'spectrum' && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '12px' }}>
           <canvas ref={wheelRef} width={240} height={240} style={{ width: '240px', height: '240px', borderRadius: '50%', cursor: 'crosshair', touchAction: 'none', display: 'block' }}
             onClick={handleWheelClick} onMouseMove={e => { if (e.buttons) handleWheelClick(e) }} />
         </div>
       )}
-
-      {/* Sliders */}
       {tab === 'sliders' && (
         <div style={{ marginBottom: '12px' }}>
           {(['r', 'g', 'b'] as const).map(ch => (
@@ -1408,8 +1345,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
           ))}
         </div>
       )}
-
-      {/* Opacity */}
       <div style={{ marginBottom: '12px' }}>
         <div style={{ fontSize: '11px', letterSpacing: '0.05em', color: '#8e8e93', marginBottom: '4px' }}>OPACITY</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1417,10 +1352,7 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
           <span style={{ fontSize: '12px', background: '#2c2c2e', borderRadius: '8px', padding: '4px 8px', color: '#fff', minWidth: '48px', textAlign: 'center' }}>{opacity}%</span>
         </div>
       </div>
-
       <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }} />
-
-      {/* Preview + presets */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{ width: 48, height: 48, borderRadius: '8px', background: nameColor, border: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
