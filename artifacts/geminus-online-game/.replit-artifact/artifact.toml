@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Geminus Online Game"
+description = "A React and Vite starter project for the Geminus online game, organized with component, system, data, Firebase, and style folders."
+version = "1.0.0"
+id = "artifacts/geminus-online-game"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24028
+
+[services.development]
+run = "pnpm --filter @workspace/geminus-online-game run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/geminus-online-game", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/geminus-online-game/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24028"
+BASE_PATH = "/"
