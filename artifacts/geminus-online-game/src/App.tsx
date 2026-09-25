@@ -1116,6 +1116,133 @@ function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => 
 
 // ─── NAME COLOR PICKER ────────────────────────────────────────
 function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onColorChange: (color: string) => void }) {
+  const [tab, setTab] = useState<'grid' | 'sliders'>('grid')
+  const [r, setR] = useState(62)
+  const [g, setG] = useState(224)
+  const [b, setB] = useState(255)
+
+  const rgbToHex = (rv: number, gv: number, bv: number) =>
+    '#' + [rv, gv, bv].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('')
+
+  const hsvToHex = (h: number, s: number, v: number) => {
+    const f = (n: number, k = (n + h / 60) % 6) => v - v * s * Math.max(Math.min(k, 4 - k, 1), 0)
+    return rgbToHex(f(5) * 255, f(3) * 255, f(1) * 255)
+  }
+
+  const applyHex = (hex: string) => {
+    onColorChange(hex)
+    setR(parseInt(hex.slice(1, 3), 16))
+    setG(parseInt(hex.slice(3, 5), 16))
+    setB(parseInt(hex.slice(5, 7), 16))
+  }
+
+  // 120 grid colors
+  const hues = [205, 225, 255, 280, 320, 0, 22, 35, 48, 72, 118, 150]
+  const grid: string[] = []
+  for (let row = 0; row < 10; row++) {
+    for (let col = 0; col < 12; col++) {
+      if (row === 0) {
+        const s = [255, 235, 209, 199, 174, 142, 99, 72, 58, 44, 28, 0][col]
+        grid.push(rgbToHex(s, s, s))
+      } else {
+        const v = [0.28, 0.38, 0.48, 0.58, 0.70, 0.82, 0.92, 0.97, 1][row - 1]
+        const s = [1, 1, 1, 1, 1, 0.95, 0.72, 0.45, 0.28][row - 1]
+        grid.push(hsvToHex(hues[col], s, v))
+      }
+    }
+  }
+
+  const presets = ['#000000','#0A84FF','#30D158','#FFD60A','#FF3B30','#BF5AF2','#FF9F0A','#FFFFFF','#FF375F','#A2845E']
+
+  // Spectrum: 12x8 hue/saturation grid as a substitute (no canvas)
+  const spectrumColors: string[] = []
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 12; col++) {
+      const h = col * 30
+      const s = 1 - row * 0.1
+      spectrumColors.push(hsvToHex(h, s, 1))
+    }
+  }
+
+  return (
+    <div style={{ background: '#1c1c1e', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', padding: '14px', maxWidth: '100%', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <span style={{ fontSize: '17px', fontWeight: 600, color: '#fff' }}>Colors</span>
+        <div style={{ width: 36, height: 36, borderRadius: '8px', background: nameColor, border: '2px solid rgba(255,255,255,0.3)' }} />
+      </div>
+
+      {/* Tab selector */}
+      <div style={{ background: '#2c2c2e', borderRadius: '9px', padding: '2px', display: 'flex', marginBottom: '12px' }}>
+        {(['grid', 'sliders'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{ flex: 1, border: 'none', background: tab === t ? '#636366' : 'transparent', color: '#fff', fontSize: '13px', fontWeight: 600, padding: '6px 0', borderRadius: '7px', cursor: 'pointer' }}>
+            {t === 'grid' ? 'Color Grid' : 'RGB Sliders'}
+          </button>
+        ))}
+      </div>
+
+      {/* Grid */}
+      {tab === 'grid' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 0, borderRadius: '10px', overflow: 'hidden', marginBottom: '12px', width: '100%' }}>
+          {grid.map((c, i) => (
+            <button key={i} onClick={() => applyHex(c)}
+              style={{ aspectRatio: '1', background: c, border: 'none', cursor: 'pointer', padding: 0, display: 'block', width: '100%' }} />
+          ))}
+        </div>
+      )}
+
+      {/* Sliders */}
+      {tab === 'sliders' && (
+        <div style={{ marginBottom: '12px' }}>
+          {([['R', r, setR], ['G', g, setG], ['B', b, setB]] as any[]).map(([label, val, setter]) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '8px 0', fontSize: '13px', color: '#fff' }}>
+              <span style={{ width: '14px', fontWeight: 700 }}>{label}</span>
+              <input type="range" min="0" max="255" value={val}
+                onChange={e => { const v = parseInt(e.target.value); setter(v); applyHex(label === 'R' ? rgbToHex(v, g, b) : label === 'G' ? rgbToHex(r, v, b) : rgbToHex(r, g, v)) }}
+                style={{ flex: 1 }} />
+              <input type="number" min="0" max="255" value={val}
+                onChange={e => { const v = Math.max(0, Math.min(255, parseInt(e.target.value) || 0)); setter(v); applyHex(label === 'R' ? rgbToHex(v, g, b) : label === 'G' ? rgbToHex(r, v, b) : rgbToHex(r, g, v)) }}
+                style={{ width: '52px', background: '#2c2c2e', border: 'none', color: '#fff', borderRadius: '8px', padding: '4px', textAlign: 'center', fontSize: '13px' }} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 0 12px' }} />
+
+      {/* Presets */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+        {presets.map(c => (
+          <button key={c} onClick={() => applyHex(c)}
+            style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: nameColor === c ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', flexShrink: 0 }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── D-PAD COMPONENT ─────────────────────────────────────────
+function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => void; onEnter: () => void; style?: React.CSSProperties }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridTemplateRows: 'repeat(3, 40px)', gridTemplateAreas: '". up ." "left enter right" ". down ."', gap: '5.5px', justifyContent: 'center', ...style }}>
+      <div className="game-key move-key" style={{ gridArea: 'up' }} onClick={() => onMove(0, -1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
+      </div>
+      <div className="game-key move-key" style={{ gridArea: 'left' }} onClick={() => onMove(-1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
+      </div>
+      <div className="game-key move-key key-enter-btn" style={{ gridArea: 'enter' }} onClick={onEnter}>Enter</div>
+      <div className="game-key move-key" style={{ gridArea: 'right' }} onClick={() => onMove(1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
+      </div>
+      <div className="game-key move-key" style={{ gridArea: 'down' }} onClick={() => onMove(0, 1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
+      </div>
+    </div>
+  )
+}
+
+// ─── NAME COLOR PICKER ────────────────────────────────────────
+function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onColorChange: (color: string) => void }) {
   const [tab, setTab] = useState<'grid' | 'spectrum' | 'sliders'>('grid')
   const [rgb, setRgb] = useState({ r: 62, g: 224, b: 255 })
   const [opacity, setOpacity] = useState(100)
