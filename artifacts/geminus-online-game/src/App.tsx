@@ -584,7 +584,7 @@ export default function App() {
                     const base = BASE_ITEMS.find(b => b.id === item.baseItemId)
                     const gems = item.socketedGems || []
                     return (
-                      <div key={item.instanceId} style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                      <div key={item.instanceId}>
                         <div className="inventory-slot" onClick={() => setEquipPopup(prev => prev === item.instanceId ? null : item.instanceId)}>
                           {gems.length > 0 && (
                             <div className="gem-overlays-container">
@@ -595,20 +595,6 @@ export default function App() {
                           <div className="item-icon-wrapper"><ItemIcon subType={base?.subType || ''} /></div>
                           <span className="item-tier-label">T{item.tier}</span>
                         </div>
-                        {equipPopup === item.instanceId && (
-                          <div style={{ marginTop: '4px', zIndex: 200, background: 'rgba(3,12,20,0.97)', border: '1px solid rgba(62,224,255,0.5)', borderRadius: '10px', padding: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{base?.name || 'Item'}</span>
-                            <span style={{ fontSize: '9px', color: '#64748b' }}>T{item.tier} · {base?.subType}</span>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); equipItem(item.instanceId) }}
-                              style={{ marginTop: '2px', width: '100%', padding: '6px 0', borderRadius: '6px', background: 'rgba(62,224,255,0.15)', border: '1px solid rgba(62,224,255,0.6)', color: '#3EE0FF', fontSize: '11px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}
-                            >{Object.values(player.equipment).includes(item.instanceId) ? '✓ Equipped' : '[Equip]'}</button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setEquipPopup(null) }}
-                              style={{ width: '100%', padding: '4px 0', borderRadius: '6px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#64748b', fontSize: '10px', cursor: 'pointer' }}
-                            >Cancel</button>
-                          </div>
-                        )}
                       </div>
                     )
                   })}
@@ -1162,6 +1148,85 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ── ITEM MODAL ── */}
+      {equipPopup && (() => {
+        const modalItem = player.inventory.find((i: any) => i.instanceId === equipPopup)
+        const modalBase = modalItem ? BASE_ITEMS.find(b => b.id === modalItem.baseItemId) : null
+        if (!modalItem || !modalBase) return null
+        const modalGems = modalItem.socketedGems || []
+        const isEquipped = Object.values(player.equipment).includes(equipPopup)
+
+        // Calculate item stat value
+        const mod = { Weapon: { stat: 'WC' }, Spell: { stat: 'SC' }, Armor: { stat: 'AC' }, Helmet: { stat: 'AC' }, Boots: { stat: 'AC' }, Leggings: { stat: 'AC' }, Gauntlets: { stat: 'AC' } } as any
+        const tierData = DROPPER_TIERS.find(t => t.tier === modalItem.tier) || DROPPER_TIERS[0]
+        const slotMod = SLOT_MODS[modalBase.subType] || {}
+        const statVal = (tierData.cv * (slotMod.prop || 0.8)).toFixed(2)
+        const statLabel = slotMod.stat || 'AC'
+
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+            onClick={() => setEquipPopup(null)}>
+            <div className="glass-panel" style={{ width: '100%', maxWidth: '340px', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }}
+              onClick={e => e.stopPropagation()}>
+
+              {/* Close X */}
+              <button onClick={() => setEquipPopup(null)}
+                style={{ position: 'absolute', top: '14px', right: '14px', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+
+              {/* Item name */}
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#fff' }}>{modalBase.name}</h3>
+                <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3EE0FF', fontWeight: 700 }}>Tier {modalItem.tier} · {modalBase.subType}</p>
+              </div>
+
+              {/* Item icon */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
+                <ItemIcon subType={modalBase.subType} />
+                <span style={{ position: 'absolute', bottom: '8px', right: '10px', background: 'rgba(255,214,10,0.95)', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '5px', color: '#09090b' }}>T{modalItem.tier}</span>
+              </div>
+
+              {/* Stats */}
+              <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>Type</span>
+                  <span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{modalBase.subType}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: modalGems.length > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>{statLabel}</span>
+                  <span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{statVal}</span>
+                </div>
+                {modalGems.map((g: any, i: number) => {
+                  const gd = GEMS[g.id]
+                  if (!gd) return null
+                  const gemColor = gd.category === 'Fighter' ? '#FF375F' : gd.category === 'Caster' ? '#0A84FF' : '#30D158'
+                  return (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', padding: '1px 5px', borderRadius: '4px', background: gemColor, color: '#fff', fontWeight: 800 }}>{gd.name.slice(0,3)}</span>
+                        <span style={{ fontSize: '13px', color: '#94a3b8' }}>{gd.name} G{g.grade}</span>
+                      </div>
+                      <span style={{ fontSize: '11px', color: gemColor, fontWeight: 700, maxWidth: '120px', textAlign: 'right' }}>{gd.effect}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <button onClick={() => equipItem(equipPopup)}
+                  style={{ padding: '14px 0', borderRadius: '12px', background: isEquipped ? 'rgba(48,209,88,0.15)' : 'rgba(62,224,255,0.15)', border: `1.5px solid ${isEquipped ? '#30D158' : '#3EE0FF'}`, color: isEquipped ? '#30D158' : '#3EE0FF', fontSize: '14px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>
+                  {isEquipped ? '✓ EQUIPPED' : 'EQUIP'}
+                </button>
+                <button onClick={() => setEquipPopup(null)}
+                  style={{ padding: '14px 0', borderRadius: '12px', background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Toast */}
       {toast && (
