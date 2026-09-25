@@ -260,7 +260,6 @@ export default function App() {
   const [lastItemColor, setLastItemColor] = useState('#8FA8C7')
   const [lastGem, setLastGem] = useState('None')
   const [lastGemColor, setLastGemColor] = useState('#8FA8C7')
-  const [mapOverlay, setMapOverlay] = useState(false)
   const [chatOverlay, setChatOverlay] = useState(false)
   const [chatChannel, setChatChannel] = useState('main')
   const [chatSub, setChatSub] = useState<Record<string, string>>({ main: 'feed', sales: 'chat', clan: 'chat', groups: 'g1' })
@@ -693,7 +692,7 @@ export default function App() {
                           <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>Aether Silver Cavern</span></p>
                           <p style={{ margin: '2px 0 0', fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Cords:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>[{player.pos.x}, {player.pos.y}]</span></p>
                         </div>
-                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', margin: '4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div onClick={() => window.open('https://geminus-map-editor.pages.dev', '_blank')} style={{ cursor: 'pointer', margin: '4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <div style={{ width: '80px', height: '80px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <div className="mini-map-ring" style={{ position: 'absolute', inset: '-4px', borderRadius: '50%', animation: 'spin 20s linear infinite' }} />
                             <div className="glass-panel mini-map-circle" style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden' }}>
@@ -1039,42 +1038,6 @@ export default function App() {
               >{em}</button>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* ── WORLD MAP OVERLAY ── */}
-      {mapOverlay && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column' }}>
-          <iframe
-            src="https://geminus-map-editor.pages.dev"
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              display: 'block',
-            }}
-            allow="fullscreen"
-          />
-          <button
-            onClick={() => setMapOverlay(false)}
-            style={{
-              position: 'absolute',
-              top: '16px',
-              right: '16px',
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              background: 'rgba(0,0,0,0.8)',
-              border: '1px solid rgba(255,255,255,0.3)',
-              color: '#fff',
-              fontSize: '20px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 51,
-            }}
-          >×</button>
         </div>
       )}
 
