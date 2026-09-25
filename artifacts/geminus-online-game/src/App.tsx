@@ -683,8 +683,8 @@ export default function App() {
                         </div>
                         <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', margin: '4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <div style={{ width: '80px', height: '80px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <div style={{ position: 'absolute', inset: '-4px', borderRadius: '50%', border: '1px dashed rgba(103,232,249,0.6)', animation: 'spin 20s linear infinite' }} />
-                            <div className="glass-panel" style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', border: '2px solid rgba(103,232,249,0.55)', boxShadow: '0 0 22px rgba(62,224,255,0.45)' }}>
+                            <div className="mini-map-ring" style={{ position: 'absolute', inset: '-4px', borderRadius: '50%', animation: 'spin 20s linear infinite' }} />
+                            <div className="glass-panel mini-map-circle" style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden' }}>
                               <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
                             </div>
                           </div>
@@ -1191,7 +1191,7 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
   const presets = ['#000000', '#0A84FF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#FF9F0A', '#FFFFFF', '#FF375F', '#A2845E']
 
   return (
-    <div style={{ background: '#1c1c1e', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', padding: '14px' }}>
+    <div style={{ background: '#1c1c1e', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', padding: '14px', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
         <button style={{ width: 32, height: 32, borderRadius: '50%', background: '#2c2c2e', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -1222,7 +1222,7 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
       {/* Spectrum */}
       {tab === 'spectrum' && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '12px' }}>
-          <canvas ref={wheelRef} width={280} height={280} style={{ width: '100%', maxWidth: '280px', borderRadius: '50%', cursor: 'crosshair', touchAction: 'none' }}
+          <canvas ref={wheelRef} width={240} height={240} style={{ width: '240px', height: '240px', borderRadius: '50%', cursor: 'crosshair', touchAction: 'none', display: 'block' }}
             onClick={handleWheelClick} onMouseMove={e => { if (e.buttons) handleWheelClick(e) }} />
         </div>
       )}
