@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import AuthWrapper from './pages/AuthWrapper'
+// Try to import firebase auth for display name / signOut — graceful fallback if not available
+let firebaseAuth: any = null
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getAuth, signOut } = require('firebase/auth')
+  firebaseAuth = { getAuth, signOut }
+} catch { /* firebase not available */ }
 // ─── GAME DATA ───────────────────────────────────────────────
 const races: Record<string, any> = {
   human: { raceName: 'Human', archetype: 'True Fighter', primaryStat: 'DEX', apAllocationWeights: { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 } },
@@ -250,6 +257,7 @@ function ItemIcon({ subType }: { subType: string }) {
 // ─── MAIN APP ─────────────────────────────────────────────────
 export default function App() {
   const [player, setPlayer] = useState<any>(null)
+  const [raceSelected, setRaceSelected] = useState(true) // false = show race picker for new accounts
   const [battleStats, setBattleStats] = useState({ levels: 0, kills: 0, rounds: 0, deaths: 0, oneHitKills: 0 })
   const [theme, setTheme] = useState('aether')
   const [toast, setToast] = useState('')
@@ -259,7 +267,8 @@ export default function App() {
   const [targetType, setTargetType] = useState('monsters')
   const [selectedTargetId, setSelectedTargetId] = useState('E01')
   const [combatMonster, setCombatMonster] = useState<any>(null)
-  const [combatLog, setCombatLog] = useState({ l1: '', l2: 'Select target & press BATTLE to fight', l3: '' })
+  const [combatLog, setCombatLog] = useState<{text: string; color: string}[]>([])
+  const [enemyCurrentHP, setEnemyCurrentHP] = useState<number | null>(null)
   const [lastItem, setLastItem] = useState('None')
   const [lastItemColor, setLastItemColor] = useState('#8FA8C7')
   const [lastGem, setLastGem] = useState('None')
@@ -300,10 +309,32 @@ export default function App() {
 
   // Init
   useEffect(() => {
-    let p = loadPlayer()
-    if (!p) p = createPlayer()
+    const existing = loadPlayer()
+    const isNew = !existing
+    // Get Firebase display name if available
+    let authName = 'Jeff'
+    try {
+      if (firebaseAuth) {
+        const auth = firebaseAuth.getAuth()
+        const user = auth.currentUser
+        if (user) {
+          authName = user.displayName || user.email?.split('@')[0] || 'Jeff'
+        }
+      }
+    } catch {}
+    let p = existing || createPlayer(authName)
+    // Fix #3: If existing player still has default name 'Jeff' and we have a real auth name, update it
+    if (existing && existing.name === 'Jeff' && authName !== 'Jeff') {
+      p = { ...existing, name: authName }
+    }
     calcDerived(p)
     setPlayer(p)
+    // Fix #2: Show race picker for new accounts that haven't picked a race yet
+    if (isNew) {
+      setRaceSelected(false)
+    } else {
+      setRaceSelected(true)
+    }
     const theme = localStorage.getItem('g_theme') || 'aether'
     setTheme(theme)
     document.documentElement.classList.toggle('theme-onyx', theme === 'onyx')
@@ -311,7 +342,6 @@ export default function App() {
       const bs = localStorage.getItem('geminus_battle_stats')
       if (bs) setBattleStats(JSON.parse(bs))
     } catch {}
-    // Seed welcome message
     setChatMessages(prev => ({ ...prev, main: [{ sender: 'System', text: 'Welcome to Geminus client core. Transmission systems operational.', color: '#3EE0FF' }] }))
   }, [])
 
@@ -408,6 +438,51 @@ export default function App() {
 
   if (!player) return <div style={{ color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Loading...</div>
 
+  // Fix #2: Race selection screen for new players
+  if (!raceSelected) {
+    return (
+      <AuthWrapper>
+        <div style={{ minHeight: '100dvh', background: 'radial-gradient(circle at 50% 8%, #143044 0%, #0a1a26 38%, #03080c 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#fff', letterSpacing: '0.04em' }}>Choose Your Race</h2>
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#94a3b8' }}>This choice is permanent — it defines your archetype and stat growth.</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {Object.entries(races).map(([key, rd]: [string, any]) => (
+                <button key={key} onClick={() => {
+                  const p = createPlayer(player.name, key)
+                  calcDerived(p)
+                  setPlayer(p)
+                  savePlayer(p)
+                  setRaceSelected(true)
+                }} style={{ padding: '12px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(62,224,255,0.35)', color: '#fff', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '2px', transition: 'all 0.18s' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#3EE0FF'; (e.currentTarget as HTMLElement).style.background = 'rgba(62,224,255,0.1)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(62,224,255,0.35)'; (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.6)' }}>
+                  <span style={{ fontWeight: 800, fontSize: '14px', color: '#fff' }}>{rd.raceName}</span>
+                  <span style={{ fontSize: '11px', color: '#3EE0FF', fontWeight: 600 }}>{rd.archetype} · {rd.primaryStat}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </AuthWrapper>
+    )
+  }
+
+  // Logout handler — uses Firebase signOut if available, otherwise clears local state
+  const handleLogout = () => {
+    if (!window.confirm('Log out of Geminus?')) return
+    try {
+      if (firebaseAuth) {
+        const auth = firebaseAuth.getAuth()
+        firebaseAuth.signOut(auth).then(() => window.location.reload()).catch(() => window.location.reload())
+        return
+      }
+    } catch {}
+    window.location.reload()
+  }
+
   const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL
 
   const handleColorChange = (color: string) => {
@@ -433,7 +508,11 @@ export default function App() {
   }
 
   const move = (dx: number, dy: number) => {
-    const p = { ...player, pos: { x: Math.max(0, Math.min(15, player.pos.x + dx)), y: Math.max(0, Math.min(15, player.pos.y + dy)) } }
+    // Game world coords: UP increases Y, DOWN decreases Y
+    // DPad sends dy=-1 for UP arrow, so we invert dy here
+    const newX = Math.max(0, Math.min(15, player.pos.x + dx))
+    const newY = Math.max(0, Math.min(15, player.pos.y - dy))
+    const p = { ...player, pos: { x: newX, y: newY } }
     setPlayer(p); savePlayer(p)
   }
 
@@ -446,11 +525,13 @@ export default function App() {
       if (!t) { showToast('Select target first.'); return }
       setCombatMonster({ ...t, currentHP: t.hp })
       setTurnCount(0)
-      setCombatLog({ l1: `Target Locked: ${t.name}`, l2: `HP: ${t.hp} | ATK: ${t.atk}`, l3: '' })
+      setEnemyCurrentHP(t.hp)
+      setCombatLog([])
       setEngaged(true)
     } else {
       setEngaged(false)
-      setCombatLog({ l1: '', l2: 'Select target & press BATTLE to fight', l3: '' })
+      setEnemyCurrentHP(null)
+      setCombatLog([])
     }
   }
 
@@ -470,7 +551,10 @@ export default function App() {
       const maxBank = getLevelBank(p.level)
       if (bankedLevels >= maxBank) {
         setPendingLevelUp(true)
-        setCombatLog({ l1: 'Level Bank Full — spend your free levels!', l2: 'Select an attribute to continue.', l3: `Bank limit: ${maxBank} at Level ${p.level}` })
+        setCombatLog([
+          { text: 'Level Bank Full — spend your free levels!', color: '#FF9500' },
+          { text: `Bank limit: ${maxBank} at Level ${p.level}`, color: '#94a3b8' },
+        ])
         setEngaged(false)
         calcDerived(p); setPlayer(p); savePlayer(p)
         return
@@ -501,7 +585,14 @@ export default function App() {
         const newMax = getLevelBank(p.level)
         if (newBanked >= newMax) setPendingLevelUp(true)
       }
-      setCombatLog({ l1: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, l2: '', l3: '⚔ Enemy is dead! Press BATTLE' })
+      const statGains = `WIS(1) | NTL(1) | VIT(1) | STR(1) | DEX(1)`
+      const killLines: {text: string; color: string}[] = []
+      if (newTurn > 1) killLines.push({ text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' })
+      killLines.push({ text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' })
+      killLines.push({ text: 'Enemy is DEAD!', color: '#30D158' })
+      killLines.push({ text: statGains, color: '#FF9500' })
+      setCombatLog(killLines)
+      setEnemyCurrentHP(null)
       setEngaged(false)
     } else {
       const monsterDmg = Math.max(1, m.atk - (p.derivedStats.AC * GDD.AC_REDUCTION))
@@ -511,12 +602,23 @@ export default function App() {
         const ns = { ...battleStats, deaths: battleStats.deaths + 1, rounds: battleStats.rounds + 1 }
         setBattleStats(ns)
         try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ns)) } catch {}
-        setCombatLog({ l1: `${m.name} hit you for ${Math.round(monsterDmg)} dmg!`, l2: 'Chassis Integrity Depleted!', l3: '💀 Defeated! Press BATTLE' })
+        setCombatLog([
+          { text: `${m.name} hit you for ${Math.round(monsterDmg)} dmg!`, color: '#FF375F' },
+          { text: 'Chassis Integrity Depleted!', color: '#fbbf24' },
+          { text: '💀 Defeated! Press BATTLE', color: '#94a3b8' },
+        ])
+        setEnemyCurrentHP(null)
         p.hp = p.derivedStats.maxHp
         setEngaged(false)
       } else {
         setBattleStats(prev => ({ ...prev, rounds: prev.rounds + 1 }))
-        setCombatLog({ l1: `${m.name} hit you for ${Math.round(monsterDmg)} dmg!`, l2: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, l3: `Enemy HP: ${Math.max(0, Math.round(m.currentHP))}` })
+        const roundLines: {text: string; color: string}[] = []
+        roundLines.push({ text: `You attack ${m.name}`, color: '#cbd5e1' })
+        roundLines.push({ text: `${m.name} hit you for ${Math.round(monsterDmg)}!`, color: '#FF375F' })
+        if (newTurn > 1) roundLines.push({ text: `You hit ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' })
+        roundLines.push({ text: `You hit ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' })
+        setCombatLog(roundLines)
+        setEnemyCurrentHP(Math.max(0, Math.round(m.currentHP)))
         setCombatMonster(m)
       }
     }
@@ -674,9 +776,9 @@ export default function App() {
     <>
       <canvas ref={smokeRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, pointerEvents: 'none', opacity: 0.9 }} />
 
-      <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column' }} onClick={(e) => { if (equipPopup && !(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null); if (menuOpen && !(e.target as HTMLElement).closest('.menu-container')) setMenuOpen(false) }}>
+      <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column', background: 'transparent' }} onClick={(e) => { if (equipPopup && !(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null); if (menuOpen && !(e.target as HTMLElement).closest('.menu-container')) setMenuOpen(false) }}>
         <div style={{ position: 'relative', zIndex: 10, width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', padding: '10px', gap: '10px', paddingBottom: '112px' }}>
+          <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', padding: '10px', paddingTop: 'max(10px, env(safe-area-inset-top, 10px))', gap: '10px', paddingBottom: '112px' }}>
 
             {/* ── HUD ── */}
             {activeTab === null && (
@@ -741,13 +843,16 @@ export default function App() {
                           )}
                         </div>
 
-                        {/* Zone Info — under Menu */}
+                        {/* Zone Info — under Menu (Fix 6 order + Fix 10 Logout) */}
                         <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                             <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span> <span style={{ color: '#cbd5e1' }}>Aether Silver Cavern</span></p>
-                            <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3, flexShrink: 0 }}>[{player.pos.x}, {player.pos.y}]</p>
+                            <button
+                              onClick={handleLogout}
+                              style={{ flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase' }}
+                            >Logout</button>
                           </div>
-                          <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontFamily: 'monospace', lineHeight: 1.3 }}>[Z01]</p>
+                          <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos.x}, {player.pos.y}]</p>
                           <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Type:</span> <span style={{ color: '#3EE0FF', fontWeight: 700 }}>XP Zone</span></p>
                           <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Gem:</span> <span style={{ color: '#30D158' }}>G1 · 1/250</span></p>
                           <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Shadow:</span> <span style={{ color: '#52525b' }}>Off</span></p>
@@ -775,43 +880,44 @@ export default function App() {
 
             {/* ── STATS PANEL (Health / XP / Last Drop) — own glass section ── */}
             {activeTab === null && (
-              <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <section className="glass-panel" style={{ flexShrink: 0, padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {/* Health Bar */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
                     <span style={{ color: '#fff', fontWeight: 700 }}>Health:</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px', color: '#30D158' }}>{fmt(player.hp)} / {fmt(player.derivedStats.maxHp)}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '13px', color: '#30D158' }}>{fmt(player.hp)} / {fmt(player.derivedStats.maxHp)}</span>
                   </div>
-                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '7px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ height: '100%', borderRadius: '9999px', width: `${hpPct}%`, background: '#30D158', boxShadow: '0 0 10px rgba(48,209,88,0.6)', transition: 'width 0.3s' }} />
                   </div>
                 </div>
 
                 {/* Level / XP Bar */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
+                    <span style={{ color: '#fff', fontWeight: 700 }}>Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 600 }}>{player.level}</span></span>
+                    <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '12px' }}>Next Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>{fmt(player.xpToNextLevel)}</span></span>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
-                    <span style={{ color: '#fff', fontWeight: 700 }}>Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{player.level}</span></span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
                     <span style={{ color: '#fff', fontWeight: 700 }}>Experience: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{fmt(player.xp)}</span></span>
-                    <span style={{ color: '#94a3b8', fontWeight: 600 }}>Next Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>{fmt(player.xpToNextLevel)}</span></span>
                   </div>
-                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ height: '100%', borderRadius: '9999px', width: `${Math.max(0, Math.min(100, (player.xp / player.xpToNextLevel) * 100))}%`, background: 'linear-gradient(90deg, #BF5AF2, #9B59F5)', boxShadow: '0 0 10px rgba(191,90,242,0.6)', transition: 'width 0.3s' }} />
+                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '7px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ height: '100%', borderRadius: '9999px', width: `${Math.max(0, Math.min(100, (player.xp / player.xpToNextLevel) * 100))}%`, background: 'linear-gradient(90deg, #FF6B00, #FF9500)', boxShadow: '0 0 10px rgba(255,149,0,0.6)', transition: 'width 0.3s' }} />
                   </div>
                 </div>
 
-                {/* Last Item / Last Gem */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '9.5px', paddingTop: '2px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                    <span style={{ color: '#fff', fontWeight: 600 }}>Last Item:</span>
-                    <span style={{ color: lastItemColor, fontWeight: 700 }}>{lastItem}</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', color: '#30D158' }}>{player.inventory.length}/200</span>
+                {/* Last Item / Last Gem — bigger, easier to read, with Level */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.08)', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                    <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last Item</span>
+                    <span style={{ color: lastItemColor, fontWeight: 700, fontSize: '12px' }}>{lastItem}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px', color: '#30D158' }}>{player.inventory.length}/200</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                    <span style={{ color: '#fff', fontWeight: 600 }}>Last Gem:</span>
-                    <span style={{ color: lastGemColor, fontWeight: 700 }}>{lastGem}</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', color: '#30D158' }}>{player.gems.length}/200</span>
+                  <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)', alignSelf: 'stretch' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, alignItems: 'flex-end' }}>
+                    <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last Gem</span>
+                    <span style={{ color: lastGemColor, fontWeight: 700, fontSize: '12px' }}>{lastGem}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px', color: '#30D158' }}>{player.gems.length}/200</span>
                   </div>
                 </div>
               </section>
@@ -981,10 +1087,11 @@ export default function App() {
             )}
 
             {/* ── COMBAT CONSOLE ── */}
-            <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20, minHeight: '120px', justifyContent: 'space-between' }}>
+            <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20 }}>
+              {/* Top row: target selectors + battle button */}
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <select value={targetType} onChange={e => { setTargetType(e.target.value); if (engaged) setEngaged(false); setSelectedTargetId(e.target.value === 'monsters' ? 'E01' : 'P01') }}
+                  <select value={targetType} onChange={e => { setTargetType(e.target.value); if (engaged) { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) } setSelectedTargetId(e.target.value === 'monsters' ? 'E01' : 'P01') }}
                     style={{ appearance: 'none', paddingLeft: '10px', paddingRight: '24px', paddingTop: '6px', paddingBottom: '6px', borderRadius: '12px', background: 'rgba(0,0,0,0.9)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '12px', fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
                     <option value="monsters">Monsters</option>
                     <option value="players">Players</option>
@@ -995,9 +1102,10 @@ export default function App() {
                 </div>
 
                 <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                  <select className="editor-input" value={selectedTargetId} onChange={e => { setSelectedTargetId(e.target.value); if (engaged) setEngaged(false) }}
+                  {/* Fix 9: Remove HP from monster name in dropdown — HP shown separately below */}
+                  <select className="editor-input" value={selectedTargetId} onChange={e => { setSelectedTargetId(e.target.value); if (engaged) { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) } }}
                     style={{ width: '100%', paddingTop: '6px', paddingBottom: '6px', paddingRight: '28px', fontSize: '12px', background: 'rgba(0,0,0,0.9)', borderColor: 'rgba(255,255,255,0.2)', appearance: 'none' }}>
-                    {targets.map((t: any) => <option key={t.id} value={t.id}>{t.name} [HP {t.hp}]</option>)}
+                    {targets.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                   <div style={{ pointerEvents: 'none', position: 'absolute', top: 0, right: '8px', bottom: 0, display: 'flex', alignItems: 'center' }}>
                     <svg style={{ width: 14, height: 14 }} fill="none" stroke="#9ca3af" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
@@ -1009,20 +1117,44 @@ export default function App() {
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', paddingTop: '3px', borderTop: '1px solid rgba(255,255,255,0.12)', height: '40px', opacity: engaged ? 1 : 0, visibility: engaged ? 'visible' : 'hidden', transition: 'opacity 0.2s, visibility 0.2s' }}>
-                <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}>Cast</button>
-                <button className="combat-tactile-btn" onClick={() => { performTurn(true); setTimeout(() => performTurn(false), 0) }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>
-                  Cast+Fight
-                </button>
-                <button className="combat-tactile-btn combat-fight-slab" onClick={() => performTurn(false)}>Fight</button>
-              </div>
+              {/* Attack buttons — only when engaged */}
+              {engaged && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', paddingTop: '3px', borderTop: '1px solid rgba(255,255,255,0.12)', height: '40px' }}>
+                  <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}>Cast</button>
+                  <button className="combat-tactile-btn" onClick={() => { performTurn(true); setTimeout(() => performTurn(false), 0) }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>
+                    Cast+Fight
+                  </button>
+                  <button className="combat-tactile-btn combat-fight-slab" onClick={() => performTurn(false)}>Fight</button>
+                </div>
+              )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '2px 8px', background: 'rgba(0,0,0,0.6)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', height: '46px', minHeight: '46px', maxHeight: '46px', overflow: 'hidden', flexShrink: 0 }}>
-                <div style={{ fontSize: '10px', lineHeight: '1.3', fontWeight: 500, color: '#cbd5e1', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{combatLog.l1}</div>
-                <div style={{ fontSize: '10.5px', lineHeight: '1.3', fontWeight: 700, color: '#fff', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{combatLog.l2}</div>
-                <div style={{ fontSize: '10.5px', lineHeight: '1.3', fontWeight: 800, color: '#fbbf24', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{combatLog.l3}</div>
-              </div>
+              {/* Fix 9: Enemy HP shown only when engaged, no box */}
+              {engaged && enemyCurrentHP !== null && (
+                <div style={{ textAlign: 'center', paddingTop: '2px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#FF375F' }}>
+                    Enemies Health: {enemyCurrentHP}/{combatMonster?.hp ?? 0}
+                  </span>
+                </div>
+              )}
+
+              {/* Fix 9: Free-floating combat log lines — no box, just centered text */}
+              {combatLog.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '2px', paddingTop: '2px' }}>
+                  {combatLog.map((line, i) => (
+                    <div key={i} style={{ fontSize: '11px', lineHeight: 1.4, fontWeight: i === combatLog.length - 1 ? 700 : 500, color: line.color }}>
+                      {line.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* No-battle idle hint */}
+              {!engaged && combatLog.length === 0 && (
+                <div style={{ textAlign: 'center', fontSize: '10px', color: '#475569', paddingTop: '2px' }}>
+                  Select target &amp; press BATTLE to fight
+                </div>
+              )}
 
               {/* Attribute Focus Selector — shows when free levels available */}
               {canAllocate && (
@@ -1282,16 +1414,19 @@ function AccordionItem({ title, children }: { title: React.ReactNode; children: 
 }
 
 // ─── D-PAD COMPONENT ─────────────────────────────────────────
+// Grid coords: x increases RIGHT, y increases DOWN (screen coords)
+// UP = y-1, DOWN = y+1, LEFT = x-1, RIGHT = x+1
 function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => void; onEnter: () => void; style?: React.CSSProperties }) {
-  const btnSize = { width: '44px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 as const, cursor: 'pointer' }
+  const btnSize = { width: '50px', height: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 as const, cursor: 'pointer' }
+  // Diagonal buttons now have the same cyan trim as cardinals
   const diagBtn: React.CSSProperties = {
     ...btnSize,
     background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)',
-    border: '1px solid rgba(62,224,255,0.48)',
+    border: '1.5px solid rgba(62,224,255,0.6)',
     borderRadius: '0.75rem',
     color: '#e8fbff',
     fontSize: '13px',
-    boxShadow: '0 3px 8px rgba(0,0,0,0.8), inset 0 1px 1px rgba(62,224,255,0.28)',
+    boxShadow: '0 0 10px rgba(62,224,255,0.28), inset 0 1px 1px rgba(62,224,255,0.28), 0 3px 8px rgba(0,0,0,0.8)',
   }
   const cardinalBtn: React.CSSProperties = {
     ...btnSize,
@@ -1302,22 +1437,25 @@ function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => 
     boxShadow: '0 0 14px rgba(62,224,255,0.45), inset 0 1px 1px rgba(62,224,255,0.4), 0 3px 8px rgba(0,0,0,0.8)',
   }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridTemplateRows: 'repeat(3, 40px)', gap: '5px', justifyContent: 'center', ...style }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 50px)', gridTemplateRows: 'repeat(3, 46px)', gap: '6px', justifyContent: 'center', marginTop: '8px', ...style }}>
+      {/* Row 1: ↖  UP  ↗ */}
       <div style={diagBtn} onClick={() => onMove(-1, -1)}>↖</div>
       <div style={cardinalBtn} onClick={() => onMove(0, -1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
       </div>
       <div style={diagBtn} onClick={() => onMove(1, -1)}>↗</div>
+      {/* Row 2: LEFT  ENTER  RIGHT */}
       <div style={cardinalBtn} onClick={() => onMove(-1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
       </div>
-      <div style={{ ...diagBtn, border: '1px solid rgba(62,224,255,0.48)', fontSize: '9px', fontWeight: 800, letterSpacing: '0.01em', color: '#d9f8ff' }} onClick={onEnter}>Enter</div>
+      <div style={{ ...diagBtn, border: '1.5px solid rgba(62,224,255,0.6)', fontSize: '9px', fontWeight: 800, letterSpacing: '0.01em', color: '#d9f8ff' }} onClick={onEnter}>Enter</div>
       <div style={cardinalBtn} onClick={() => onMove(1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
       </div>
+      {/* Row 3: ↙  DOWN  ↘ */}
       <div style={diagBtn} onClick={() => onMove(-1, 1)}>↙</div>
       <div style={cardinalBtn} onClick={() => onMove(0, 1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
+        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
       </div>
       <div style={diagBtn} onClick={() => onMove(1, 1)}>↘</div>
     </div>
