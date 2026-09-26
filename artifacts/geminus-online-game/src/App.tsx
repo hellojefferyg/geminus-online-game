@@ -701,7 +701,19 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="menu-container" style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
+                        {/* Gold / Bank above Menu */}
+                        <div style={{ paddingTop: '4px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                          <div className="info-cell" style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '10px' }}>Gold:</span>
+                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '10px' }}>{fmt(player.gold)}</span>
+                          </div>
+                          <div className="info-cell" style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '10px' }}>Bank:</span>
+                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '10px' }}>{fmt(player.bank)}</span>
+                          </div>
+                        </div>
+
+                        <div className="menu-container" style={{ paddingTop: '4px', position: 'relative' }}>
                           <button
                             className="battle-mode-btn"
                             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
@@ -723,39 +735,30 @@ export default function App() {
                             </div>
                           )}
                         </div>
+
+                        {/* Zone Info — under Menu */}
+                        <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <p style={{ margin: 0, fontSize: '10.5px', fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>Zone: <span style={{ fontWeight: 400, color: '#cbd5e1' }}>Aether Silver Cavern</span></p>
+                          <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos.x}, {player.pos.y}] · Z01 · <span style={{ color: '#3EE0FF', fontWeight: 700, fontFamily: 'sans-serif' }}>XP Zone</span></p>
+                          <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8', lineHeight: 1.3 }}><span style={{ color: '#30D158', fontWeight: 600 }}>Gem:</span> G1 · 1/250</p>
+                          <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8', lineHeight: 1.3 }}><span style={{ color: '#52525b', fontWeight: 600 }}>Shadow:</span> Off</p>
+                        </div>
                       </div>
                     </section>
 
                     {/* Right: Nav Deck */}
                     {!battleMode && (
-                      <section style={{ width: '172px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '6px', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
-                        <div style={{ width: '100%', textAlign: 'center', paddingTop: '2px' }}>
-                          <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>Aether Silver Cavern</span></p>
-                          <p style={{ margin: '2px 0 0', fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Cords:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>[{player.pos.x}, {player.pos.y}]</span></p>
+                      <section style={{ width: '160px', flexShrink: 0, display: 'flex', flexDirection: 'column', paddingLeft: '0', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px' }}>
+                        {/* Square map — flush to top and right */}
+                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
+                          <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
                         </div>
-                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', margin: '4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <div style={{ width: '80px', height: '80px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <div className="mini-map-ring" style={{ position: 'absolute', inset: '-4px', borderRadius: '50%', animation: 'spin 20s linear infinite' }} />
-                            <div className="glass-panel mini-map-circle" style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden' }}>
-                              <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-                            </div>
-                          </div>
+                        {/* DPad directly below map */}
+                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
+                          <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
                         </div>
-                        <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
                       </section>
                     )}
-                  </div>
-
-                  {/* Gold/Bank */}
-                  <div style={{ paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    <div className="info-cell" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Gold:</span>
-                      <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '12px' }}>{fmt(player.gold)}</span>
-                    </div>
-                    <div className="info-cell" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Bank:</span>
-                      <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '12px' }}>{fmt(player.bank)}</span>
-                    </div>
                   </div>
 
                   {/* Health Bar */}
@@ -990,12 +993,12 @@ export default function App() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', paddingTop: '3px', borderTop: '1px solid rgba(255,255,255,0.12)', height: '40px', opacity: engaged ? 1 : 0, visibility: engaged ? 'visible' : 'hidden', transition: 'opacity 0.2s, visibility 0.2s' }}>
-                <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}><span>⚡</span><span>CAST</span></button>
+                <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}>Cast</button>
                 <button className="combat-tactile-btn" onClick={() => { performTurn(true); setTimeout(() => performTurn(false), 0) }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>
-                  <span>⚡</span><span>⚔</span><span style={{ fontSize: '0.65rem' }}>C+F</span>
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>
+                  Cast+Fight
                 </button>
-                <button className="combat-tactile-btn combat-fight-slab" onClick={() => performTurn(false)}><span>⚔</span><span>FIGHT</span></button>
+                <button className="combat-tactile-btn combat-fight-slab" onClick={() => performTurn(false)}>Fight</button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '2px 8px', background: 'rgba(0,0,0,0.6)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', height: '46px', minHeight: '46px', maxHeight: '46px', overflow: 'hidden', flexShrink: 0 }}>
@@ -1262,21 +1265,35 @@ function AccordionItem({ title, children }: { title: React.ReactNode; children: 
 
 // ─── D-PAD COMPONENT ─────────────────────────────────────────
 function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => void; onEnter: () => void; style?: React.CSSProperties }) {
+  const diagStyle: React.CSSProperties = {
+    width: '30px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'linear-gradient(180deg, #0e1e26 0%, #050a0d 100%)',
+    border: '1px solid rgba(62,224,255,0.22)', borderRadius: '7px',
+    color: 'rgba(62,224,255,0.45)', fontSize: '10px', cursor: 'pointer',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.6)', userSelect: 'none' as const,
+  }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridTemplateRows: 'repeat(3, 40px)', gridTemplateAreas: '". up ." "left enter right" ". down ."', gap: '5.5px', justifyContent: 'center', ...style }}>
-      <div className="game-key move-key" style={{ gridArea: 'up' }} onClick={() => onMove(0, -1)}>
+    <div style={{ display: 'grid', gridTemplateColumns: '30px 44px 30px', gridTemplateRows: '28px 40px 28px', gap: '4px', justifyContent: 'center', ...style }}>
+      {/* Row 1 */}
+      <div style={diagStyle} onClick={() => onMove(-1, -1)}>↖</div>
+      <div className="game-key move-key" onClick={() => onMove(0, -1)}>
         <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
       </div>
-      <div className="game-key move-key" style={{ gridArea: 'left' }} onClick={() => onMove(-1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
+      <div style={diagStyle} onClick={() => onMove(1, -1)}>↗</div>
+      {/* Row 2 */}
+      <div className="game-key move-key" style={{ width: '30px' }} onClick={() => onMove(-1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
       </div>
-      <div className="game-key move-key key-enter-btn" style={{ gridArea: 'enter' }} onClick={onEnter}>Enter</div>
-      <div className="game-key move-key" style={{ gridArea: 'right' }} onClick={() => onMove(1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
+      <div className="game-key move-key key-enter-btn" onClick={onEnter}>Enter</div>
+      <div className="game-key move-key" style={{ width: '30px' }} onClick={() => onMove(1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
       </div>
-      <div className="game-key move-key" style={{ gridArea: 'down' }} onClick={() => onMove(0, 1)}>
+      {/* Row 3 */}
+      <div style={diagStyle} onClick={() => onMove(-1, 1)}>↙</div>
+      <div className="game-key move-key" onClick={() => onMove(0, 1)}>
         <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
       </div>
+      <div style={diagStyle} onClick={() => onMove(1, 1)}>↘</div>
     </div>
   )
 }
