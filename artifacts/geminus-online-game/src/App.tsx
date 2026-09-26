@@ -2,10 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { auth, db } from './firebase/index'
 import { signOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
-// ─── GAME DATA ───────────────────────────────────────────────
-// All 24 races — must match RaceSelect.tsx exactly
+
 const races: Record<string, any> = {
-  // True Fighters — primary: DEX
   human:      { raceName: 'Human',      archetype: 'True Fighter',   primaryStat: 'DEX' },
   dragonborn: { raceName: 'Dragonborn', archetype: 'True Fighter',   primaryStat: 'DEX' },
   orc:        { raceName: 'Orc',        archetype: 'True Fighter',   primaryStat: 'DEX' },
@@ -14,7 +12,6 @@ const races: Record<string, any> = {
   troll:      { raceName: 'Troll',      archetype: 'True Fighter',   primaryStat: 'VIT' },
   hobbit:     { raceName: 'Hobbit',     archetype: 'True Fighter',   primaryStat: 'DEX' },
   centaur:    { raceName: 'Centaur',    archetype: 'True Fighter',   primaryStat: 'DEX' },
-  // True Casters — primary: WIS
   phoenix:    { raceName: 'Phoenix',    archetype: 'True Caster',    primaryStat: 'WIS' },
   tiefling:   { raceName: 'Tiefling',   archetype: 'True Caster',    primaryStat: 'WIS' },
   mermaid:    { raceName: 'Mermaid',    archetype: 'True Caster',    primaryStat: 'WIS' },
@@ -23,12 +20,10 @@ const races: Record<string, any> = {
   vampire:    { raceName: 'Vampire',    archetype: 'True Caster',    primaryStat: 'WIS' },
   elf:        { raceName: 'Elf',        archetype: 'True Caster',    primaryStat: 'WIS' },
   babayaga:   { raceName: 'Baba Yaga',  archetype: 'True Caster',    primaryStat: 'WIS' },
-  // Martial Hybrids — primary: DEX
   angel:      { raceName: 'Angel',      archetype: 'Martial Hybrid', primaryStat: 'DEX' },
   aasimar:    { raceName: 'Aasimar',    archetype: 'Martial Hybrid', primaryStat: 'DEX' },
   banshee:    { raceName: 'Banshee',    archetype: 'Martial Hybrid', primaryStat: 'DEX' },
   halfling:   { raceName: 'Halfling',   archetype: 'Martial Hybrid', primaryStat: 'DEX' },
-  // Mystic Hybrids — primary: WIS
   dwarf:      { raceName: 'Dwarf',      archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
   demon:      { raceName: 'Demon',      archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
   draugr:     { raceName: 'Draugr',     archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
@@ -39,18 +34,19 @@ const GDD = { XP_BASE: 200, XP_GROWTH: 1.12, AP_PER_LEVEL: 40, DAMAGE_CONST: 90,
 
 function getAttributeFocusOrder(raceKey: string): string[] {
   const rd = races[raceKey] || races.human
-  const primaryStat = rd.primaryStat
   const allStats = ['DEX', 'STR', 'NTL', 'WIS', 'VIT']
-  const others = allStats.filter(s => s !== primaryStat)
-  return [...others, primaryStat]
+  return [...allStats.filter(s => s !== rd.primaryStat), rd.primaryStat]
 }
 
-function getLevelBank(level: number): number {
-  return 1 + Math.floor(level / 50)
-}
+function getLevelBank(level: number): number { return 1 + Math.floor(level / 50) }
+function getBankedLevels(ap: number): number { return Math.floor(ap / GDD.AP_PER_LEVEL) }
 
-function getBankedLevels(attributePoints: number): number {
-  return Math.floor(attributePoints / GDD.AP_PER_LEVEL)
+// AP earned at level 1 from RaceSelect — not spendable points
+const INITIAL_AP = GDD.AP_PER_LEVEL // 40 given on character creation
+function canSpendAP(ap: number, level: number): boolean {
+  // Only show spend bar if AP > what was given at creation
+  // i.e. player has actually leveled up and earned new AP
+  return ap > INITIAL_AP || getBankedLevels(ap) > 0 && level > 1
 }
 
 const BESTIARY: Record<string, any> = {
@@ -132,7 +128,6 @@ const CHAT_SUBS: Record<string, [string, string][]> = {
   groups: [['g1', ''], ['g2', ''], ['g3', ''], ['g4', '']],
 }
 
-// ─── HELPERS ──────────────────────────────────────────────────
 function fmt(n: number): string {
   if (!n || isNaN(n)) return '0'
   const a = Math.abs(n)
@@ -148,13 +143,11 @@ function calcDerived(p: any) {
   if (!Array.isArray(p.gems)) p.gems = []
   if (!p.equipment || typeof p.equipment !== 'object') p.equipment = {}
   if (!p.pos || typeof p.pos !== 'object') p.pos = { x: 7, y: 7 }
-
   const rd = races[p.race] || races.human
   let ac = 0, wc = 0, sc = 0
   for (const slotName in p.equipment) {
     const iid = p.equipment[slotName]; if (!iid) continue
-    const item = Array.isArray(p.inventory) ? p.inventory.find((i: any) => i.instanceId === iid) : null
-    if (!item) continue
+    const item = p.inventory.find((i: any) => i.instanceId === iid); if (!item) continue
     const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) continue
     const mod = SLOT_MODS[base.subType] || {}
     const tier = DROPPER_TIERS.find(t => t.tier === item.tier) || DROPPER_TIERS[0]
@@ -163,9 +156,9 @@ function calcDerived(p: any) {
     if (mod.stat === 'WC') wc += val
     if (mod.stat === 'SC') sc += val
   }
-  const pStat = (p.baseStats && p.baseStats[rd.primaryStat]) || 10
-  const vit = (p.baseStats && p.baseStats.VIT) || 10
-  const dex = (p.baseStats && p.baseStats.DEX) || 10
+  const pStat = (p.baseStats[rd.primaryStat]) || 10
+  const vit = (p.baseStats.VIT) || 10
+  const dex = (p.baseStats.DEX) || 10
   p.derivedStats = {
     maxHp: 100 + vit * 10,
     AC: Math.max(10, ac * (1 + vit * 0.0075)),
@@ -178,17 +171,13 @@ function calcDerived(p: any) {
   return p
 }
 
-// ─── SAVE PLAYER → SUPABASE via API route ────────────────────
-// Only called on: level-up, stat spend, combat end, equip change, logout, tab hide
+// ─── SAVE → SUPABASE ─────────────────────────────────────────
 async function savePlayer(p: any, reason: string = '') {
   if (!p?.uid) return
   try {
-      await fetch('/api/player/save', {
+    await fetch('/api/player/save', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         uid: p.uid,
         xp: p.xp ?? 0,
@@ -201,13 +190,11 @@ async function savePlayer(p: any, reason: string = '') {
         pos: p.pos ?? { zoneId: 'Z01', x: 0, y: 0 },
         inventory: p.inventory ?? [],
         gems: p.gems ?? [],
-        kills: 0,
+        kills: p.kills ?? 0,
       }),
     })
     if (reason) console.log(`[save] ${reason}`)
-  } catch (e) {
-    console.error('savePlayer failed:', e)
-  }
+  } catch (e) { console.error('savePlayer failed:', e) }
 }
 
 // ─── ITEM ICONS ───────────────────────────────────────────────
@@ -252,7 +239,7 @@ export default function App({ uid }: { uid: string }) {
   const [theme, setTheme] = useState('aether')
   const [toast, setToast] = useState('')
   const [activeTab, setActiveTab] = useState<string | null>(null)
-  const [battleMode, setBattleMode] = useState(false)
+  const [battleMode] = useState(false)
   const [engaged, setEngaged] = useState(false)
   const [selectedTargetId, setSelectedTargetId] = useState('E01')
   const [combatMonster, setCombatMonster] = useState<any>(null)
@@ -270,13 +257,14 @@ export default function App({ uid }: { uid: string }) {
   const [chatInput, setChatInput] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [equipPopup, setEquipPopup] = useState<string | null>(null)
-  const [pendingLevelUp, setPendingLevelUp] = useState(false)
   const [chatNameColor, setChatNameColor] = useState('#3EE0FF')
   const [inboxOpen, setInboxOpen] = useState(false)
-  const [groupNames, setGroupNames] = useState<Record<string, string>>({ g1: 'Group-1', g2: 'Group-2', g3: 'Group-3', g4: 'Group-4' })
+  const [groupNames] = useState<Record<string, string>>({ g1: 'Group-1', g2: 'Group-2', g3: 'Group-3', g4: 'Group-4' })
   const [filterState, setFilterState] = useState({ category: 'All', subType: 'All', tier: 'All', quality: 'All', sortBy: 'tier', order: 'desc' })
   const [menuOpen, setMenuOpen] = useState(false)
   const [turnCount, setTurnCount] = useState(0)
+  // Track kills in session for save cadence
+  const sessionKillsRef = useRef(0)
   const smokeRef = useRef<HTMLCanvasElement>(null)
   const miniMapRef = useRef<HTMLCanvasElement>(null)
   const zoneCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -284,100 +272,82 @@ export default function App({ uid }: { uid: string }) {
   const playerRef = useRef<any>(null)
 
   const showToast = useCallback((msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(''), 2800)
+    setToast(msg); setTimeout(() => setToast(''), 2800)
   }, [])
 
-  // Keep playerRef in sync so visibilitychange always has latest state
   useEffect(() => { playerRef.current = player }, [player])
 
-  // Theme-color meta tag for Safari status bar
   useEffect(() => {
     let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement
-    if (!meta) {
-      meta = document.createElement('meta') as HTMLMetaElement
-      meta.name = 'theme-color'
-      document.head.prepend(meta)
-    }
+    if (!meta) { meta = document.createElement('meta') as HTMLMetaElement; meta.name = 'theme-color'; document.head.prepend(meta) }
     meta.content = '#03080c'
   }, [])
 
-  // ── FIREBASE PLAYER LOAD ──
+  // ── LOAD: Firestore (identity) + Supabase (live stats) ──
   useEffect(() => {
-    const loadPlayerDoc = async () => {
+    const loadPlayer = async () => {
       try {
         const snap = await getDoc(doc(db, 'players', uid))
-        if (!snap.exists()) {
-          setLoadError('Character data not found. Please sign out and create your character.')
-          return
-        }
+        if (!snap.exists()) { setLoadError('Character not found. Sign out and create your character.'); return }
         const data = snap.data() as any
         const p: any = {
           uid,
           name: data.name || 'Pilot',
-          level: data.level || 1,
-          xp: data.xp || 0,
-          xpToNextLevel: data.xpToNextLevel || 200,
-          attributePoints: data.attributePoints ?? 40,
-          gold: data.gold || 0,
-          bank: data.bank || 0,
           race: data.race || 'human',
           raceName: data.raceName || 'Human',
           archetype: data.archetype || 'True Fighter',
           cci: data.cci || 'DEX',
+          // defaults — will be overwritten by Supabase if row exists
+          level: 1, xp: 0, xpToNextLevel: 200,
+          attributePoints: 0, // start at 0, Supabase has real value
+          gold: 0, bank: data.bank || 0,
           baseStats: data.baseStats || { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 },
-          derivedStats: {},
-          hp: data.hp,
-          inventory: data.inventory || [],
-          equipment: data.equipment || {},
-          gems: data.gems || [],
-          pos: data.pos || { x: 7, y: 7 },
+          derivedStats: {}, hp: null,
+          inventory: [], equipment: data.equipment || {}, gems: [],
+          pos: data.pos || { x: 7, y: 7 }, kills: 0,
         }
+        // Overlay live stats from Supabase
+        try {
+          const res = await fetch(`/api/player?uid=${uid}`)
+          const supa = await res.json()
+          if (supa && !supa.error) {
+            p.xp = supa.xp ?? 0
+            p.gold = supa.gold ?? 0
+            p.level = supa.level ?? 1
+            p.hp = supa.hp ?? null
+            p.attributePoints = supa.attribute_points ?? 0
+            p.kills = supa.kills ?? 0
+            if (supa.base_stats && Object.keys(supa.base_stats).length > 0) p.baseStats = supa.base_stats
+            if (Array.isArray(supa.gems) && supa.gems.length > 0) p.gems = supa.gems
+            if (Array.isArray(supa.inventory) && supa.inventory.length > 0) p.inventory = supa.inventory
+          }
+        } catch (e) { console.log('Supabase load skipped', e) }
+        p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
         calcDerived(p)
-          if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
-          try {
-            const res = await fetch(`/api/player?uid=${uid}`)
-            const supa = await res.json()
-            if (supa && !supa.error) {
-              p.xp = supa.xp ?? p.xp
-              p.gold = supa.gold ?? p.gold
-              p.level = supa.level ?? p.level
-              p.hp = supa.hp ?? p.hp
-              p.attributePoints = supa.attribute_points ?? p.attributePoints
-              p.baseStats = supa.base_stats && Object.keys(supa.base_stats).length > 0 ? supa.base_stats : p.baseStats
-              p.gems = supa.gems?.length > 0 ? supa.gems : p.gems
-              p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
-              calcDerived(p)
-            }
-          } catch (e) { console.log('Supabase load skipped', e) }
-          setPlayer(p)
-
+        if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
+        setPlayer(p)
       } catch (err: any) {
-        const msg = err?.code === 'permission-denied'
-          ? 'Firestore permission denied — check security rules in Firebase console.'
-          : `Failed to load character: ${err?.message || 'Unknown error'}`
-        setLoadError(msg)
+        setLoadError(err?.code === 'permission-denied'
+          ? 'Firestore permission denied — check security rules.'
+          : `Failed to load character: ${err?.message || 'Unknown error'}`)
       }
     }
-    loadPlayerDoc()
+    loadPlayer()
     const savedTheme = localStorage.getItem('g_theme') || 'aether'
     setTheme(savedTheme)
     document.documentElement.classList.toggle('theme-onyx', savedTheme === 'onyx')
     setChatMessages(prev => ({ ...prev, main: [{ sender: 'System', text: 'Welcome to Geminus. Transmission systems online.', color: '#3EE0FF' }] }))
   }, [uid])
 
-  // ── VISIBILITY SAVE — fires when player hides the tab ──
+  // Tab-hide save
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === 'hidden' && playerRef.current) {
-        savePlayer(playerRef.current, 'tab-hidden')
-      }
+      if (document.visibilityState === 'hidden' && playerRef.current) savePlayer(playerRef.current, 'tab-hidden')
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
-  // Theme
   useEffect(() => {
     document.documentElement.classList.toggle('theme-onyx', theme === 'onyx')
     localStorage.setItem('g_theme', theme)
@@ -403,15 +373,15 @@ export default function App({ uid }: { uid: string }) {
       }
       update() {
         this.x += this.sx; this.y += this.sy; this.rot += this.rs
-        if (this.x < -this.size * 1.5 || this.x > canvas.width + this.size * 1.5 || this.y < -this.size * 1.5 || this.y > canvas.height + this.size * 1.5) Object.assign(this, new Smoke())
+        if (this.x < -this.size*1.5 || this.x > canvas.width+this.size*1.5 || this.y < -this.size*1.5 || this.y > canvas.height+this.size*1.5) Object.assign(this, new Smoke())
       }
       draw() {
         ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rot)
         const g = ctx.createRadialGradient(0, 0, 0, 0, 0, this.size)
-        if (this.type === 'black') { g.addColorStop(0, `rgba(0,0,0,${this.alpha * 1.4})`); g.addColorStop(0.5, `rgba(0,0,0,${this.alpha * 0.7})`); g.addColorStop(1, 'rgba(0,0,0,0)') }
-        else if (this.type === 'white') { g.addColorStop(0, `rgba(${this.r},${this.g},${this.b},${this.alpha * 1.2})`); g.addColorStop(0.4, `rgba(200,210,225,${this.alpha * 0.5})`); g.addColorStop(1, 'rgba(255,255,255,0)') }
-        else { g.addColorStop(0, `rgba(${this.r},${this.g},${this.b},${this.alpha * 1.3})`); g.addColorStop(0.5, `rgba(5,5,8,${this.alpha * 0.6})`); g.addColorStop(1, 'rgba(0,0,0,0)') }
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, this.size, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+        if (this.type === 'black') { g.addColorStop(0, `rgba(0,0,0,${this.alpha*1.4})`); g.addColorStop(0.5, `rgba(0,0,0,${this.alpha*0.7})`); g.addColorStop(1, 'rgba(0,0,0,0)') }
+        else if (this.type === 'white') { g.addColorStop(0, `rgba(${this.r},${this.g},${this.b},${this.alpha*1.2})`); g.addColorStop(0.4, `rgba(200,210,225,${this.alpha*0.5})`); g.addColorStop(1, 'rgba(255,255,255,0)') }
+        else { g.addColorStop(0, `rgba(${this.r},${this.g},${this.b},${this.alpha*1.3})`); g.addColorStop(0.5, `rgba(5,5,8,${this.alpha*0.6})`); g.addColorStop(1, 'rgba(0,0,0,0)') }
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, this.size, 0, Math.PI*2); ctx.fill(); ctx.restore()
       }
     }
     const particles = Array.from({ length: 40 }, (_, i) => new Smoke(true))
@@ -423,7 +393,6 @@ export default function App({ uid }: { uid: string }) {
     return () => { cancelAnimationFrame(id); window.removeEventListener('resize', onResize) }
   }, [])
 
-  // Mini map
   useEffect(() => {
     if (!miniMapRef.current || !player) return
     const canvas = miniMapRef.current; const ctx = canvas.getContext('2d')!
@@ -431,15 +400,11 @@ export default function App({ uid }: { uid: string }) {
     canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
     ctx.scale(dpr, dpr)
     const w = canvas.offsetWidth; const h = canvas.offsetHeight
-    ctx.clearRect(0, 0, w, h)
-    ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, w, h)
-    const dotX = w / 2; const dotY = h / 2
+    ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, w, h)
     ctx.fillStyle = '#3EE0FF'; ctx.shadowBlur = 8; ctx.shadowColor = '#3EE0FF'
-    ctx.beginPath(); ctx.arc(dotX, dotY, 5, 0, Math.PI * 2); ctx.fill()
-    ctx.shadowBlur = 0
+    ctx.beginPath(); ctx.arc(w/2, h/2, 5, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0
   }, [player, activeTab])
 
-  // Zone canvas
   useEffect(() => {
     if (!zoneCanvasRef.current || !player || !mapOverlay) return
     const canvas = zoneCanvasRef.current; const ctx = canvas.getContext('2d')!
@@ -449,69 +414,44 @@ export default function App({ uid }: { uid: string }) {
     const w = canvas.offsetWidth; const h = canvas.offsetHeight
     ctx.clearRect(0, 0, w, h)
     const t = 28; const pos = player.pos
-    const ox = w / 2 - pos.x * t - t / 2; const oy = h / 2 - pos.y * t - t / 2
+    const ox = w/2 - pos.x*t - t/2; const oy = h/2 - pos.y*t - t/2
     ctx.save(); ctx.translate(ox, oy)
-    for (let x = 0; x < 16; x++) {
-      for (let y = 0; y < 16; y++) {
-        const cur = x === pos.x && y === pos.y
-        if (cur) { ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(x * t, y * t, t, t) }
-        ctx.strokeStyle = cur ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.strokeRect(x * t, y * t, t, t)
-      }
+    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
+      const cur = x === pos.x && y === pos.y
+      if (cur) { ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(x*t, y*t, t, t) }
+      ctx.strokeStyle = cur ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.strokeRect(x*t, y*t, t, t)
     }
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(pos.x * t + t / 2, pos.y * t + t / 2, t * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(pos.x*t+t/2, pos.y*t+t/2, t*0.32, 0, Math.PI*2); ctx.fill(); ctx.restore()
   }, [player, mapOverlay])
 
-  // Chat scroll
   useEffect(() => {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
   }, [chatMessages, chatChannel, chatSub])
 
   if (!player) return (
-    <div style={{
-      minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', gap: '16px', padding: '24px',
-      background: 'radial-gradient(circle at 50% 8%, #143044 0%, #0a1a26 38%, #03080c 100%)',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif',
-    }}>
+    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', background: 'radial-gradient(circle at 50% 8%, #143044 0%, #0a1a26 38%, #03080c 100%)', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif' }}>
       <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#3EE0FF', letterSpacing: '0.14em', margin: 0, textShadow: '0 0 30px rgba(62,224,255,0.5)' }}>GEMINUS</h1>
       {loadError ? (
-        <>
-          <p style={{ color: '#f87171', fontSize: '13px', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5, margin: 0 }}>{loadError}</p>
-          <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', borderRadius: '10px', background: 'rgba(62,224,255,0.1)', border: '1px solid rgba(62,224,255,0.4)', color: '#3EE0FF', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>
-            Retry
-          </button>
-        </>
-      ) : (
-        <p style={{ color: '#64748b', fontSize: '12px', letterSpacing: '0.08em', margin: 0 }}>Loading your character...</p>
-      )}
-      <button onClick={async () => {
-        try { await signOut(auth) } catch {}
-        try { localStorage.clear() } catch {}
-        try { sessionStorage.clear() } catch {}
-        window.location.replace(window.location.origin)
-      }}
-        style={{ marginTop: '8px', background: 'rgba(255,55,95,0.1)', border: '1px solid rgba(255,55,95,0.3)', borderRadius: '8px', color: '#f87171', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: '10px 28px' }}>
-        Sign Out
-      </button>
-      <p style={{ color: '#1e3a4a', fontSize: '10px', margin: 0, textAlign: 'center', maxWidth: '280px' }}>
-        Tap Sign Out to return to login and create your character
-      </p>
+        <><p style={{ color: '#f87171', fontSize: '13px', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5, margin: 0 }}>{loadError}</p>
+        <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', borderRadius: '10px', background: 'rgba(62,224,255,0.1)', border: '1px solid rgba(62,224,255,0.4)', color: '#3EE0FF', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>Retry</button></>
+      ) : <p style={{ color: '#64748b', fontSize: '12px', letterSpacing: '0.08em', margin: 0 }}>Loading your character...</p>}
+      <button onClick={async () => { try { await signOut(auth) } catch {} try { localStorage.clear() } catch {} window.location.replace(window.location.origin) }}
+        style={{ marginTop: '8px', background: 'rgba(255,55,95,0.1)', border: '1px solid rgba(255,55,95,0.3)', borderRadius: '8px', color: '#f87171', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: '10px 28px' }}>Sign Out</button>
     </div>
   )
 
-  // Logout — save first, then sign out
   const handleLogout = async () => {
     if (!window.confirm('Log out of Geminus?')) return
     await savePlayer(playerRef.current, 'logout')
     signOut(auth).then(() => window.location.reload()).catch(() => window.location.reload())
   }
 
-  const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL
+  // ── FIX: only show stat bar when player has earned NEW AP from leveling up ──
+  // AP starts at 0 from Supabase. RaceSelect gave 40 on creation but that's stored
+  // in Firestore, not Supabase. So if Supabase ap > 0, player has unspent level-up AP.
+  const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL && player.level > 1
 
-  const handleColorChange = (color: string) => {
-    setChatNameColor(color)
-    localStorage.setItem('g_name', color)
-  }
+  const handleColorChange = (color: string) => { setChatNameColor(color); localStorage.setItem('g_name', color) }
 
   const spendPoint = (attr: string) => {
     if (!canAllocate) return
@@ -521,50 +461,35 @@ export default function App({ uid }: { uid: string }) {
     const baseScale = GDD.AP_PER_LEVEL / total
     for (const k of statKeys) {
       const w = p.baseStats[k] || 1
-      const boost = k === attr
-        ? w * baseScale * 1.5
-        : w * baseScale * 0.5
-      p.baseStats[k] = (p.baseStats[k] || 1) + boost
+      p.baseStats[k] = (p.baseStats[k] || 1) + (k === attr ? w * baseScale * 1.5 : w * baseScale * 0.5)
     }
     p.attributePoints -= GDD.AP_PER_LEVEL
     calcDerived(p)
     setPlayer(p); savePlayer(p, 'stat-spend')
-    const remaining = getBankedLevels(p.attributePoints)
-    const max = getLevelBank(p.level)
-    if (remaining < max) setPendingLevelUp(false)
     showToast(attr + ' upgraded!')
   }
 
   const move = (dx: number, dy: number) => {
     const newX = Math.max(0, Math.min(15, player.pos.x + dx))
     const newY = Math.max(0, Math.min(15, player.pos.y - dy))
-    const p = { ...player, pos: { x: newX, y: newY } }
-    setPlayer(p)
-    // No save on move — position saves on next real trigger
+    setPlayer({ ...player, pos: { x: newX, y: newY } })
   }
 
   const getTargets = () => BESTIARY.Z01.monsters
 
   const toggleEngage = () => {
     if (!engaged) {
-      const targets = getTargets()
-      const t = targets.find((x: any) => x.id === selectedTargetId) || targets[0]
+      const t = getTargets().find((x: any) => x.id === selectedTargetId) || getTargets()[0]
       if (!t) { showToast('Select target first.'); return }
-      setCombatMonster({ ...t, currentHP: t.hp })
-      setTurnCount(0)
-      setEnemyCurrentHP(t.hp)
-      setCombatLog([])
-      setEngaged(true)
-    } else {
-      setEngaged(false)
-      setEnemyCurrentHP(null)
-      setCombatLog([])
-    }
+      setCombatMonster({ ...t, currentHP: t.hp }); setTurnCount(0); setEnemyCurrentHP(t.hp); setCombatLog([]); setEngaged(true)
+    } else { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) }
   }
 
   const performTurn = (isMagic: boolean) => {
     if (!engaged || !combatMonster) return
-    const p = { ...player, baseStats: { ...player.baseStats }, derivedStats: { ...player.derivedStats } }
+    // ── FIX: always use playerRef.current to avoid stale closure ──
+    const current = playerRef.current || player
+    const p = { ...current, baseStats: { ...current.baseStats }, derivedStats: { ...current.derivedStats } }
     const m = { ...combatMonster }
     const classVal = isMagic ? (p.derivedStats.SC || 12) : (p.derivedStats.WC || 15)
     const playerDmg = (GDD.DAMAGE_CONST * classVal) / Math.max(5, m.def)
@@ -576,102 +501,71 @@ export default function App({ uid }: { uid: string }) {
       const bankedLevels = getBankedLevels(p.attributePoints || 0)
       const maxBank = getLevelBank(p.level)
       if (bankedLevels >= maxBank) {
-        setPendingLevelUp(true)
-        setCombatLog([
-          { text: 'Level Bank Full — spend your free levels!', color: '#FF9500' },
-          { text: `Bank limit: ${maxBank} at Level ${p.level}`, color: '#94a3b8' },
-        ])
-        setEngaged(false)
-        calcDerived(p); setPlayer(p); savePlayer(p, 'bank-full')
-        return
+        setCombatLog([{ text: 'Level Bank Full — spend your free levels!', color: '#FF9500' }, { text: `Bank limit: ${maxBank} at Level ${p.level}`, color: '#94a3b8' }])
+        setEngaged(false); calcDerived(p); setPlayer(p); savePlayer(p, 'bank-full'); return
       }
       const newStats = { ...battleStats, kills: battleStats.kills + 1, rounds: battleStats.rounds + 1, oneHitKills: battleStats.oneHitKills + (newTurn === 1 ? 1 : 0) }
       setBattleStats(newStats)
       try { localStorage.setItem('geminus_battle_stats', JSON.stringify(newStats)) } catch {}
       p.gold += m.gold; p.xp += m.xp
+      p.kills = (p.kills || 0) + 1
+      sessionKillsRef.current += 1
       setLastItem(m.drop?.name || 'Item'); setLastItemColor(RARITY_COLORS[m.drop?.rarity] || '#8FA8C7')
       if (Math.random() < 0.35) {
         const allGems = Object.entries(GEMS)
         const [gId, gData] = allGems[Math.floor(Math.random() * allGems.length)]
-        if (p.gems.length < 200) {
-          p.gems = [...p.gems, { id: gId, grade: 1 }]
-          setLastGem(`${(gData as any).name} G1`); setLastGemColor(RARITY_COLORS['Rare'])
-        }
+        if (p.gems.length < 200) { p.gems = [...p.gems, { id: gId, grade: 1 }]; setLastGem(`${(gData as any).name} G1`); setLastGemColor(RARITY_COLORS['Rare']) }
       }
       let didLevelUp = false
       if (p.xp >= p.xpToNextLevel) {
         p.level++; p.xp -= p.xpToNextLevel
-        p.attributePoints += GDD.AP_PER_LEVEL
+        p.attributePoints = (p.attributePoints || 0) + GDD.AP_PER_LEVEL
         p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
         const ls = { ...newStats, levels: newStats.levels + 1 }
-        setBattleStats(ls)
-        try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ls)) } catch {}
-        showToast(`⬆ Level Up! Level ${p.level}`)
-        const newBanked = getBankedLevels(p.attributePoints)
-        const newMax = getLevelBank(p.level)
-        if (newBanked >= newMax) setPendingLevelUp(true)
-        didLevelUp = true
+        setBattleStats(ls); try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ls)) } catch {}
+        showToast(`⬆ Level Up! Level ${p.level}`); didLevelUp = true
       }
-      const statGains = `WIS(1) | NTL(1) | VIT(1) | STR(1) | DEX(1)`
-      const killLines: {text: string; color: string}[] = []
-      if (newTurn > 1) killLines.push({ text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' })
-      killLines.push({ text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' })
-      killLines.push({ text: 'Enemy is DEAD!', color: '#30D158' })
-      killLines.push({ text: statGains, color: '#FF9500' })
-      setCombatLog(killLines)
-      setEnemyCurrentHP(null)
-      setEngaged(false)
+      setCombatLog([
+        ...(newTurn > 1 ? [{ text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' }] : []),
+        { text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' },
+        { text: 'Enemy is DEAD!', color: '#30D158' },
+        { text: `WIS(1) | NTL(1) | VIT(1) | STR(1) | DEX(1)`, color: '#FF9500' },
+      ])
+      setEnemyCurrentHP(null); setEngaged(false)
       calcDerived(p); setPlayer(p)
-      // Save on level-up or every 10 kills
-       savePlayer(p, didLevelUp ? 'level-up' : 'kill')
+      // Save on level-up or every 5 kills
+      if (didLevelUp || sessionKillsRef.current % 5 === 0) savePlayer(p, didLevelUp ? 'level-up' : 'kill-checkpoint')
     } else {
       const monsterDmg = Math.max(1, m.atk - (p.derivedStats.AC * GDD.AC_REDUCTION))
       p.hp -= monsterDmg
       if (p.hp <= 0) {
-        p.hp = 0
-        const ns = { ...battleStats, deaths: battleStats.deaths + 1, rounds: battleStats.rounds + 1 }
-        setBattleStats(ns)
-        try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ns)) } catch {}
-        setCombatLog([
-          { text: `${m.name} hit you for ${Math.round(monsterDmg)} dmg!`, color: '#FF375F' },
-          { text: 'Chassis Integrity Depleted!', color: '#fbbf24' },
-          { text: '💀 Defeated! Press BATTLE', color: '#94a3b8' },
-        ])
-        setEnemyCurrentHP(null)
         p.hp = p.derivedStats.maxHp
-        setEngaged(false)
-        calcDerived(p); setPlayer(p); savePlayer(p, 'death')
+        const ns = { ...battleStats, deaths: battleStats.deaths + 1, rounds: battleStats.rounds + 1 }
+        setBattleStats(ns); try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ns)) } catch {}
+        setCombatLog([{ text: `${m.name} hit you for ${Math.round(monsterDmg)} dmg!`, color: '#FF375F' }, { text: 'Chassis Integrity Depleted!', color: '#fbbf24' }, { text: '💀 Defeated! Press BATTLE', color: '#94a3b8' }])
+        setEnemyCurrentHP(null); setEngaged(false); calcDerived(p); setPlayer(p); savePlayer(p, 'death')
       } else {
         setBattleStats(prev => ({ ...prev, rounds: prev.rounds + 1 }))
-        const roundLines: {text: string; color: string}[] = []
-        roundLines.push({ text: `You attack ${m.name}`, color: '#cbd5e1' })
-        roundLines.push({ text: `${m.name} hit you for ${Math.round(monsterDmg)}!`, color: '#FF375F' })
-        if (newTurn > 1) roundLines.push({ text: `You hit ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' })
-        roundLines.push({ text: `You hit ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' })
-        setCombatLog(roundLines)
-        setEnemyCurrentHP(Math.max(0, Math.round(m.currentHP)))
-        setCombatMonster(m)
+        setCombatLog([
+          { text: `You attack ${m.name}`, color: '#cbd5e1' },
+          { text: `${m.name} hit you for ${Math.round(monsterDmg)}!`, color: '#FF375F' },
+          ...(newTurn > 1 ? [{ text: `You hit ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' }] : []),
+          { text: `You hit ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' },
+        ])
+        setEnemyCurrentHP(Math.max(0, Math.round(m.currentHP))); setCombatMonster(m)
         calcDerived(p); setPlayer(p)
-        // No save mid-combat — only on kill or death
       }
     }
   }
 
   const sendMessage = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!chatInput.trim()) return
-    const ch = chatChannel; const sub = chatSub[ch]
-    const key = ch === 'groups' ? sub : ch
-    const msg = { sender: player.name || 'Jeff', text: chatInput.trim(), color: chatNameColor }
-    setChatMessages(prev => ({ ...prev, [key]: [...(prev[key] || []).slice(-149), msg] }))
+    e.preventDefault(); if (!chatInput.trim()) return
+    const key = chatChannel === 'groups' ? chatSub[chatChannel] : chatChannel
+    setChatMessages(prev => ({ ...prev, [key]: [...(prev[key] || []).slice(-149), { sender: player.name || 'Jeff', text: chatInput.trim(), color: chatNameColor }] }))
     setChatInput('')
   }
 
-  const switchChannel = (ch: string) => {
-    setChatChannel(ch)
-    if (inboxOpen) setInboxOpen(false)
-  }
-
+  const switchChannel = (ch: string) => { setChatChannel(ch); if (inboxOpen) setInboxOpen(false) }
   const toggleInbox = () => setInboxOpen(prev => !prev)
 
   const renderChatContent = () => {
@@ -680,14 +574,7 @@ export default function App({ uid }: { uid: string }) {
     const key = chatChannel === 'groups' ? sub : chatChannel
     const msgs = chatMessages[key] || []
     return msgs.length === 0 ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#475569', fontSize: '12px' }}></div> : (
-      <>
-        {msgs.map((m: any, i: number) => (
-          <div key={i} style={{ margin: '4px 0', fontSize: '12px' }}>
-            <span style={{ color: m.color || chatNameColor, fontWeight: 800 }}>{m.sender}:</span>{' '}
-            <span style={{ color: '#fff' }}>{m.text}</span>
-          </div>
-        ))}
-      </>
+      <>{msgs.map((m: any, i: number) => <div key={i} style={{ margin: '4px 0', fontSize: '12px' }}><span style={{ color: m.color || chatNameColor, fontWeight: 800 }}>{m.sender}:</span>{' '}<span style={{ color: '#fff' }}>{m.text}</span></div>)}</>
     )
   }
 
@@ -712,26 +599,17 @@ export default function App({ uid }: { uid: string }) {
     return (
       <>
         {Object.entries(INVENTORY_BAGS).map(([bagName, types]) => {
-          const bagItems = filtered.filter((item: any) => {
-            const base = BASE_ITEMS.find(b => b.id === item.baseItemId)
-            return base && types.includes(base.type)
-          })
+          const bagItems = filtered.filter((item: any) => { const base = BASE_ITEMS.find(b => b.id === item.baseItemId); return base && types.includes(base.type) })
           return (
             <AccordionItem key={bagName} title={<span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#fff' }}>📦 {bagName} <span style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'monospace' }}>({bagItems.length})</span></span>}>
               <div className="inventory-grid">
                 {bagItems.length === 0 ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '16px', color: '#71717a', fontSize: '11px' }}>No items found</div> :
                   bagItems.map((item: any) => {
-                    const base = BASE_ITEMS.find(b => b.id === item.baseItemId)
-                    const gems = item.socketedGems || []
+                    const base = BASE_ITEMS.find(b => b.id === item.baseItemId); const gems = item.socketedGems || []
                     return (
                       <div key={item.instanceId}>
                         <div className="inventory-slot" onClick={() => setEquipPopup(prev => prev === item.instanceId ? null : item.instanceId)}>
-                          {gems.length > 0 && (
-                            <div className="gem-overlays-container">
-                              {gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}
-                              {gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}
-                            </div>
-                          )}
+                          {gems.length > 0 && <div className="gem-overlays-container">{gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}{gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}</div>}
                           <div className="item-icon-wrapper"><ItemIcon subType={base?.subType || ''} /></div>
                           <span className="item-tier-label">T{item.tier}</span>
                         </div>
@@ -745,15 +623,7 @@ export default function App({ uid }: { uid: string }) {
         <AccordionItem title={<span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#fff' }}>💎 Gem Pouch <span style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'monospace' }}>({player.gems.length}/200)</span></span>}>
           <div className="gem-pouch-grid">
             {player.gems.length === 0 ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '16px', color: '#71717a', fontSize: '11px' }}>No gems stored</div> :
-              player.gems.map((g: any, i: number) => {
-                const gd = GEMS[g.id] || { name: 'Gem', color: 'Green' }
-                return (
-                  <div key={i} className="gem-item">
-                    <span style={{ fontSize: '12px' }}>{gd.color === 'Red' ? '🔴' : gd.color === 'Blue' ? '🔵' : gd.color === 'Yellow' ? '🟡' : '🟢'}</span>
-                    <span className="item-label">{gd.name.slice(0, 3)}{g.grade}</span>
-                  </div>
-                )
-              })}
+              player.gems.map((g: any, i: number) => { const gd = GEMS[g.id] || { name: 'Gem', color: 'Green' }; return <div key={i} className="gem-item"><span style={{ fontSize: '12px' }}>{gd.color === 'Red' ? '🔴' : gd.color === 'Blue' ? '🔵' : gd.color === 'Yellow' ? '🟡' : '🟢'}</span><span className="item-label">{gd.name.slice(0, 3)}{g.grade}</span></div> })}
           </div>
         </AccordionItem>
       </>
@@ -766,8 +636,7 @@ export default function App({ uid }: { uid: string }) {
     const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
     const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
     for (const slot in p.equipment) if (p.equipment[slot] === instanceId) p.equipment[slot] = null
-    calcDerived(p); setPlayer(p); savePlayer(p, 'unequip')
-    showToast(`${base.name} unequipped.`)
+    calcDerived(p); setPlayer(p); savePlayer(p, 'unequip'); showToast(`${base.name} unequipped.`)
   }
 
   const equipItem = (instanceId: string) => {
@@ -777,24 +646,15 @@ export default function App({ uid }: { uid: string }) {
     const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
     const slotMap: Record<string, string> = { Sword: 'Weapon 1', Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves', Leggings: 'Leggings', Boots: 'Boots', Fire: 'Spell 1', Air: 'Spell 2', Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory' }
     const slot = slotMap[base.subType]
-    if (slot) {
-      p.equipment[slot] = instanceId
-      calcDerived(p); setPlayer(p); savePlayer(p, 'equip')
-      showToast(`${base.name} equipped to ${slot}.`)
-    }
+    if (slot) { p.equipment[slot] = instanceId; calcDerived(p); setPlayer(p); savePlayer(p, 'equip'); showToast(`${base.name} equipped to ${slot}.`) }
     setEquipPopup(null)
-  }
-
-  const handleItemTap = (instanceId: string) => {
-    setEquipPopup(prev => prev === instanceId ? null : instanceId)
   }
 
   const resetSave = () => {
     if (!confirm('Reset all progress? This cannot be undone.')) return
     localStorage.removeItem('geminus_battle_stats')
     setBattleStats({ levels: 0, kills: 0, rounds: 0, deaths: 0, oneHitKills: 0 })
-    showToast('Battle stats reset.')
-    setActiveTab(null)
+    showToast('Battle stats reset.'); setActiveTab(null)
   }
 
   const hpPct = Math.max(0, Math.min(100, (player.hp / player.derivedStats.maxHp) * 100))
@@ -804,102 +664,78 @@ export default function App({ uid }: { uid: string }) {
   return (
     <>
       <canvas ref={smokeRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, pointerEvents: 'none', opacity: 0.9 }} />
-
       <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column', background: 'transparent' }} onClick={(e) => { if (equipPopup && !(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null); if (menuOpen && !(e.target as HTMLElement).closest('.menu-container')) setMenuOpen(false) }}>
         <div style={{ position: 'relative', zIndex: 10, width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', padding: '10px', paddingTop: 'max(10px, env(safe-area-inset-top, 10px))', gap: '10px', paddingBottom: '112px' }}>
 
-            {/* ── HUD ── */}
+            {/* HUD */}
             {activeTab === null && (
               <header className="glass-panel" style={{ flexShrink: 0, position: 'relative', zIndex: 30, padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '8px' }}>
-                    <section style={{ flex: 1, minWidth: 0, paddingRight: '4px', display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <p style={{ margin: 0, fontSize: '12px' }}>
-                          <span style={{ color: '#fff', fontWeight: 700 }}>{player.name}:</span>
-                          <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>Level {player.level}</span>
-                        </p>
-                        <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Race:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.raceName || player.race}</span></p>
-                        <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>A-Spec:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.archetype} · {player.cci}</span></p>
-
-                        <div style={{ paddingTop: '4px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px' }}>
-                          {(['DEX', 'STR', 'WIS', 'NTL', 'VIT'] as const).map(stat => (
-                            <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-                              <span style={{ color: '#fff', fontWeight: 700 }}>{stat.charAt(0) + stat.slice(1).toLowerCase()}:</span>
-                              <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{fmt(player.baseStats[stat])}</span>
-                            </div>
-                          ))}
-                          <div style={{ display: 'flex', alignItems: 'center', fontSize: '12px' }}>
-                            <span style={{ color: '#fff', fontWeight: 700, marginRight: '4px' }}>Lvls:</span>
-                            <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{freeLevels} ({player.attributePoints || 0} AP)</span>
+                <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '8px' }}>
+                  <section style={{ flex: 1, minWidth: 0, paddingRight: '4px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>{player.name}:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>Level {player.level}</span></p>
+                      <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Race:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.raceName || player.race}</span></p>
+                      <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>A-Spec:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.archetype} · {player.cci}</span></p>
+                      <div style={{ paddingTop: '4px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px' }}>
+                        {(['DEX', 'STR', 'WIS', 'NTL', 'VIT'] as const).map(stat => (
+                          <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                            <span style={{ color: '#fff', fontWeight: 700 }}>{stat.charAt(0) + stat.slice(1).toLowerCase()}:</span>
+                            <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{fmt(player.baseStats[stat])}</span>
                           </div>
-                        </div>
-
-                        <div style={{ paddingTop: '4px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Gold:</span>
-                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.gold)}</span>
-                          </div>
-                          <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Bank:</span>
-                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.bank)}</span>
-                          </div>
-                        </div>
-
-                        <div className="menu-container" style={{ paddingTop: '4px', position: 'relative' }}>
-                          <button
-                            className="battle-mode-btn"
-                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                            onClick={() => setMenuOpen(prev => !prev)}
-                          >
-                            <span style={{ fontSize: '13px' }}>≡</span> Menu
-                          </button>
-                          {menuOpen && (
-                            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 100, background: 'rgba(3,12,20,0.97)', border: '1px solid rgba(62,224,255,0.42)', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 28px rgba(0,0,0,0.9)' }}>
-                              {([['stats', 'Player Info'], ['training', 'Training Log'], ['settings', 'Settings'], ['equipment', 'Equipment'], ['inventory', 'Inventory']] as const).map(([tab, label]) => (
-                                <button key={tab} onClick={() => { setActiveTab(tab); setMenuOpen(false) }}
-                                  style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#e8fbff', fontSize: '12px', fontWeight: 600, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(62,224,255,0.1)')}
-                                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                                >
-                                  {tab === 'stats' ? '👤' : tab === 'training' ? '📊' : tab === 'settings' ? '⚙️' : tab === 'equipment' ? '🛡️' : '🎒'} {label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                            <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span> <span style={{ color: '#cbd5e1' }}>Aether Silver Cavern</span></p>
-                            <button
-                              onClick={handleLogout}
-                              style={{ flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase' }}
-                            >Logout</button>
-                          </div>
-                          <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos.x}, {player.pos.y}]</p>
-                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Type:</span> <span style={{ color: '#3EE0FF', fontWeight: 700 }}>XP Zone</span></p>
-                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Gem:</span> <span style={{ color: '#30D158' }}>G1 · 1/250</span></p>
-                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Shadow:</span> <span style={{ color: '#52525b' }}>Off</span></p>
+                        ))}
+                        <div style={{ display: 'flex', alignItems: 'center', fontSize: '12px' }}>
+                          <span style={{ color: '#fff', fontWeight: 700, marginRight: '4px' }}>Lvls:</span>
+                          <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{freeLevels} ({player.attributePoints || 0} AP)</span>
                         </div>
                       </div>
+                      <div style={{ paddingTop: '4px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Gold:</span><span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.gold)}</span></div>
+                        <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Bank:</span><span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.bank)}</span></div>
+                      </div>
+                      <div className="menu-container" style={{ paddingTop: '4px', position: 'relative' }}>
+                        <button className="battle-mode-btn" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={() => setMenuOpen(prev => !prev)}>
+                          <span style={{ fontSize: '13px' }}>≡</span> Menu
+                        </button>
+                        {menuOpen && (
+                          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 100, background: 'rgba(3,12,20,0.97)', border: '1px solid rgba(62,224,255,0.42)', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 28px rgba(0,0,0,0.9)' }}>
+                            {([['stats', 'Player Info'], ['training', 'Training Log'], ['settings', 'Settings'], ['equipment', 'Equipment'], ['inventory', 'Inventory']] as const).map(([tab, label]) => (
+                              <button key={tab} onClick={() => { setActiveTab(tab); setMenuOpen(false) }}
+                                style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#e8fbff', fontSize: '12px', fontWeight: 600, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(62,224,255,0.1)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                                {tab === 'stats' ? '👤' : tab === 'training' ? '📊' : tab === 'settings' ? '⚙️' : tab === 'equipment' ? '🛡️' : '🎒'} {label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span> <span style={{ color: '#cbd5e1' }}>Aether Silver Cavern</span></p>
+                          <button onClick={handleLogout} style={{ flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase' }}>Logout</button>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos.x}, {player.pos.y}]</p>
+                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Type:</span> <span style={{ color: '#3EE0FF', fontWeight: 700 }}>XP Zone</span></p>
+                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Gem:</span> <span style={{ color: '#30D158' }}>G1 · 1/250</span></p>
+                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Shadow:</span> <span style={{ color: '#52525b' }}>Off</span></p>
+                      </div>
+                    </div>
+                  </section>
+                  {!battleMode && (
+                    <section style={{ width: '162px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px', paddingRight: '4px' }}>
+                      <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
+                        <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
+                        <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
+                      </div>
                     </section>
-
-                    {!battleMode && (
-                      <section style={{ width: '162px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px', paddingRight: '4px' }}>
-                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
-                          <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
-                          <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
-                        </div>
-                      </section>
-                    )}
-                  </div>
+                  )}
+                </div>
               </header>
             )}
 
-            {/* ── STATS PANEL ── */}
+            {/* Stats Panel */}
             {activeTab === null && (
               <section className="glass-panel" style={{ flexShrink: 0, padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -925,173 +761,135 @@ export default function App({ uid }: { uid: string }) {
                     <span style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>Last Item: <span style={{ color: lastItemColor, fontWeight: 700 }}>{lastItem}</span> <span style={{ color: '#30D158', fontFamily: 'monospace', fontSize: '11px' }}>{player.inventory.length}/200</span></span>
                     <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '12px' }}>Level: <span style={{ color: '#fff', fontWeight: 800, fontFamily: 'monospace' }}>{player.level}</span></span>
                   </div>
-                  <div>
-                    <span style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>Last Gem: <span style={{ color: lastGemColor, fontWeight: 700 }}>{lastGem}</span> <span style={{ color: '#30D158', fontFamily: 'monospace', fontSize: '11px' }}>{player.gems.length}/200</span></span>
-                  </div>
+                  <div><span style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>Last Gem: <span style={{ color: lastGemColor, fontWeight: 700 }}>{lastGem}</span> <span style={{ color: '#30D158', fontFamily: 'monospace', fontSize: '11px' }}>{player.gems.length}/200</span></span></div>
                 </div>
               </section>
             )}
 
-            {/* ── INLINE PANEL (tabs) ── */}
+            {/* Inline Panel */}
             {activeTab !== null && (
-                <div className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        {(['stats', 'training', 'settings'] as const).map(t => (
-                          <button key={t} className={`hud-nav-pill${activeTab === t ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => setActiveTab(t)}>
-                            {t === 'stats' ? 'Player Info' : t === 'training' ? 'Training Log' : 'Settings'}
-                          </button>
-                        ))}
-                      </div>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        {(['equipment', 'inventory'] as const).map(t => (
-                          <button key={t} className={`hud-nav-pill${activeTab === t ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => setActiveTab(t)}>
-                            {t === 'equipment' ? 'Equipment' : 'Inventory'}
-                          </button>
-                        ))}
-                      </div>
+              <div className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {(['stats', 'training', 'settings'] as const).map(t => (
+                        <button key={t} className={`hud-nav-pill${activeTab === t ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => setActiveTab(t)}>
+                          {t === 'stats' ? 'Player Info' : t === 'training' ? 'Training Log' : 'Settings'}
+                        </button>
+                      ))}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px', flexShrink: 0 }}>
-                      <button className="pin-btn">📌</button>
-                      <button onClick={() => setActiveTab(null)} style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'black', border: '1px solid rgba(255,255,255,0.2)', color: '#d4d4d8', fontSize: '18px', cursor: 'pointer' }}>×</button>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {(['equipment', 'inventory'] as const).map(t => (
+                        <button key={t} className={`hud-nav-pill${activeTab === t ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => setActiveTab(t)}>
+                          {t === 'equipment' ? 'Equipment' : 'Inventory'}
+                        </button>
+                      ))}
                     </div>
                   </div>
-
-                  <div style={{ flex: 1, overflowY: 'auto', maxHeight: '480px' }}>
-                    {activeTab === 'equipment' && (
-                      <div className="equipment-grid">
-                        {EQUIP_SLOTS.map(slot => {
-                          const instId = player.equipment[slot.name]
-                          const item = player.inventory.find((i: any) => i.instanceId === instId)
-                          const base = item ? BASE_ITEMS.find(b => b.id === item.baseItemId) : null
-                          const gems = item?.socketedGems || []
-                          return (
-                            <div key={slot.name} className="equipment-slot-wrapper">
-                              <div className="equipment-slot-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <span>{slot.name}</span>
-                                {instId && (
-                                  <button onClick={() => unequipItem(instId)} style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.02em', flexShrink: 0 }}>Unequip</button>
-                                )}
-                              </div>
-                              <div className="equipment-slot-content" style={{ cursor: 'default' }}>
-                                {gems.length > 0 && (
-                                  <div className="gem-overlays-container">
-                                    {gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}
-                                    {gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}
-                                  </div>
-                                )}
-                                {base ? (
-                                  <>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ItemIcon subType={base.subType} /></div>
-                                    <span className="item-tier-label">T{item.tier}</span>
-                                  </>
-                                ) : <span style={{ fontSize: '11px', color: '#71717a' }}>Empty</span>}
-                              </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px', flexShrink: 0 }}>
+                    <button className="pin-btn">📌</button>
+                    <button onClick={() => setActiveTab(null)} style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'black', border: '1px solid rgba(255,255,255,0.2)', color: '#d4d4d8', fontSize: '18px', cursor: 'pointer' }}>×</button>
+                  </div>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '480px' }}>
+                  {activeTab === 'equipment' && (
+                    <div className="equipment-grid">
+                      {EQUIP_SLOTS.map(slot => {
+                        const instId = player.equipment[slot.name]
+                        const item = player.inventory.find((i: any) => i.instanceId === instId)
+                        const base = item ? BASE_ITEMS.find(b => b.id === item.baseItemId) : null
+                        const gems = item?.socketedGems || []
+                        return (
+                          <div key={slot.name} className="equipment-slot-wrapper">
+                            <div className="equipment-slot-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span>{slot.name}</span>
+                              {instId && <button onClick={() => unequipItem(instId)} style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', flexShrink: 0 }}>Unequip</button>}
                             </div>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {activeTab === 'inventory' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ paddingBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                          <span style={{ fontSize: '11px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inventory Ledger</span>
-                        </div>
-                        <AccordionItem title={
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9M3 12h9m-9 4h6" /></svg>
-                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#fff' }}>Sort & Filter</span>
+                            <div className="equipment-slot-content" style={{ cursor: 'default' }}>
+                              {gems.length > 0 && <div className="gem-overlays-container">{gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}{gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}</div>}
+                              {base ? <><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ItemIcon subType={base.subType} /></div><span className="item-tier-label">T{item.tier}</span></> : <span style={{ fontSize: '11px', color: '#71717a' }}>Empty</span>}
+                            </div>
                           </div>
-                        }>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                            {[['Category', 'category', ['All', ...Object.keys(INVENTORY_BAGS)]], ['Tier', 'tier', ['All', ...Array.from({ length: 20 }, (_, i) => String(i + 1))]], ['Quality', 'quality', ['All', 'Dropper', 'Shadow', 'Echo']], ['Sort By', 'sortBy', [['tier', 'Tier'], ['name', 'Name'], ['type', 'Type']]]].map(([label, key, opts]: any) => (
-                              <div key={String(key)}>
-                                <label style={{ fontSize: '10.5px', fontWeight: 700, color: '#d4d4d8', display: 'block', marginBottom: '2px' }}>{label}</label>
-                                <select className="editor-input" style={{ width: '100%', fontSize: '12px', padding: '4px 8px' }} value={(filterState as any)[key as string]} onChange={e => setFilterState(prev => ({ ...prev, [key as string]: e.target.value }))}>
-                                  {opts.map((o: any) => Array.isArray(o) ? <option key={o[0]} value={o[0]}>{o[1]}</option> : <option key={o} value={o}>{o}</option>)}
-                                </select>
-                              </div>
-                            ))}
-                          </div>
-                        </AccordionItem>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {renderInventoryBags()}
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTab === 'stats' && (
-                      <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                        <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Combat Attributes</span>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '12px' }}>
-                          {[['Armor Class (AC)', player.derivedStats.AC?.toFixed(1)], ['Weapon Class (WC)', player.derivedStats.WC?.toFixed(1)], ['Spell Class (SC)', player.derivedStats.SC?.toFixed(1)], ['Hit Probability', `${player.derivedStats.hitChance?.toFixed(1)}%`], ['Critical Chance', `${player.derivedStats.critChance?.toFixed(1)}%`], ['Max Health', Math.round(player.derivedStats.maxHp)]].map(([k, v]) => (
-                            <div key={String(k)} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                              <span style={{ color: '#9ca3af' }}>{k}</span>
-                              <span style={{ color: '#fff', fontWeight: 700, fontFamily: 'monospace' }}>{v}</span>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {activeTab === 'inventory' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ paddingBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}><span style={{ fontSize: '11px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inventory Ledger</span></div>
+                      <AccordionItem title={<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9M3 12h9m-9 4h6" /></svg><span style={{ fontSize: '12px', fontWeight: 700, color: '#fff' }}>Sort & Filter</span></div>}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          {[['Category', 'category', ['All', ...Object.keys(INVENTORY_BAGS)]], ['Tier', 'tier', ['All', ...Array.from({ length: 20 }, (_, i) => String(i + 1))]], ['Quality', 'quality', ['All', 'Dropper', 'Shadow', 'Echo']], ['Sort By', 'sortBy', [['tier', 'Tier'], ['name', 'Name'], ['type', 'Type']]]].map(([label, key, opts]: any) => (
+                            <div key={String(key)}>
+                              <label style={{ fontSize: '10.5px', fontWeight: 700, color: '#d4d4d8', display: 'block', marginBottom: '2px' }}>{label}</label>
+                              <select className="editor-input" style={{ width: '100%', fontSize: '12px', padding: '4px 8px' }} value={(filterState as any)[key]} onChange={e => setFilterState(prev => ({ ...prev, [key]: e.target.value }))}>
+                                {opts.map((o: any) => Array.isArray(o) ? <option key={o[0]} value={o[0]}>{o[1]}</option> : <option key={o} value={o}>{o}</option>)}
+                              </select>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
-
-                    {activeTab === 'training' && (
-                      <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)', fontSize: '12px' }}>
-                        <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', textDecoration: 'underline', textUnderlineOffset: '4px', marginBottom: '12px' }}>Battle Statistics</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontFamily: 'monospace', fontSize: '12.5px' }}>
-                          <div><span style={{ fontWeight: 700, color: '#fff', fontFamily: 'sans-serif' }}>Levels: </span><span style={{ background: 'black', padding: '1px 4px', borderRadius: '4px', border: '1px solid #262626', color: '#fff', fontWeight: 700 }}>{fmt(battleStats.levels)}</span></div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                            {[['Kills', battleStats.kills], ['Rounds', battleStats.rounds], ['Deaths', battleStats.deaths], ['1 Hit Kill %', battleStats.kills > 0 ? `${Math.round(battleStats.oneHitKills / battleStats.kills * 100)}%` : '0%']].map(([k, v]) => (
-                              <div key={String(k)}><span style={{ fontWeight: 700, color: '#fff', fontFamily: 'sans-serif' }}>{k}: </span><span style={{ background: 'black', padding: '1px 4px', borderRadius: '4px', border: '1px solid #262626', color: '#fff', fontWeight: 700 }}>{typeof v === 'number' ? fmt(v) : v}</span></div>
-                            ))}
+                      </AccordionItem>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>{renderInventoryBags()}</div>
+                    </div>
+                  )}
+                  {activeTab === 'stats' && (
+                    <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                      <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Combat Attributes</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '12px' }}>
+                        {[['Armor Class (AC)', player.derivedStats.AC?.toFixed(1)], ['Weapon Class (WC)', player.derivedStats.WC?.toFixed(1)], ['Spell Class (SC)', player.derivedStats.SC?.toFixed(1)], ['Hit Probability', `${player.derivedStats.hitChance?.toFixed(1)}%`], ['Critical Chance', `${player.derivedStats.critChance?.toFixed(1)}%`], ['Max Health', Math.round(player.derivedStats.maxHp)]].map(([k, v]) => (
+                          <div key={String(k)} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                            <span style={{ color: '#9ca3af' }}>{k}</span><span style={{ color: '#fff', fontWeight: 700, fontFamily: 'monospace' }}>{v}</span>
                           </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {activeTab === 'training' && (
+                    <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)', fontSize: '12px' }}>
+                      <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', textDecoration: 'underline', textUnderlineOffset: '4px', marginBottom: '12px' }}>Battle Statistics</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontFamily: 'monospace', fontSize: '12.5px' }}>
+                        <div><span style={{ fontWeight: 700, color: '#fff', fontFamily: 'sans-serif' }}>Levels: </span><span style={{ background: 'black', padding: '1px 4px', borderRadius: '4px', border: '1px solid #262626', color: '#fff', fontWeight: 700 }}>{fmt(battleStats.levels)}</span></div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          {[['Kills', battleStats.kills], ['Rounds', battleStats.rounds], ['Deaths', battleStats.deaths], ['1 Hit Kill %', battleStats.kills > 0 ? `${Math.round(battleStats.oneHitKills / battleStats.kills * 100)}%` : '0%']].map(([k, v]) => (
+                            <div key={String(k)}><span style={{ fontWeight: 700, color: '#fff', fontFamily: 'sans-serif' }}>{k}: </span><span style={{ background: 'black', padding: '1px 4px', borderRadius: '4px', border: '1px solid #262626', color: '#fff', fontWeight: 700 }}>{typeof v === 'number' ? fmt(v) : v}</span></div>
+                          ))}
                         </div>
                       </div>
-                    )}
-
-                    {activeTab === 'settings' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
-                        <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                          <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '8px' }}>Pilot Profile</span>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                              <span style={{ color: '#d4d4d8' }}>Pilot Callsign</span>
-                              <input className="editor-input" id="settings-name-input" defaultValue={player.name} style={{ width: '144px', padding: '4px 8px', fontSize: '12px' }} />
-                            </div>
-                            <button className="glass-button" style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px' }} onClick={() => {
-                              const val = (document.getElementById('settings-name-input') as HTMLInputElement)?.value?.trim()
-                              if (val) { const p = { ...player, name: val }; setPlayer(p); savePlayer(p, 'name-update'); showToast('Profile callsign updated.') }
-                            }}>Update Profile</button>
-                            <button onClick={resetSave} style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', background: 'transparent', cursor: 'pointer' }}>Reset Progress & Restore Chassis</button>
-                          </div>
-                        </div>
-                        <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                          <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '8px' }}>Display</span>
+                    </div>
+                  )}
+                  {activeTab === 'settings' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+                      <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                        <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '8px' }}>Pilot Profile</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                            <div>
-                              <div style={{ color: '#e4e4e7' }}>Dark Mode</div>
-                              <div style={{ fontSize: '10px', color: '#71717a' }}>Onyx black HUD — no cyan glass</div>
-                            </div>
-                            <button className="footer-tab-button" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => {
-                              const next = theme === 'onyx' ? 'aether' : 'onyx'
-                              setTheme(next)
-                              showToast(next === 'onyx' ? 'Dark Mode on — Onyx HUD' : 'Aether glass restored')
-                            }}>{theme === 'onyx' ? 'On' : 'Off'}</button>
+                            <span style={{ color: '#d4d4d8' }}>Pilot Callsign</span>
+                            <input className="editor-input" id="settings-name-input" defaultValue={player.name} style={{ width: '144px', padding: '4px 8px', fontSize: '12px' }} />
                           </div>
+                          <button className="glass-button" style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px' }} onClick={() => {
+                            const val = (document.getElementById('settings-name-input') as HTMLInputElement)?.value?.trim()
+                            if (val) { const p = { ...player, name: val }; setPlayer(p); savePlayer(p, 'name-update'); showToast('Profile callsign updated.') }
+                          }}>Update Profile</button>
+                          <button onClick={resetSave} style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', background: 'transparent', cursor: 'pointer' }}>Reset Progress & Restore Chassis</button>
                         </div>
                       </div>
-                    )}
-                  </div>
+                      <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                        <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '8px' }}>Display</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                          <div><div style={{ color: '#e4e4e7' }}>Dark Mode</div><div style={{ fontSize: '10px', color: '#71717a' }}>Onyx black HUD — no cyan glass</div></div>
+                          <button className="footer-tab-button" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => { const next = theme === 'onyx' ? 'aether' : 'onyx'; setTheme(next); showToast(next === 'onyx' ? 'Dark Mode on — Onyx HUD' : 'Aether glass restored') }}>{theme === 'onyx' ? 'On' : 'Off'}</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
+              </div>
             )}
 
-            {/* ── COMBAT CONSOLE ── */}
+            {/* Combat Console */}
             <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20 }}>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <div style={{ flexShrink: 0, padding: '6px 12px', borderRadius: '12px', background: 'rgba(0,0,0,0.9)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '12px', fontWeight: 600, color: '#fff' }}>
-                  Monsters
-                </div>
+                <div style={{ flexShrink: 0, padding: '6px 12px', borderRadius: '12px', background: 'rgba(0,0,0,0.9)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '12px', fontWeight: 600, color: '#fff' }}>Monsters</div>
                 <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
                   <select className="editor-input" value={selectedTargetId} onChange={e => { setSelectedTargetId(e.target.value); if (engaged) { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) } }}
                     style={{ width: '100%', paddingTop: '6px', paddingBottom: '6px', paddingRight: '28px', fontSize: '12px', background: 'rgba(0,0,0,0.9)', borderColor: 'rgba(255,255,255,0.2)', appearance: 'none' }}>
@@ -1101,61 +899,38 @@ export default function App({ uid }: { uid: string }) {
                     <svg style={{ width: 14, height: 14 }} fill="none" stroke="#9ca3af" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
                   </div>
                 </div>
-                <button className={`combat-engage-btn${engaged ? ' active' : ''}`} onClick={toggleEngage}>
-                  {engaged ? 'DISENGAGE' : 'BATTLE'}
-                </button>
+                <button className={`combat-engage-btn${engaged ? ' active' : ''}`} onClick={toggleEngage}>{engaged ? 'DISENGAGE' : 'BATTLE'}</button>
               </div>
-
               {engaged && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', paddingTop: '3px', borderTop: '1px solid rgba(255,255,255,0.12)', height: '40px' }}>
                   <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}>Cast</button>
                   <button className="combat-tactile-btn" onClick={() => { performTurn(true); setTimeout(() => performTurn(false), 0) }}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>
-                    Cast+Fight
-                  </button>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>Cast+Fight</button>
                   <button className="combat-tactile-btn combat-fight-slab" onClick={() => performTurn(false)}>Fight</button>
                 </div>
               )}
-
               {engaged && enemyCurrentHP !== null && (
                 <div style={{ textAlign: 'center', paddingTop: '2px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#FF375F' }}>
-                    Enemies Health: {enemyCurrentHP}/{combatMonster?.hp ?? 0}
-                  </span>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#FF375F' }}>Enemies Health: {enemyCurrentHP}/{combatMonster?.hp ?? 0}</span>
                 </div>
               )}
-
               {combatLog.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '2px', paddingTop: '2px' }}>
-                  {combatLog.map((line, i) => (
-                    <div key={i} style={{ fontSize: '11px', lineHeight: 1.4, fontWeight: i === combatLog.length - 1 ? 700 : 500, color: line.color }}>
-                      {line.text}
-                    </div>
-                  ))}
+                  {combatLog.map((line, i) => <div key={i} style={{ fontSize: '11px', lineHeight: 1.4, fontWeight: i === combatLog.length - 1 ? 700 : 500, color: line.color }}>{line.text}</div>)}
                 </div>
               )}
+              {!engaged && combatLog.length === 0 && <div style={{ textAlign: 'center', fontSize: '10px', color: '#475569', paddingTop: '2px' }}>Select target &amp; press BATTLE to fight</div>}
 
-              {!engaged && combatLog.length === 0 && (
-                <div style={{ textAlign: 'center', fontSize: '10px', color: '#475569', paddingTop: '2px' }}>
-                  Select target &amp; press BATTLE to fight
-                </div>
-              )}
-
+              {/* ── FIX: stat bar only shows when level > 1 and has real AP to spend ── */}
               {canAllocate && (
                 <div style={{ flexShrink: 0, paddingTop: '6px', borderTop: '1px solid rgba(255,149,0,0.25)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                   <span style={{ fontSize: '10px', color: '#FF9500', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>⬆ Level Up — Choose Focus</span>
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'center', gap: '2px' }}>
                     {getAttributeFocusOrder(player.race).map((stat, idx, arr) => (
                       <span key={stat} style={{ display: 'flex', alignItems: 'center' }}>
-                        <button
-                          onClick={() => spendPoint(stat)}
-                          style={{
-                            background: 'rgba(255,149,0,0.15)', border: '1.5px solid rgba(255,149,0,0.7)', borderRadius: '8px', cursor: 'pointer',
-                            padding: '6px 8px', color: '#FF9500', fontSize: '11.5px', fontWeight: 800, fontFamily: 'monospace',
-                            WebkitTapHighlightColor: 'rgba(255,149,0,0.3)', touchAction: 'manipulation', minWidth: '44px', minHeight: '36px',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none',
-                          }}
-                        >{stat}({freeLevels})</button>
+                        <button onClick={() => spendPoint(stat)} style={{ background: 'rgba(255,149,0,0.15)', border: '1.5px solid rgba(255,149,0,0.7)', borderRadius: '8px', cursor: 'pointer', padding: '6px 8px', color: '#FF9500', fontSize: '11.5px', fontWeight: 800, fontFamily: 'monospace', WebkitTapHighlightColor: 'rgba(255,149,0,0.3)', touchAction: 'manipulation', minWidth: '44px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none' }}>
+                          {stat}({freeLevels})
+                        </button>
                         {idx < arr.length - 1 && <span style={{ color: '#FF9500', fontSize: '10px', opacity: 0.4, marginLeft: '2px', marginRight: '2px' }}>|</span>}
                       </span>
                     ))}
@@ -1164,39 +939,28 @@ export default function App({ uid }: { uid: string }) {
               )}
             </section>
 
-            {/* ── CHAT CONSOLE ── */}
+            {/* Chat Console */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '240px' }}>
               <div className="glass-panel" style={{ width: '100%', padding: '10px', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
                 <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
                     <button className={`chat-expand-btn inbox-btn${inboxOpen ? ' active' : ''}`} onClick={toggleInbox}>💬</button>
                     {['main', 'sales', 'clan', 'groups'].map(ch => (
-                      <button key={ch} className={`footer-tab-button${chatChannel === ch ? ' active' : ''}`} style={{ flex: 1 }} onClick={() => switchChannel(ch)}>
-                        {ch.charAt(0).toUpperCase() + ch.slice(1)}
-                      </button>
+                      <button key={ch} className={`footer-tab-button${chatChannel === ch ? ' active' : ''}`} style={{ flex: 1 }} onClick={() => switchChannel(ch)}>{ch.charAt(0).toUpperCase() + ch.slice(1)}</button>
                     ))}
                   </div>
                   <button className="chat-expand-btn" style={{ marginLeft: '4px' }} onClick={() => setChatOverlay(true)}>
-                    <svg style={{ width: 16, height: 16 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
-                      <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
-                    </svg>
+                    <svg style={{ width: 16, height: 16 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
                   </button>
                 </div>
-
                 {!inboxOpen && (
                   <div className="sub-bar" style={{ flexShrink: 0, marginBottom: '8px' }}>
                     {(CHAT_SUBS[chatChannel] || []).map(([id, label]) => {
                       const name = chatChannel === 'groups' ? groupNames[id] || id : label
-                      return (
-                        <button key={id} className={`sub-btn${chatSub[chatChannel] === id ? ' active' : ''}`} onClick={() => setChatSub(prev => ({ ...prev, [chatChannel]: id }))}>
-                          <span>{name}</span>
-                        </button>
-                      )
+                      return <button key={id} className={`sub-btn${chatSub[chatChannel] === id ? ' active' : ''}`} onClick={() => setChatSub(prev => ({ ...prev, [chatChannel]: id }))}><span>{name}</span></button>
                     })}
                   </div>
                 )}
-
                 {inboxOpen ? (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid rgba(62,224,255,0.3)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(0,0,0,0.3)' }}>
@@ -1209,11 +973,8 @@ export default function App({ uid }: { uid: string }) {
                     </div>
                   </div>
                 ) : (
-                  <div ref={chatScrollRef} style={{ fontSize: '12px', flex: 1, overflowY: 'auto', minHeight: '140px', padding: '4px' }}>
-                    {renderChatContent()}
-                  </div>
+                  <div ref={chatScrollRef} style={{ fontSize: '12px', flex: 1, overflowY: 'auto', minHeight: '140px', padding: '4px' }}>{renderChatContent()}</div>
                 )}
-
                 {!inboxOpen && (
                   <form onSubmit={sendMessage} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                     <button type="button" className="icon-btn" onClick={() => setEmojiOpen(prev => !prev)}>😀</button>
@@ -1223,12 +984,11 @@ export default function App({ uid }: { uid: string }) {
                 )}
               </div>
             </div>
-
           </div>
         </div>
       </div>
 
-      {/* ── EMOJI PANEL ── */}
+      {/* Emoji Panel */}
       {emojiOpen && (
         <div style={{ position: 'fixed', bottom: '80px', left: '16px', right: '16px', zIndex: 300, background: '#061018', border: '1px solid rgba(62,224,255,0.4)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.75)' }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px', background: '#061018' }}>
@@ -1238,15 +998,13 @@ export default function App({ uid }: { uid: string }) {
             {['😀','😂','😍','🥰','😎','🤩','😏','😤','😡','💀','👻','👾','⚔️','🛡️','💎','🔥','⚡','❄️','🌟','💫','🏆','💰','🎯','🎮','👑','🐉','⚗️','🗡️','🏹','🪄','💥','🌀'].map(em => (
               <button key={em} onClick={() => { setChatInput(prev => prev + em); setEmojiOpen(false) }}
                 style={{ fontSize: '20px', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-              >{em}</button>
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')} onMouseLeave={e => (e.currentTarget.style.background = 'none')}>{em}</button>
             ))}
           </div>
         </div>
       )}
 
-      {/* ── WORLD MAP OVERLAY ── */}
+      {/* World Map Overlay */}
       {mapOverlay && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(12px)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}>
           <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '20px', color: '#fff', marginTop: '8px' }}>World Exploration</h3>
@@ -1260,34 +1018,21 @@ export default function App({ uid }: { uid: string }) {
         </div>
       )}
 
-      {/* ── CHAT OVERLAY ── */}
+      {/* Chat Overlay */}
       {chatOverlay && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(12px)', zIndex: 150, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '14px' }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '512px', margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column', padding: '12px', border: '1px solid rgba(255,255,255,0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', flexShrink: 0 }}>
               <button className={`chat-expand-btn inbox-btn${inboxOpen ? ' active' : ''}`} onClick={toggleInbox}>💬</button>
-              {['main', 'sales', 'clan', 'groups'].map(ch => (
-                <button key={ch} className={`footer-tab-button${chatChannel === ch ? ' active' : ''}`} style={{ flex: 1 }} onClick={() => switchChannel(ch)}>
-                  {ch.charAt(0).toUpperCase() + ch.slice(1)}
-                </button>
-              ))}
+              {['main', 'sales', 'clan', 'groups'].map(ch => <button key={ch} className={`footer-tab-button${chatChannel === ch ? ' active' : ''}`} style={{ flex: 1 }} onClick={() => switchChannel(ch)}>{ch.charAt(0).toUpperCase() + ch.slice(1)}</button>)}
               <button className="chat-expand-btn" onClick={() => setChatOverlay(false)}>✕</button>
             </div>
             {!inboxOpen && (
               <div className="sub-bar" style={{ flexShrink: 0, marginBottom: '8px' }}>
-                {(CHAT_SUBS[chatChannel] || []).map(([id, label]) => {
-                  const name = chatChannel === 'groups' ? groupNames[id] || id : label
-                  return (
-                    <button key={id} className={`sub-btn${chatSub[chatChannel] === id ? ' active' : ''}`} onClick={() => setChatSub(prev => ({ ...prev, [chatChannel]: id }))}>
-                      <span>{name}</span>
-                    </button>
-                  )
-                })}
+                {(CHAT_SUBS[chatChannel] || []).map(([id, label]) => { const name = chatChannel === 'groups' ? groupNames[id] || id : label; return <button key={id} className={`sub-btn${chatSub[chatChannel] === id ? ' active' : ''}`} onClick={() => setChatSub(prev => ({ ...prev, [chatChannel]: id }))}><span>{name}</span></button> })}
               </div>
             )}
-            <div ref={chatScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {renderChatContent()}
-            </div>
+            <div ref={chatScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>{renderChatContent()}</div>
             <form onSubmit={sendMessage} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
               <button type="button" className="icon-btn" onClick={() => setEmojiOpen(prev => !prev)}>😀</button>
               <input type="text" className="editor-input" value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Type To Chat…" style={{ flex: 1, padding: '10px', fontSize: '12px' }} />
@@ -1297,7 +1042,7 @@ export default function App({ uid }: { uid: string }) {
         </div>
       )}
 
-      {/* ── ITEM MODAL ── */}
+      {/* Item Modal */}
       {equipPopup && (() => {
         const modalItem = player.inventory.find((i: any) => i.instanceId === equipPopup)
         const modalBase = modalItem ? BASE_ITEMS.find(b => b.id === modalItem.baseItemId) : null
@@ -1309,49 +1054,22 @@ export default function App({ uid }: { uid: string }) {
         const statVal = (tierData.cv * (slotMod.prop || 0.8)).toFixed(2)
         const statLabel = slotMod.stat || 'AC'
         return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
-            onClick={() => setEquipPopup(null)}>
-            <div className="glass-panel" style={{ width: '100%', maxWidth: '340px', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }}
-              onClick={e => e.stopPropagation()}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} onClick={() => setEquipPopup(null)}>
+            <div className="glass-panel" style={{ width: '100%', maxWidth: '340px', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }} onClick={e => e.stopPropagation()}>
               <button onClick={() => setEquipPopup(null)} style={{ position: 'absolute', top: '14px', right: '14px', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#fff' }}>{modalBase.name}</h3>
-                <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3EE0FF', fontWeight: 700 }}>Tier {modalItem.tier} · {modalBase.subType}</p>
-              </div>
+              <div><h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#fff' }}>{modalBase.name}</h3><p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3EE0FF', fontWeight: 700 }}>Tier {modalItem.tier} · {modalBase.subType}</p></div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
                 <ItemIcon subType={modalBase.subType} />
                 <span style={{ position: 'absolute', bottom: '8px', right: '10px', background: 'rgba(255,214,10,0.95)', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '5px', color: '#09090b' }}>T{modalItem.tier}</span>
               </div>
               <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>Type</span>
-                  <span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{modalBase.subType}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: modalGems.length > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
-                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>{statLabel}</span>
-                  <span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{statVal}</span>
-                </div>
-                {modalGems.map((g: any, i: number) => {
-                  const gd = GEMS[g.id]; if (!gd) return null
-                  const gemColor = gd.category === 'Fighter' ? '#FF375F' : gd.category === 'Caster' ? '#0A84FF' : '#30D158'
-                  return (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', padding: '1px 5px', borderRadius: '4px', background: gemColor, color: '#fff', fontWeight: 800 }}>{gd.name.slice(0,3)}</span>
-                        <span style={{ fontSize: '13px', color: '#94a3b8' }}>{gd.name} G{g.grade}</span>
-                      </div>
-                      <span style={{ fontSize: '11px', color: gemColor, fontWeight: 700, maxWidth: '120px', textAlign: 'right' }}>{gd.effect}</span>
-                    </div>
-                  )
-                })}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}><span style={{ fontSize: '13px', color: '#94a3b8' }}>Type</span><span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{modalBase.subType}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: modalGems.length > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}><span style={{ fontSize: '13px', color: '#94a3b8' }}>{statLabel}</span><span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{statVal}</span></div>
+                {modalGems.map((g: any, i: number) => { const gd = GEMS[g.id]; if (!gd) return null; const gemColor = gd.category === 'Fighter' ? '#FF375F' : gd.category === 'Caster' ? '#0A84FF' : '#30D158'; return <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ fontSize: '11px', padding: '1px 5px', borderRadius: '4px', background: gemColor, color: '#fff', fontWeight: 800 }}>{gd.name.slice(0,3)}</span><span style={{ fontSize: '13px', color: '#94a3b8' }}>{gd.name} G{g.grade}</span></div><span style={{ fontSize: '11px', color: gemColor, fontWeight: 700, maxWidth: '120px', textAlign: 'right' }}>{gd.effect}</span></div> })}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <button onClick={() => equipItem(equipPopup)} style={{ padding: '14px 0', borderRadius: '12px', background: isEquipped ? 'rgba(48,209,88,0.15)' : 'rgba(62,224,255,0.15)', border: `1.5px solid ${isEquipped ? '#30D158' : '#3EE0FF'}`, color: isEquipped ? '#30D158' : '#3EE0FF', fontSize: '14px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>
-                  {isEquipped ? '✓ EQUIPPED' : 'EQUIP'}
-                </button>
-                <button onClick={() => setEquipPopup(null)} style={{ padding: '14px 0', borderRadius: '12px', background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
-                  CANCEL
-                </button>
+                <button onClick={() => equipItem(equipPopup)} style={{ padding: '14px 0', borderRadius: '12px', background: isEquipped ? 'rgba(48,209,88,0.15)' : 'rgba(62,224,255,0.15)', border: `1.5px solid ${isEquipped ? '#30D158' : '#3EE0FF'}`, color: isEquipped ? '#30D158' : '#3EE0FF', fontSize: '14px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>{isEquipped ? '✓ EQUIPPED' : 'EQUIP'}</button>
+                <button onClick={() => setEquipPopup(null)} style={{ padding: '14px 0', borderRadius: '12px', background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>CANCEL</button>
               </div>
             </div>
           </div>
@@ -1359,30 +1077,21 @@ export default function App({ uid }: { uid: string }) {
       })()}
 
       {/* Toast */}
-      {toast && (
-        <div className="glass-panel" style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: '72px', zIndex: 210, padding: '8px 20px', borderRadius: '9999px', fontWeight: 500, fontSize: '12px', background: 'black', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,0.8)', whiteSpace: 'nowrap' }}>
-          {toast}
-        </div>
-      )}
+      {toast && <div className="glass-panel" style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: '72px', zIndex: 210, padding: '8px 20px', borderRadius: '9999px', fontWeight: 500, fontSize: '12px', background: 'black', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,0.8)', whiteSpace: 'nowrap' }}>{toast}</div>}
     </>
   )
 }
 
-// ─── ACCORDION COMPONENT ──────────────────────────────────────
 function AccordionItem({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   const [open, setOpen] = useState(true)
   return (
     <div className={`stat-accordion-item${open ? ' open' : ''}`}>
-      <button className="stat-accordion-header" onClick={() => setOpen(!open)}>
-        {title}
-        <svg className="accordion-arrow" style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
-      </button>
+      <button className="stat-accordion-header" onClick={() => setOpen(!open)}>{title}<svg className="accordion-arrow" style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg></button>
       <div className="stat-accordion-content">{children}</div>
     </div>
   )
 }
 
-// ─── D-PAD COMPONENT ─────────────────────────────────────────
 function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => void; onEnter: () => void; style?: React.CSSProperties }) {
   const btnSize = { width: '50px', height: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 as const, cursor: 'pointer' }
   const diagBtn: React.CSSProperties = { ...btnSize, background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)', border: '1.5px solid rgba(62,224,255,0.6)', borderRadius: '0.75rem', color: '#e8fbff', fontSize: '13px', boxShadow: '0 0 10px rgba(62,224,255,0.28), inset 0 1px 1px rgba(62,224,255,0.28), 0 3px 8px rgba(0,0,0,0.8)' }
@@ -1402,135 +1111,65 @@ function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => 
   )
 }
 
-// ─── NAME COLOR PICKER ────────────────────────────────────────
 function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onColorChange: (color: string) => void }) {
   const [tab, setTab] = useState<'grid' | 'spectrum' | 'sliders'>('grid')
   const [rgb, setRgb] = useState({ r: 62, g: 224, b: 255 })
   const [opacity, setOpacity] = useState(100)
   const wheelRef = useRef<HTMLCanvasElement>(null)
-
-  const hsvToHex = (h: number, s: number, v: number) => {
-    const f = (n: number, k = (n + h / 60) % 6) => v - v * s * Math.max(Math.min(k, 4 - k, 1), 0)
-    const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, '0')
-    return `#${toHex(f(5))}${toHex(f(3))}${toHex(f(1))}`
-  }
-
-  const rgbToHex = (r: number, g: number, b: number) =>
-    '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('')
-
-  const applyColor = (hex: string) => {
-    onColorChange(hex)
-    const r = parseInt(hex.slice(1, 3), 16)
-    const g = parseInt(hex.slice(3, 5), 16)
-    const b = parseInt(hex.slice(5, 7), 16)
-    setRgb({ r, g, b })
-  }
-
+  const hsvToHex = (h: number, s: number, v: number) => { const f = (n: number, k = (n + h / 60) % 6) => v - v * s * Math.max(Math.min(k, 4 - k, 1), 0); const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, '0'); return `#${toHex(f(5))}${toHex(f(3))}${toHex(f(1))}` }
+  const rgbToHex = (r: number, g: number, b: number) => '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('')
+  const applyColor = (hex: string) => { onColorChange(hex); const r = parseInt(hex.slice(1,3),16); const g = parseInt(hex.slice(3,5),16); const b = parseInt(hex.slice(5,7),16); setRgb({ r, g, b }) }
   const hues = [205, 225, 255, 280, 320, 0, 22, 35, 48, 72, 118, 150]
   const gridColors: string[] = []
-  for (let row = 0; row < 10; row++) {
-    for (let col = 0; col < 12; col++) {
-      if (row === 0) {
-        const steps = [255, 235, 209, 199, 174, 142, 99, 72, 58, 44, 28, 0]
-        gridColors.push(rgbToHex(steps[col], steps[col], steps[col]))
-      } else {
-        const v = [0.28, 0.38, 0.48, 0.58, 0.70, 0.82, 0.92, 0.97, 1][row - 1]
-        const s = [1, 1, 1, 1, 1, 0.95, 0.72, 0.45, 0.28][row - 1]
-        gridColors.push(hsvToHex(hues[col], s, v))
-      }
-    }
+  for (let row = 0; row < 10; row++) for (let col = 0; col < 12; col++) {
+    if (row === 0) { const steps = [255,235,209,199,174,142,99,72,58,44,28,0]; gridColors.push(rgbToHex(steps[col],steps[col],steps[col])) }
+    else { const v = [0.28,0.38,0.48,0.58,0.70,0.82,0.92,0.97,1][row-1]; const s = [1,1,1,1,1,0.95,0.72,0.45,0.28][row-1]; gridColors.push(hsvToHex(hues[col],s,v)) }
   }
-
   useEffect(() => {
     if (tab !== 'spectrum' || !wheelRef.current) return
-    const canvas = wheelRef.current
-    const ctx = canvas.getContext('2d')!
-    const size = canvas.width; const cx = size / 2; const cy = size / 2; const radius = size / 2 - 4
+    const canvas = wheelRef.current; const ctx = canvas.getContext('2d')!
+    const size = canvas.width; const cx = size/2; const cy = size/2; const radius = size/2-4
     const img = ctx.createImageData(size, size)
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const dx = x - cx; const dy = y - cy; const dist = Math.sqrt(dx * dx + dy * dy)
-        const i = (y * size + x) * 4
-        if (dist > radius) { img.data[i + 3] = 0; continue }
-        let hue = Math.atan2(dy, dx) * 180 / Math.PI; if (hue < 0) hue += 360
-        const hex = hsvToHex(hue, dist / radius, 1)
-        img.data[i] = parseInt(hex.slice(1, 3), 16)
-        img.data[i + 1] = parseInt(hex.slice(3, 5), 16)
-        img.data[i + 2] = parseInt(hex.slice(5, 7), 16)
-        img.data[i + 3] = 255
-      }
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const dx = x-cx; const dy = y-cy; const dist = Math.sqrt(dx*dx+dy*dy); const i = (y*size+x)*4
+      if (dist > radius) { img.data[i+3] = 0; continue }
+      let hue = Math.atan2(dy,dx)*180/Math.PI; if (hue < 0) hue += 360
+      const hex = hsvToHex(hue, dist/radius, 1)
+      img.data[i]=parseInt(hex.slice(1,3),16); img.data[i+1]=parseInt(hex.slice(3,5),16); img.data[i+2]=parseInt(hex.slice(5,7),16); img.data[i+3]=255
     }
     ctx.putImageData(img, 0, 0)
   }, [tab])
-
   const handleWheelClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = wheelRef.current!; const rect = canvas.getBoundingClientRect()
-    const scale = canvas.width / rect.width
-    const x = (e.clientX - rect.left) * scale; const y = (e.clientY - rect.top) * scale
-    const cx = canvas.width / 2; const cy = canvas.height / 2; const radius = canvas.width / 2 - 4
-    const dx = x - cx; const dy = y - cy; const dist = Math.sqrt(dx * dx + dy * dy)
+    const canvas = wheelRef.current!; const rect = canvas.getBoundingClientRect(); const scale = canvas.width/rect.width
+    const x = (e.clientX-rect.left)*scale; const y = (e.clientY-rect.top)*scale
+    const cx = canvas.width/2; const cy = canvas.height/2; const radius = canvas.width/2-4
+    const dx = x-cx; const dy = y-cy; const dist = Math.sqrt(dx*dx+dy*dy)
     if (dist > radius) return
-    let hue = Math.atan2(dy, dx) * 180 / Math.PI; if (hue < 0) hue += 360
-    applyColor(hsvToHex(hue, dist / radius, 1))
+    let hue = Math.atan2(dy,dx)*180/Math.PI; if (hue < 0) hue += 360
+    applyColor(hsvToHex(hue, dist/radius, 1))
   }
-
-  const presets = ['#000000', '#0A84FF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#FF9F0A', '#FFFFFF', '#FF375F', '#A2845E']
-
+  const presets = ['#000000','#0A84FF','#30D158','#FFD60A','#FF3B30','#BF5AF2','#FF9F0A','#FFFFFF','#FF375F','#A2845E']
   return (
     <div style={{ background: '#1c1c1e', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', padding: '14px', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-        <button style={{ width: 32, height: 32, borderRadius: '50%', background: '#2c2c2e', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" strokeWidth="2"><path d="M2 22l5.5-5.5"/><path d="M18.4 3.6a2.8 2.8 0 014 4L8 22H4v-4L18.4 3.6z"/></svg>
-        </button>
+        <button style={{ width: 32, height: 32, borderRadius: '50%', background: '#2c2c2e', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" strokeWidth="2"><path d="M2 22l5.5-5.5"/><path d="M18.4 3.6a2.8 2.8 0 014 4L8 22H4v-4L18.4 3.6z"/></svg></button>
         <span style={{ fontSize: '17px', fontWeight: 600, color: '#fff' }}>Colors</span>
         <div style={{ width: 32 }} />
       </div>
       <div style={{ background: '#2c2c2e', borderRadius: '9px', padding: '2px', display: 'flex', marginBottom: '12px' }}>
-        {(['grid', 'spectrum', 'sliders'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ flex: 1, border: 'none', background: tab === t ? '#636366' : 'transparent', color: '#fff', fontSize: '13px', fontWeight: 600, padding: '6px 0', borderRadius: '7px', cursor: 'pointer' }}>
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
+        {(['grid','spectrum','sliders'] as const).map(t => <button key={t} onClick={() => setTab(t)} style={{ flex: 1, border: 'none', background: tab === t ? '#636366' : 'transparent', color: '#fff', fontSize: '13px', fontWeight: 600, padding: '6px 0', borderRadius: '7px', cursor: 'pointer' }}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>)}
       </div>
-      {tab === 'grid' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 0, borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}>
-          {gridColors.map((c, i) => (
-            <button key={i} onClick={() => applyColor(c)} style={{ aspectRatio: '1', background: c, border: 'none', cursor: 'pointer', padding: 0, display: 'block' }} />
-          ))}
-        </div>
-      )}
-      {tab === 'spectrum' && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '12px' }}>
-          <canvas ref={wheelRef} width={240} height={240} style={{ width: '240px', height: '240px', borderRadius: '50%', cursor: 'crosshair', touchAction: 'none', display: 'block' }}
-            onClick={handleWheelClick} onMouseMove={e => { if (e.buttons) handleWheelClick(e) }} />
-        </div>
-      )}
-      {tab === 'sliders' && (
-        <div style={{ marginBottom: '12px' }}>
-          {(['r', 'g', 'b'] as const).map(ch => (
-            <div key={ch} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '8px 0', fontSize: '13px', color: '#fff' }}>
-              <span style={{ width: '12px' }}>{ch.toUpperCase()}</span>
-              <input type="range" min="0" max="255" value={rgb[ch]} onChange={e => { const v = parseInt(e.target.value); const nr = { ...rgb, [ch]: v }; setRgb(nr); applyColor(rgbToHex(nr.r, nr.g, nr.b)) }} style={{ flex: 1 }} />
-              <input type="number" min="0" max="255" value={rgb[ch]} onChange={e => { const v = Math.max(0, Math.min(255, parseInt(e.target.value) || 0)); const nr = { ...rgb, [ch]: v }; setRgb(nr); applyColor(rgbToHex(nr.r, nr.g, nr.b)) }} style={{ width: '52px', background: '#2c2c2e', border: 'none', color: '#fff', borderRadius: '8px', padding: '4px', textAlign: 'center', fontSize: '13px' }} />
-            </div>
-          ))}
-        </div>
-      )}
+      {tab === 'grid' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 0, borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}>{gridColors.map((c, i) => <button key={i} onClick={() => applyColor(c)} style={{ aspectRatio: '1', background: c, border: 'none', cursor: 'pointer', padding: 0, display: 'block' }} />)}</div>}
+      {tab === 'spectrum' && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '12px' }}><canvas ref={wheelRef} width={240} height={240} style={{ width: '240px', height: '240px', borderRadius: '50%', cursor: 'crosshair', touchAction: 'none', display: 'block' }} onClick={handleWheelClick} onMouseMove={e => { if (e.buttons) handleWheelClick(e) }} /></div>}
+      {tab === 'sliders' && <div style={{ marginBottom: '12px' }}>{(['r','g','b'] as const).map(ch => <div key={ch} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '8px 0', fontSize: '13px', color: '#fff' }}><span style={{ width: '12px' }}>{ch.toUpperCase()}</span><input type="range" min="0" max="255" value={rgb[ch]} onChange={e => { const v=parseInt(e.target.value); const nr={...rgb,[ch]:v}; setRgb(nr); applyColor(rgbToHex(nr.r,nr.g,nr.b)) }} style={{ flex: 1 }} /><input type="number" min="0" max="255" value={rgb[ch]} onChange={e => { const v=Math.max(0,Math.min(255,parseInt(e.target.value)||0)); const nr={...rgb,[ch]:v}; setRgb(nr); applyColor(rgbToHex(nr.r,nr.g,nr.b)) }} style={{ width: '52px', background: '#2c2c2e', border: 'none', color: '#fff', borderRadius: '8px', padding: '4px', textAlign: 'center', fontSize: '13px' }} /></div>)}</div>}
       <div style={{ marginBottom: '12px' }}>
         <div style={{ fontSize: '11px', letterSpacing: '0.05em', color: '#8e8e93', marginBottom: '4px' }}>OPACITY</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input type="range" min="0" max="100" value={opacity} onChange={e => setOpacity(parseInt(e.target.value))} style={{ flex: 1 }} />
-          <span style={{ fontSize: '12px', background: '#2c2c2e', borderRadius: '8px', padding: '4px 8px', color: '#fff', minWidth: '48px', textAlign: 'center' }}>{opacity}%</span>
-        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><input type="range" min="0" max="100" value={opacity} onChange={e => setOpacity(parseInt(e.target.value))} style={{ flex: 1 }} /><span style={{ fontSize: '12px', background: '#2c2c2e', borderRadius: '8px', padding: '4px 8px', color: '#fff', minWidth: '48px', textAlign: 'center' }}>{opacity}%</span></div>
       </div>
       <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{ width: 48, height: 48, borderRadius: '8px', background: nameColor, border: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }} />
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {presets.map(c => (
-            <button key={c} onClick={() => applyColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer' }} />
-          ))}
-        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>{presets.map(c => <button key={c} onClick={() => applyColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer' }} />)}</div>
       </div>
     </div>
   )
