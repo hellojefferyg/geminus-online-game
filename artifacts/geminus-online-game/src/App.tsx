@@ -494,17 +494,21 @@ export default function App() {
     if (!canAllocate) return
     const p = { ...player, baseStats: { ...player.baseStats }, derivedStats: {} }
     const w = (races[p.race] || races.human).apAllocationWeights
-    const total = Object.values(w).reduce((a: any, b: any) => a + b, 0)
-    const scale = GDD.AP_PER_LEVEL / (total as number)
-    for (const k in w) p.baseStats[k] = (p.baseStats[k] || 10) + (w as any)[k] * scale
+    const total = Object.values(w).reduce((a: any, b: any) => a + b, 0) as number
+    const baseScale = GDD.AP_PER_LEVEL / total
+    for (const k in w) {
+      const boost = k === attr
+        ? (w as any)[k] * baseScale * 1.5
+        : (w as any)[k] * baseScale * 0.6
+      p.baseStats[k] = (p.baseStats[k] || 10) + boost
+    }
     p.attributePoints -= GDD.AP_PER_LEVEL
     calcDerived(p)
     setPlayer(p); savePlayer(p)
-    // Clear pending level up block if now under bank limit
     const remaining = getBankedLevels(p.attributePoints)
     const max = getLevelBank(p.level)
     if (remaining < max) setPendingLevelUp(false)
-    showToast('Core attributes upgraded.')
+    showToast(attr + ' focus applied — attributes upgraded.')
   }
 
   const move = (dx: number, dy: number) => {
@@ -860,15 +864,15 @@ export default function App() {
                       </div>
                     </section>
 
-                    {/* Right: Nav Deck */}
+                    {/* Right: Nav Deck — flush to right edge */}
                     {!battleMode && (
-                      <section style={{ width: '160px', flexShrink: 0, display: 'flex', flexDirection: 'column', paddingLeft: '0', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px' }}>
-                        {/* Square map — flush to top and right */}
-                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
+                      <section style={{ width: '164px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px', marginRight: '-4px', paddingRight: '0' }}>
+                        {/* Square map — flush to right */}
+                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px 4px 4px 10px', border: '1.5px dashed rgba(62,224,255,0.5)', borderRight: 'none', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
                           <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
                         </div>
-                        {/* DPad directly below map */}
-                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
+                        {/* DPad pushed right */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px', paddingRight: '0' }}>
                           <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
                         </div>
                       </section>
@@ -892,32 +896,25 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Level / XP Bar */}
+                {/* XP row — Experience left, Next Level right, bar below */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span style={{ color: '#fff', fontWeight: 700 }}>Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 600 }}>{player.level}</span></span>
-                    <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '12px' }}>Next Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>{fmt(player.xpToNextLevel)}</span></span>
-                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
                     <span style={{ color: '#fff', fontWeight: 700 }}>Experience: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{fmt(player.xp)}</span></span>
+                    <span style={{ color: '#94a3b8', fontWeight: 600 }}>Next Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>{fmt(player.xpToNextLevel)}</span></span>
                   </div>
                   <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '7px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ height: '100%', borderRadius: '9999px', width: `${Math.max(0, Math.min(100, (player.xp / player.xpToNextLevel) * 100))}%`, background: 'linear-gradient(90deg, #FF6B00, #FF9500)', boxShadow: '0 0 10px rgba(255,149,0,0.6)', transition: 'width 0.3s' }} />
                   </div>
                 </div>
 
-                {/* Last Item / Last Gem — bigger, easier to read, with Level */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.08)', gap: '8px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
-                    <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last Item</span>
-                    <span style={{ color: lastItemColor, fontWeight: 700, fontSize: '12px' }}>{lastItem}</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px', color: '#30D158' }}>{player.inventory.length}/200</span>
+                {/* Last Item + Level on row 1, Last Gem on row 2 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>Last Item: <span style={{ color: lastItemColor, fontWeight: 700 }}>{lastItem}</span> <span style={{ color: '#30D158', fontFamily: 'monospace', fontSize: '11px' }}>{player.inventory.length}/200</span></span>
+                    <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '12px' }}>Level: <span style={{ color: '#fff', fontWeight: 800, fontFamily: 'monospace' }}>{player.level}</span></span>
                   </div>
-                  <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)', alignSelf: 'stretch' }} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, alignItems: 'flex-end' }}>
-                    <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last Gem</span>
-                    <span style={{ color: lastGemColor, fontWeight: 700, fontSize: '12px' }}>{lastGem}</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px', color: '#30D158' }}>{player.gems.length}/200</span>
+                  <div>
+                    <span style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>Last Gem: <span style={{ color: lastGemColor, fontWeight: 700 }}>{lastGem}</span> <span style={{ color: '#30D158', fontFamily: 'monospace', fontSize: '11px' }}>{player.gems.length}/200</span></span>
                   </div>
                 </div>
               </section>
