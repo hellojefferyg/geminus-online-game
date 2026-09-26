@@ -4,13 +4,36 @@ import { signOut } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import AuthWrapper from './pages/AuthWrapper'
 // ─── GAME DATA ───────────────────────────────────────────────
+// All 24 races — must match RaceSelect.tsx exactly
 const races: Record<string, any> = {
-  human: { raceName: 'Human', archetype: 'True Fighter', primaryStat: 'DEX', apAllocationWeights: { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 } },
-  dragonborn: { raceName: 'Dragonborn', archetype: 'True Fighter', primaryStat: 'DEX', apAllocationWeights: { STR: 18, DEX: 20, VIT: 12, NTL: 2, WIS: 3 } },
-  orc: { raceName: 'Orc', archetype: 'True Fighter', primaryStat: 'DEX', apAllocationWeights: { STR: 20, DEX: 18, VIT: 15, NTL: 2, WIS: 2 } },
-  phoenix: { raceName: 'Phoenix', archetype: 'True Caster', primaryStat: 'WIS', apAllocationWeights: { STR: 2, DEX: 3, VIT: 10, NTL: 20, WIS: 20 } },
-  elf: { raceName: 'Elf', archetype: 'True Caster', primaryStat: 'WIS', apAllocationWeights: { STR: 2, DEX: 7, VIT: 7, NTL: 20, WIS: 19 } },
-  angel: { raceName: 'Angel', archetype: 'Hybrid', primaryStat: 'DEX', apAllocationWeights: { STR: 12, DEX: 18, VIT: 8, NTL: 8, WIS: 9 } },
+  // True Fighters — primary: DEX
+  human:      { raceName: 'Human',      archetype: 'True Fighter',   primaryStat: 'DEX' },
+  dragonborn: { raceName: 'Dragonborn', archetype: 'True Fighter',   primaryStat: 'DEX' },
+  orc:        { raceName: 'Orc',        archetype: 'True Fighter',   primaryStat: 'DEX' },
+  werewolf:   { raceName: 'Werewolf',   archetype: 'True Fighter',   primaryStat: 'DEX' },
+  minotaur:   { raceName: 'Minotaur',   archetype: 'True Fighter',   primaryStat: 'DEX' },
+  troll:      { raceName: 'Troll',      archetype: 'True Fighter',   primaryStat: 'VIT' },
+  hobbit:     { raceName: 'Hobbit',     archetype: 'True Fighter',   primaryStat: 'DEX' },
+  centaur:    { raceName: 'Centaur',    archetype: 'True Fighter',   primaryStat: 'DEX' },
+  // True Casters — primary: WIS
+  phoenix:    { raceName: 'Phoenix',    archetype: 'True Caster',    primaryStat: 'WIS' },
+  tiefling:   { raceName: 'Tiefling',   archetype: 'True Caster',    primaryStat: 'WIS' },
+  mermaid:    { raceName: 'Mermaid',    archetype: 'True Caster',    primaryStat: 'WIS' },
+  gnome:      { raceName: 'Gnome',      archetype: 'True Caster',    primaryStat: 'WIS' },
+  griffin:    { raceName: 'Griffin',    archetype: 'True Caster',    primaryStat: 'WIS' },
+  vampire:    { raceName: 'Vampire',    archetype: 'True Caster',    primaryStat: 'WIS' },
+  elf:        { raceName: 'Elf',        archetype: 'True Caster',    primaryStat: 'WIS' },
+  babayaga:   { raceName: 'Baba Yaga',  archetype: 'True Caster',    primaryStat: 'WIS' },
+  // Martial Hybrids — primary: DEX
+  angel:      { raceName: 'Angel',      archetype: 'Martial Hybrid', primaryStat: 'DEX' },
+  aasimar:    { raceName: 'Aasimar',    archetype: 'Martial Hybrid', primaryStat: 'DEX' },
+  banshee:    { raceName: 'Banshee',    archetype: 'Martial Hybrid', primaryStat: 'DEX' },
+  halfling:   { raceName: 'Halfling',   archetype: 'Martial Hybrid', primaryStat: 'DEX' },
+  // Mystic Hybrids — primary: WIS
+  dwarf:      { raceName: 'Dwarf',      archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
+  demon:      { raceName: 'Demon',      archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
+  draugr:     { raceName: 'Draugr',     archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
+  unicorn:    { raceName: 'Unicorn',    archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
 }
 
 const GDD = { XP_BASE: 200, XP_GROWTH: 1.12, AP_PER_LEVEL: 40, DAMAGE_CONST: 90, AC_REDUCTION: 0.5 }
