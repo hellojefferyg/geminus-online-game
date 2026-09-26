@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import AuthWrapper from './pages/AuthWrapper'
 
 // ─── GAME DATA ───────────────────────────────────────────────
 const races: Record<string, any> = {
@@ -278,6 +277,7 @@ export default function App() {
   const [inboxOpen, setInboxOpen] = useState(false)
   const [groupNames, setGroupNames] = useState<Record<string, string>>({ g1: 'Group-1', g2: 'Group-2', g3: 'Group-3', g4: 'Group-4' })
   const [filterState, setFilterState] = useState({ category: 'All', subType: 'All', tier: 'All', quality: 'All', sortBy: 'tier', order: 'desc' })
+  const [menuOpen, setMenuOpen] = useState(false)
   const [turnCount, setTurnCount] = useState(0)
   const smokeRef = useRef<HTMLCanvasElement>(null)
   const miniMapRef = useRef<HTMLCanvasElement>(null)
@@ -368,10 +368,15 @@ export default function App() {
     const dpr = window.devicePixelRatio || 1
     canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
     ctx.scale(dpr, dpr)
-    ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight)
-    ctx.save(); ctx.beginPath()
-    ctx.arc(canvas.offsetWidth / 2, canvas.offsetHeight / 2, canvas.offsetWidth / 2, 0, Math.PI * 2); ctx.clip()
-    ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight); ctx.restore()
+    const w = canvas.offsetWidth; const h = canvas.offsetHeight
+    ctx.clearRect(0, 0, w, h)
+    // Solid black background
+    ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, w, h)
+    // Player dot centered
+    const dotX = w / 2; const dotY = h / 2
+    ctx.fillStyle = '#3EE0FF'; ctx.shadowBlur = 8; ctx.shadowColor = '#3EE0FF'
+    ctx.beginPath(); ctx.arc(dotX, dotY, 5, 0, Math.PI * 2); ctx.fill()
+    ctx.shadowBlur = 0
   }, [player, activeTab])
 
   // Zone canvas
@@ -665,18 +670,16 @@ export default function App() {
   const targets = getTargets()
 
   return (
-    <AuthWrapper>
     <>
       <canvas ref={smokeRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, pointerEvents: 'none', opacity: 0.9 }} />
 
-      <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column' }} onClick={(e) => { if (equipPopup && !(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null) }}>
+      <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column' }} onClick={(e) => { if (equipPopup && !(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null); if (menuOpen && !(e.target as HTMLElement).closest('.menu-container')) setMenuOpen(false) }}>
         <div style={{ position: 'relative', zIndex: 10, width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', padding: '10px', gap: '10px', paddingBottom: '112px' }}>
 
-            {/* ── HUD / INLINE PANEL ── */}
-            <div style={{ flexShrink: 0, position: 'relative', zIndex: 30 }}>
-              {activeTab === null ? (
-                <header className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* ── HUD ── */}
+            {activeTab === null && (
+              <header className="glass-panel" style={{ flexShrink: 0, position: 'relative', zIndex: 30, padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '8px' }}>
 
                     {/* Left: Stats */}
@@ -686,8 +689,6 @@ export default function App() {
                           <span style={{ color: '#fff', fontWeight: 700 }}>{player.name}:</span>
                           <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>Level {player.level}</span>
                         </p>
-                        <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Experience:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>{fmt(player.xp)}</span></p>
-                        <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Next Level:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>{fmt(player.xpToNextLevel)}</span></p>
                         <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Race:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{races[player.race]?.raceName || player.race}</span></p>
                         <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>A-Spec:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.archetype} · {player.cci}</span></p>
 
@@ -704,85 +705,119 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div style={{ paddingTop: '4px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
-                            <span style={{ color: '#fff', fontWeight: 700 }}>Health:</span>
-                            <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '10.5px', color: '#30D158' }}>{fmt(player.hp)} / {fmt(player.derivedStats.maxHp)}</span>
+                        {/* Gold / Bank stacked above Menu */}
+                        <div style={{ paddingTop: '4px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Gold:</span>
+                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.gold)}</span>
                           </div>
-                          <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                            <div style={{ height: '100%', borderRadius: '9999px', width: `${hpPct}%`, background: '#30D158', boxShadow: '0 0 10px rgba(48,209,88,0.6)', transition: 'width 0.3s' }} />
+                          <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Bank:</span>
+                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.bank)}</span>
                           </div>
                         </div>
 
-                        <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                        <div className="menu-container" style={{ paddingTop: '4px', position: 'relative' }}>
                           <button
                             className="battle-mode-btn"
-                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(battleMode ? { background: 'rgba(239,68,68,0.25)', borderColor: 'rgba(248,113,113,0.8)', color: '#fecaca' } : {}) }}
-                            onClick={() => {
-                              const next = !battleMode; setBattleMode(next)
-                              showToast(next ? '⚔️ Battle Mode active.' : 'Battle Mode deactivated.')
-                            }}
-                          >{battleMode ? 'Exit Battle Mode' : 'Battle Mode'}</button>
-                          <p style={{ fontSize: '9.5px', lineHeight: '1.3', textAlign: 'center', color: '#94a3b8', margin: 0 }}>
-                            {battleMode ? 'Active: Navigation and tab controls hidden for streamlined battle.' : 'Streamlines HUD to stats, combat console, and transmissions for fast combat.'}
-                          </p>
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                            onClick={() => setMenuOpen(prev => !prev)}
+                          >
+                            <span style={{ fontSize: '13px' }}>≡</span> Menu
+                          </button>
+                          {menuOpen && (
+                            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 100, background: 'rgba(3,12,20,0.97)', border: '1px solid rgba(62,224,255,0.42)', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 28px rgba(0,0,0,0.9)' }}>
+                              {([['stats', 'Player Info'], ['training', 'Training Log'], ['settings', 'Settings'], ['equipment', 'Equipment'], ['inventory', 'Inventory']] as const).map(([tab, label]) => (
+                                <button key={tab} onClick={() => { setActiveTab(tab); setMenuOpen(false) }}
+                                  style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#e8fbff', fontSize: '12px', fontWeight: 600, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(62,224,255,0.1)')}
+                                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                >
+                                  {tab === 'stats' ? '👤' : tab === 'training' ? '📊' : tab === 'settings' ? '⚙️' : tab === 'equipment' ? '🛡️' : '🎒'} {label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Zone Info — under Menu */}
+                        <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '4px' }}>
+                            <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span> <span style={{ color: '#cbd5e1' }}>Aether Silver Cavern</span></p>
+                            <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3, flexShrink: 0 }}>[{player.pos.x}, {player.pos.y}]</p>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontFamily: 'monospace', lineHeight: 1.3 }}>[Z01]</p>
+                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Type:</span> <span style={{ color: '#3EE0FF', fontWeight: 700 }}>XP Zone</span></p>
+                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Gem:</span> <span style={{ color: '#30D158' }}>G1 · 1/250</span></p>
+                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Shadow:</span> <span style={{ color: '#52525b' }}>Off</span></p>
                         </div>
                       </div>
                     </section>
 
                     {/* Right: Nav Deck */}
                     {!battleMode && (
-                      <section style={{ width: '172px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', paddingLeft: '6px', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
-                        <div style={{ width: '100%', textAlign: 'center', paddingTop: '2px' }}>
-                          <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>Aether Silver Cavern</span></p>
-                          <p style={{ margin: '2px 0 0', fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Cords:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>[{player.pos.x}, {player.pos.y}]</span></p>
+                      <section style={{ width: '160px', flexShrink: 0, display: 'flex', flexDirection: 'column', paddingLeft: '0', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px' }}>
+                        {/* Square map — flush to top and right */}
+                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
+                          <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
                         </div>
-                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', margin: '4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <div style={{ width: '80px', height: '80px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <div className="mini-map-ring" style={{ position: 'absolute', inset: '-4px', borderRadius: '50%', animation: 'spin 20s linear infinite' }} />
-                            <div className="glass-panel mini-map-circle" style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden' }}>
-                              <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-                            </div>
-                          </div>
+                        {/* DPad directly below map */}
+                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
+                          <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
                         </div>
-                        <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
                       </section>
                     )}
                   </div>
 
-                  {/* Gold/Bank */}
-                  <div style={{ paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    <div className="info-cell" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Gold:</span>
-                      <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '12px' }}>{fmt(player.gold)}</span>
-                    </div>
-                    <div className="info-cell" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Bank:</span>
-                      <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '12px' }}>{fmt(player.bank)}</span>
-                    </div>
-                  </div>
+              </header>
+            )}
 
-                  {/* Nav Tabs */}
-                  {!battleMode && (
-                    <div style={{ paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        {(['stats', 'training', 'settings'] as const).map(t => (
-                          <button key={t} className="hud-nav-pill" style={{ flex: 1, textAlign: 'center' }} onClick={() => setActiveTab(t)}>
-                            {t === 'stats' ? 'Player Info' : t === 'training' ? 'Training Log' : 'Settings'}
-                          </button>
-                        ))}
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        {(['equipment', 'inventory'] as const).map(t => (
-                          <button key={t} className="hud-nav-pill" style={{ flex: 1, textAlign: 'center' }} onClick={() => setActiveTab(t)}>
-                            {t === 'equipment' ? 'Equipment' : 'Inventory'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </header>
-              ) : (
+            {/* ── STATS PANEL (Health / XP / Last Drop) — own glass section ── */}
+            {activeTab === null && (
+              <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {/* Health Bar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <span style={{ color: '#fff', fontWeight: 700 }}>Health:</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px', color: '#30D158' }}>{fmt(player.hp)} / {fmt(player.derivedStats.maxHp)}</span>
+                  </div>
+                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ height: '100%', borderRadius: '9999px', width: `${hpPct}%`, background: '#30D158', boxShadow: '0 0 10px rgba(48,209,88,0.6)', transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+
+                {/* Level / XP Bar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <span style={{ color: '#fff', fontWeight: 700 }}>Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{player.level}</span></span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
+                    <span style={{ color: '#fff', fontWeight: 700 }}>Experience: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{fmt(player.xp)}</span></span>
+                    <span style={{ color: '#94a3b8', fontWeight: 600 }}>Next Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>{fmt(player.xpToNextLevel)}</span></span>
+                  </div>
+                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ height: '100%', borderRadius: '9999px', width: `${Math.max(0, Math.min(100, (player.xp / player.xpToNextLevel) * 100))}%`, background: 'linear-gradient(90deg, #BF5AF2, #9B59F5)', boxShadow: '0 0 10px rgba(191,90,242,0.6)', transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+
+                {/* Last Item / Last Gem */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '9.5px', paddingTop: '2px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <span style={{ color: '#fff', fontWeight: 600 }}>Last Item:</span>
+                    <span style={{ color: lastItemColor, fontWeight: 700 }}>{lastItem}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', color: '#30D158' }}>{player.inventory.length}/200</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <span style={{ color: '#fff', fontWeight: 600 }}>Last Gem:</span>
+                    <span style={{ color: lastGemColor, fontWeight: 700 }}>{lastGem}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', color: '#30D158' }}>{player.gems.length}/200</span>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ── INLINE PANEL (tabs) ── */}
+            {activeTab !== null && (
                 // Inline Panel
                 <div className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
@@ -942,24 +977,10 @@ export default function App() {
                     )}
                   </div>
                 </div>
-              )}
-            </div>
+            )}
 
             {/* ── COMBAT CONSOLE ── */}
-            <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20, minHeight: '182px', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '9.5px', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flex: 1, minWidth: 0 }}>
-                  <span style={{ color: '#fff', fontWeight: 600, flexShrink: 0 }}>Last Item:</span>
-                  <span style={{ color: lastItemColor, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lastItem}</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', flexShrink: 0, color: '#30D158' }}>{player.inventory.length}/200</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '2px', flex: 1, minWidth: 0 }}>
-                  <span style={{ color: '#fff', fontWeight: 600, flexShrink: 0 }}>Last Gem:</span>
-                  <span style={{ color: lastGemColor, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lastGem}</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', flexShrink: 0, color: '#30D158' }}>{player.gems.length}/200</span>
-                </div>
-              </div>
-
+            <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20, minHeight: '120px', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <div style={{ position: 'relative', flexShrink: 0 }}>
                   <select value={targetType} onChange={e => { setTargetType(e.target.value); if (engaged) setEngaged(false); setSelectedTargetId(e.target.value === 'monsters' ? 'E01' : 'P01') }}
@@ -987,9 +1008,13 @@ export default function App() {
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', paddingTop: '3px', borderTop: '1px solid rgba(255,255,255,0.12)', height: '40px', opacity: engaged ? 1 : 0, visibility: engaged ? 'visible' : 'hidden', transition: 'opacity 0.2s, visibility 0.2s' }}>
-                <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}><span>⚡</span><span>CAST</span></button>
-                <button className="combat-tactile-btn combat-fight-slab" onClick={() => performTurn(false)}><span>⚔</span><span>FIGHT</span></button>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', paddingTop: '3px', borderTop: '1px solid rgba(255,255,255,0.12)', height: '40px', opacity: engaged ? 1 : 0, visibility: engaged ? 'visible' : 'hidden', transition: 'opacity 0.2s, visibility 0.2s' }}>
+                <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}>Cast</button>
+                <button className="combat-tactile-btn" onClick={() => { performTurn(true); setTimeout(() => performTurn(false), 0) }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>
+                  Cast+Fight
+                </button>
+                <button className="combat-tactile-btn combat-fight-slab" onClick={() => performTurn(false)}>Fight</button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '2px 8px', background: 'rgba(0,0,0,0.6)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', height: '46px', minHeight: '46px', maxHeight: '46px', overflow: 'hidden', flexShrink: 0 }}>
@@ -1237,7 +1262,6 @@ export default function App() {
         </div>
       )}
     </>
-    </AuthWrapper>
   )
 }
 
@@ -1257,21 +1281,43 @@ function AccordionItem({ title, children }: { title: React.ReactNode; children: 
 
 // ─── D-PAD COMPONENT ─────────────────────────────────────────
 function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => void; onEnter: () => void; style?: React.CSSProperties }) {
+  const btnSize = { width: '44px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 as const, cursor: 'pointer' }
+  const diagBtn: React.CSSProperties = {
+    ...btnSize,
+    background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)',
+    border: '1px solid rgba(62,224,255,0.48)',
+    borderRadius: '0.75rem',
+    color: '#e8fbff',
+    fontSize: '13px',
+    boxShadow: '0 3px 8px rgba(0,0,0,0.8), inset 0 1px 1px rgba(62,224,255,0.28)',
+  }
+  const cardinalBtn: React.CSSProperties = {
+    ...btnSize,
+    background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)',
+    border: '1.5px solid rgba(62,224,255,0.85)',
+    borderRadius: '0.75rem',
+    color: '#e8fbff',
+    boxShadow: '0 0 14px rgba(62,224,255,0.45), inset 0 1px 1px rgba(62,224,255,0.4), 0 3px 8px rgba(0,0,0,0.8)',
+  }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridTemplateRows: 'repeat(3, 40px)', gridTemplateAreas: '". up ." "left enter right" ". down ."', gap: '5.5px', justifyContent: 'center', ...style }}>
-      <div className="game-key move-key" style={{ gridArea: 'up' }} onClick={() => onMove(0, -1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridTemplateRows: 'repeat(3, 40px)', gap: '5px', justifyContent: 'center', ...style }}>
+      <div style={diagBtn} onClick={() => onMove(-1, -1)}>↖</div>
+      <div style={cardinalBtn} onClick={() => onMove(0, -1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
       </div>
-      <div className="game-key move-key" style={{ gridArea: 'left' }} onClick={() => onMove(-1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
+      <div style={diagBtn} onClick={() => onMove(1, -1)}>↗</div>
+      <div style={cardinalBtn} onClick={() => onMove(-1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
       </div>
-      <div className="game-key move-key key-enter-btn" style={{ gridArea: 'enter' }} onClick={onEnter}>Enter</div>
-      <div className="game-key move-key" style={{ gridArea: 'right' }} onClick={() => onMove(1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
+      <div style={{ ...diagBtn, border: '1px solid rgba(62,224,255,0.48)', fontSize: '9px', fontWeight: 800, letterSpacing: '0.01em', color: '#d9f8ff' }} onClick={onEnter}>Enter</div>
+      <div style={cardinalBtn} onClick={() => onMove(1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
       </div>
-      <div className="game-key move-key" style={{ gridArea: 'down' }} onClick={() => onMove(0, 1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
+      <div style={diagBtn} onClick={() => onMove(-1, 1)}>↙</div>
+      <div style={cardinalBtn} onClick={() => onMove(0, 1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
       </div>
+      <div style={diagBtn} onClick={() => onMove(1, 1)}>↘</div>
     </div>
   )
 }
