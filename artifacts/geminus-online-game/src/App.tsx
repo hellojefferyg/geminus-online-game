@@ -1,12 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { auth, db } from './firebase/index'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 import AuthWrapper from './pages/AuthWrapper'
-// Try to import firebase auth for display name / signOut — graceful fallback if not available
-let firebaseAuth: any = null
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { getAuth, signOut } = require('firebase/auth')
-  firebaseAuth = { getAuth, signOut }
-} catch { /* firebase not available */ }
 // ─── GAME DATA ───────────────────────────────────────────────
 const races: Record<string, any> = {
   human: { raceName: 'Human', archetype: 'True Fighter', primaryStat: 'DEX', apAllocationWeights: { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 } },
@@ -51,12 +47,7 @@ const BESTIARY: Record<string, any> = {
   }
 }
 
-const MOCK_PLAYERS = [
-  { id: 'P01', name: 'JuugBoyTV', level: 12, hp: 420, atk: 28, def: 24, xp: 180, gold: 95, drop: { name: 'Champion Shard', rarity: 'Epic' } },
-  { id: 'P02', name: 'Valkyrie_Nova', level: 8, hp: 310, atk: 21, def: 19, xp: 95, gold: 50, drop: { name: 'Winged Crest', rarity: 'Rare' } },
-  { id: 'P03', name: 'ShadowWraith', level: 15, hp: 550, atk: 35, def: 30, xp: 260, gold: 140, drop: { name: 'Void Band', rarity: 'Legendary' } },
-  { id: 'P04', name: 'AetherKnight', level: 5, hp: 220, atk: 16, def: 15, xp: 60, gold: 30, drop: { name: 'Silver Insignia', rarity: 'Uncommon' } },
-]
+// MOCK_PLAYERS removed — PvP targets will come from Firestore in Phase 5
 
 const BASE_ITEMS = [
   { id: 'base_helm_1', name: 'Silver Crest Helm', type: 'Armor', subType: 'Helmet', sockets: 2 },
@@ -162,62 +153,36 @@ function calcDerived(p: any) {
   return p
 }
 
-function createPlayer(name = 'Jeff', raceKey = 'human') {
-  const rd = races[raceKey] || races.human
-  const p: any = {
-    name, level: 1, xp: 0, gold: 1200, bank: 10000,
-    xpToNextLevel: GDD.XP_BASE, attributePoints: GDD.AP_PER_LEVEL,
-    race: raceKey, archetype: rd.archetype, cci: rd.primaryStat,
-    baseStats: { ...rd.apAllocationWeights }, derivedStats: {},
-    inventory: [], equipment: {}, gems: [], pos: { x: 7, y: 7 }
-  }
-  const starters = [
-    { baseId: 'base_sword_1', tier: 1, gems: [{ id: 'warStone', grade: 1 }] },
-    { baseId: 'base_axe_1', tier: 1, gems: [] },
-    { baseId: 'base_staff_1', tier: 1, gems: [{ id: 'loreStone', grade: 1 }] },
-    { baseId: 'base_armor_1', tier: 1, gems: [{ id: 'obsidianHeart', grade: 1 }] },
-    { baseId: 'base_helm_1', tier: 1, gems: [] },
-    { baseId: 'base_gauntlets_1', tier: 1, gems: [{ id: 'mightrite', grade: 1 }] },
-    { baseId: 'base_leggings_1', tier: 1, gems: [] },
-    { baseId: 'base_boots_1', tier: 1, gems: [] },
-    { baseId: 'base_firespell_1', tier: 1, gems: [{ id: 'loreStone', grade: 1 }] },
-    { baseId: 'base_airspell_1', tier: 1, gems: [] },
-    { baseId: 'base_amulet_1', tier: 1, gems: [{ id: 'vitalCore', grade: 1 }] },
-    { baseId: 'base_ring_1', tier: 1, gems: [] },
-    { baseId: 'base_accessory_1', tier: 1, gems: [{ id: 'trueCore', grade: 1 }] },
-  ]
-  starters.forEach((s, idx) => {
-    const base = BASE_ITEMS.find(b => b.id === s.baseId); if (!base) return
-    const inst = { instanceId: `item_${Date.now()}_${idx}`, baseItemId: base.id, tier: s.tier, type: 'Dropper', socketedGems: s.gems }
-    p.inventory.push(inst)
-    const slotMap: Record<string, string> = {
-      Sword: 'Weapon 1', Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves',
-      Leggings: 'Leggings', Boots: 'Boots', Fire: 'Spell 1', Air: 'Spell 2',
-      Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory',
-    }
-    const slot = slotMap[base.subType]
-    if (slot && !p.equipment[slot]) p.equipment[slot] = inst.instanceId
-  })
-  p.gems = [
-    { id: 'warStone', grade: 1 }, { id: 'loreStone', grade: 1 }, { id: 'vitalCore', grade: 1 },
-    { id: 'obsidianHeart', grade: 1 }, { id: 'mightrite', grade: 1 }, { id: 'spikeCore', grade: 1 },
-    { id: 'treasureCore', grade: 1 },
-  ]
-  calcDerived(p)
-  p.hp = p.derivedStats.maxHp
-  return p
-}
+// createPlayer is no longer the source of truth — Firestore is.
+// Kept as a helper for calcDerived only. New players are created by RaceSelect.tsx → Firestore.
 
-function savePlayer(p: any) {
-  try { localStorage.setItem('geminus_player_save', JSON.stringify(p)) } catch {}
-}
-
-function loadPlayer(): any {
+// Save player to Firestore (called after any stat/combat change)
+async function savePlayer(p: any) {
+  if (!p?.uid) return
   try {
-    const d = localStorage.getItem('geminus_player_save')
-    if (d) return JSON.parse(d)
-  } catch {}
-  return null
+    await setDoc(doc(db, 'players', p.uid), {
+      name: p.name,
+      level: p.level,
+      xp: p.xp,
+      xpToNextLevel: p.xpToNextLevel,
+      attributePoints: p.attributePoints,
+      gold: p.gold,
+      bank: p.bank,
+      hp: p.hp,
+      baseStats: p.baseStats,
+      inventory: p.inventory,
+      equipment: p.equipment,
+      gems: p.gems,
+      pos: p.pos,
+      race: p.race,
+      raceName: p.raceName,
+      archetype: p.archetype,
+      cci: p.cci,
+      raceSelected: true,
+    }, { merge: true })
+  } catch (e) {
+    console.error('savePlayer failed:', e)
+  }
 }
 
 // ─── ITEM ICONS ───────────────────────────────────────────────
@@ -257,14 +222,12 @@ function ItemIcon({ subType }: { subType: string }) {
 // ─── MAIN APP ─────────────────────────────────────────────────
 export default function App() {
   const [player, setPlayer] = useState<any>(null)
-  const [raceSelected, setRaceSelected] = useState(true) // false = show race picker for new accounts
   const [battleStats, setBattleStats] = useState({ levels: 0, kills: 0, rounds: 0, deaths: 0, oneHitKills: 0 })
   const [theme, setTheme] = useState('aether')
   const [toast, setToast] = useState('')
   const [activeTab, setActiveTab] = useState<string | null>(null)
   const [battleMode, setBattleMode] = useState(false)
   const [engaged, setEngaged] = useState(false)
-  const [targetType, setTargetType] = useState('monsters')
   const [selectedTargetId, setSelectedTargetId] = useState('E01')
   const [combatMonster, setCombatMonster] = useState<any>(null)
   const [combatLog, setCombatLog] = useState<{text: string; color: string}[]>([])
@@ -309,42 +272,52 @@ export default function App() {
     meta.content = '#03080c'
   }, [])
 
-  // Init
+  // ── FIREBASE PLAYER LOAD ──
+  // AuthWrapper already guarantees user is logged in + has raceSelected=true before App renders.
+  // We just read their Firestore doc here.
   useEffect(() => {
-    const existing = loadPlayer()
-    const isNew = !existing
-    // Get Firebase display name if available
-    let authName = 'Jeff'
-    try {
-      if (firebaseAuth) {
-        const auth = firebaseAuth.getAuth()
-        const user = auth.currentUser
-        if (user) {
-          authName = user.displayName || user.email?.split('@')[0] || 'Jeff'
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) return // AuthWrapper handles redirect
+      try {
+        const snap = await getDoc(doc(db, 'players', user.uid))
+        if (snap.exists()) {
+          const data = snap.data() as any
+          // Build player object from Firestore doc
+          const p: any = {
+            uid: user.uid,
+            name: data.name || user.email?.split('@')[0] || 'Pilot',
+            level: data.level || 1,
+            xp: data.xp || 0,
+            xpToNextLevel: data.xpToNextLevel || 200,
+            attributePoints: data.attributePoints ?? 40,
+            gold: data.gold || 0,
+            bank: data.bank || 0,
+            race: data.race || 'human',
+            raceName: data.raceName || 'Human',
+            archetype: data.archetype || 'True Fighter',
+            cci: data.cci || 'DEX',
+            baseStats: data.baseStats || { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 },
+            derivedStats: {},
+            hp: data.hp,
+            inventory: data.inventory || [],
+            equipment: data.equipment || {},
+            gems: data.gems || [],
+            pos: data.pos || { x: 7, y: 7 },
+          }
+          calcDerived(p)
+          // hp: use stored value unless it exceeds max
+          if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
+          setPlayer(p)
         }
+      } catch (err) {
+        console.error('Failed to load player from Firestore:', err)
       }
-    } catch {}
-    let p = existing || createPlayer(authName)
-    // Fix #3: If existing player still has default name 'Jeff' and we have a real auth name, update it
-    if (existing && existing.name === 'Jeff' && authName !== 'Jeff') {
-      p = { ...existing, name: authName }
-    }
-    calcDerived(p)
-    setPlayer(p)
-    // Fix #2: Show race picker for new accounts that haven't picked a race yet
-    if (isNew) {
-      setRaceSelected(false)
-    } else {
-      setRaceSelected(true)
-    }
-    const theme = localStorage.getItem('g_theme') || 'aether'
-    setTheme(theme)
-    document.documentElement.classList.toggle('theme-onyx', theme === 'onyx')
-    try {
-      const bs = localStorage.getItem('geminus_battle_stats')
-      if (bs) setBattleStats(JSON.parse(bs))
-    } catch {}
-    setChatMessages(prev => ({ ...prev, main: [{ sender: 'System', text: 'Welcome to Geminus client core. Transmission systems operational.', color: '#3EE0FF' }] }))
+    })
+    const savedTheme = localStorage.getItem('g_theme') || 'aether'
+    setTheme(savedTheme)
+    document.documentElement.classList.toggle('theme-onyx', savedTheme === 'onyx')
+    setChatMessages(prev => ({ ...prev, main: [{ sender: 'System', text: 'Welcome to Geminus. Transmission systems online.', color: '#3EE0FF' }] }))
+    return () => unsub()
   }, [])
 
   // Theme
@@ -440,49 +413,10 @@ export default function App() {
 
   if (!player) return <div style={{ color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Loading...</div>
 
-  // Fix #2: Race selection screen for new players
-  if (!raceSelected) {
-    return (
-      <AuthWrapper>
-        <div style={{ minHeight: '100dvh', background: 'radial-gradient(circle at 50% 8%, #143044 0%, #0a1a26 38%, #03080c 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ textAlign: 'center' }}>
-              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#fff', letterSpacing: '0.04em' }}>Choose Your Race</h2>
-              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#94a3b8' }}>This choice is permanent — it defines your archetype and stat growth.</p>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {Object.entries(races).map(([key, rd]: [string, any]) => (
-                <button key={key} onClick={() => {
-                  const p = createPlayer(player.name, key)
-                  calcDerived(p)
-                  setPlayer(p)
-                  savePlayer(p)
-                  setRaceSelected(true)
-                }} style={{ padding: '12px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(62,224,255,0.35)', color: '#fff', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '2px', transition: 'all 0.18s' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#3EE0FF'; (e.currentTarget as HTMLElement).style.background = 'rgba(62,224,255,0.1)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(62,224,255,0.35)'; (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.6)' }}>
-                  <span style={{ fontWeight: 800, fontSize: '14px', color: '#fff' }}>{rd.raceName}</span>
-                  <span style={{ fontSize: '11px', color: '#3EE0FF', fontWeight: 600 }}>{rd.archetype} · {rd.primaryStat}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </AuthWrapper>
-    )
-  }
-
-  // Logout handler — uses Firebase signOut if available, otherwise clears local state
+  // Logout — real Firebase signOut
   const handleLogout = () => {
     if (!window.confirm('Log out of Geminus?')) return
-    try {
-      if (firebaseAuth) {
-        const auth = firebaseAuth.getAuth()
-        firebaseAuth.signOut(auth).then(() => window.location.reload()).catch(() => window.location.reload())
-        return
-      }
-    } catch {}
-    window.location.reload()
+    signOut(auth).then(() => window.location.reload()).catch(() => window.location.reload())
   }
 
   const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL
@@ -495,14 +429,16 @@ export default function App() {
   const spendPoint = (attr: string) => {
     if (!canAllocate) return
     const p = { ...player, baseStats: { ...player.baseStats }, derivedStats: {} }
-    const w = (races[p.race] || races.human).apAllocationWeights
-    const total = Object.values(w).reduce((a: any, b: any) => a + b, 0) as number
+    // Use current stat ratios as weights — works for ALL 24 races from Firestore
+    const statKeys = ['STR', 'DEX', 'VIT', 'NTL', 'WIS']
+    const total = statKeys.reduce((sum, k) => sum + (p.baseStats[k] || 1), 0)
     const baseScale = GDD.AP_PER_LEVEL / total
-    for (const k in w) {
+    for (const k of statKeys) {
+      const w = p.baseStats[k] || 1
       const boost = k === attr
-        ? (w as any)[k] * baseScale * 1.5
-        : (w as any)[k] * baseScale * 0.6
-      p.baseStats[k] = (p.baseStats[k] || 10) + boost
+        ? w * baseScale * 1.5   // chosen stat: 50% extra
+        : w * baseScale * 0.5   // others: reduced
+      p.baseStats[k] = (p.baseStats[k] || 1) + boost
     }
     p.attributePoints -= GDD.AP_PER_LEVEL
     calcDerived(p)
@@ -510,7 +446,7 @@ export default function App() {
     const remaining = getBankedLevels(p.attributePoints)
     const max = getLevelBank(p.level)
     if (remaining < max) setPendingLevelUp(false)
-    showToast(attr + ' focus applied — attributes upgraded.')
+    showToast(attr + ' upgraded!')
   }
 
   const move = (dx: number, dy: number) => {
@@ -522,7 +458,7 @@ export default function App() {
     setPlayer(p); savePlayer(p)
   }
 
-  const getTargets = () => targetType === 'monsters' ? BESTIARY.Z01.monsters : MOCK_PLAYERS
+  const getTargets = () => BESTIARY.Z01.monsters // PvP targets come from Firestore in Phase 5
 
   const toggleEngage = () => {
     if (!engaged) {
@@ -766,10 +702,10 @@ export default function App() {
 
   const resetSave = () => {
     if (!confirm('Reset all progress? This cannot be undone.')) return
-    localStorage.removeItem('geminus_player_save'); localStorage.removeItem('geminus_battle_stats')
-    const p = createPlayer(); setPlayer(p)
+    // Clear local battle stats cache; Firestore player doc is source of truth
+    localStorage.removeItem('geminus_battle_stats')
     setBattleStats({ levels: 0, kills: 0, rounds: 0, deaths: 0, oneHitKills: 0 })
-    showToast('Save data reset.')
+    showToast('Battle stats reset.')
     setActiveTab(null)
   }
 
@@ -798,7 +734,7 @@ export default function App() {
                           <span style={{ color: '#fff', fontWeight: 700 }}>{player.name}:</span>
                           <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>Level {player.level}</span>
                         </p>
-                        <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Race:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{races[player.race]?.raceName || player.race}</span></p>
+                        <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Race:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.raceName || player.race}</span></p>
                         <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>A-Spec:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.archetype} · {player.cci}</span></p>
 
                         <div style={{ paddingTop: '4px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px' }}>
@@ -1089,15 +1025,8 @@ export default function App() {
             <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20 }}>
               {/* Top row: target selectors + battle button */}
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <select value={targetType} onChange={e => { setTargetType(e.target.value); if (engaged) { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) } setSelectedTargetId(e.target.value === 'monsters' ? 'E01' : 'P01') }}
-                    style={{ appearance: 'none', paddingLeft: '10px', paddingRight: '24px', paddingTop: '6px', paddingBottom: '6px', borderRadius: '12px', background: 'rgba(0,0,0,0.9)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '12px', fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
-                    <option value="monsters">Monsters</option>
-                    <option value="players">Players</option>
-                  </select>
-                  <div style={{ pointerEvents: 'none', position: 'absolute', top: 0, right: '6px', bottom: 0, display: 'flex', alignItems: 'center' }}>
-                    <svg style={{ width: 14, height: 14 }} fill="none" stroke="#9ca3af" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                  </div>
+                <div style={{ flexShrink: 0, padding: '6px 12px', borderRadius: '12px', background: 'rgba(0,0,0,0.9)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '12px', fontWeight: 600, color: '#fff' }}>
+                  Monsters
                 </div>
 
                 <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
