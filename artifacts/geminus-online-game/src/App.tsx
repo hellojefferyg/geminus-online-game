@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-
+import AuthWrapper from './pages/AuthWrapper'
 // ─── GAME DATA ───────────────────────────────────────────────
 const races: Record<string, any> = {
   human: { raceName: 'Human', archetype: 'True Fighter', primaryStat: 'DEX', apAllocationWeights: { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 } },
@@ -670,6 +670,7 @@ export default function App() {
   const targets = getTargets()
 
   return (
+    <AuthWrapper>
     <>
       <canvas ref={smokeRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, pointerEvents: 'none', opacity: 0.9 }} />
 
@@ -1262,6 +1263,7 @@ export default function App() {
         </div>
       )}
     </>
+      </AuthWrapper>
   )
 }
 
