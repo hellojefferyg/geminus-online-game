@@ -623,7 +623,7 @@ export default function App({ uid }: { uid: string }) {
       setEngaged(false)
       calcDerived(p); setPlayer(p)
       // Save on level-up or every 10 kills
-      if (didLevelUp || newStats.kills % 10 === 0) savePlayer(p, didLevelUp ? 'level-up' : 'kill-checkpoint')
+       savePlayer(p, didLevelUp ? 'level-up' : 'kill')
     } else {
       const monsterDmg = Math.max(1, m.atk - (p.derivedStats.AC * GDD.AC_REDUCTION))
       p.hp -= monsterDmg
