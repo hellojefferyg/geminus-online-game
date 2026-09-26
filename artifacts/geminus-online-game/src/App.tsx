@@ -281,6 +281,12 @@ export default function App() {
       if (!user) return // AuthWrapper handles redirect
       try {
         const snap = await getDoc(doc(db, 'players', user.uid))
+        if (!snap.exists()) {
+          // Player doc missing — sign out so AuthWrapper routes through RaceSelect
+          console.warn('Player doc not found for uid:', user.uid, '— signing out to rebuild')
+          setLoadError('Your character data was not found. Please sign out and sign back in to set up your character.')
+          return
+        }
         if (snap.exists()) {
           const data = snap.data() as any
           // Build player object from Firestore doc
@@ -430,13 +436,18 @@ export default function App() {
           <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', borderRadius: '10px', background: 'rgba(62,224,255,0.1)', border: '1px solid rgba(62,224,255,0.4)', color: '#3EE0FF', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>
             Retry
           </button>
-          <button onClick={() => { signOut(auth); window.location.reload() }} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '12px', cursor: 'pointer' }}>
-            Sign out
-          </button>
         </>
       ) : (
         <p style={{ color: '#64748b', fontSize: '12px', letterSpacing: '0.08em', margin: 0 }}>Loading your character...</p>
       )}
+      {/* Always show sign out — lets player escape a stuck loading state */}
+      <button onClick={() => signOut(auth).then(() => window.location.reload())}
+        style={{ marginTop: '8px', background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#475569', fontSize: '12px', cursor: 'pointer', padding: '8px 20px' }}>
+        Sign Out
+      </button>
+      <p style={{ color: '#1e3a4a', fontSize: '10px', margin: 0, textAlign: 'center' }}>
+        If this screen persists, sign out and sign back in to rebuild your character.
+      </p>
     </div>
   )
 
