@@ -127,11 +127,19 @@ function fmt(n: number): string {
 }
 
 function calcDerived(p: any) {
+  // Guard all fields — Firestore may return undefined for unset fields
+  if (!p.baseStats) p.baseStats = { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 }
+  if (!Array.isArray(p.inventory)) p.inventory = []
+  if (!Array.isArray(p.gems)) p.gems = []
+  if (!p.equipment || typeof p.equipment !== 'object') p.equipment = {}
+  if (!p.pos || typeof p.pos !== 'object') p.pos = { x: 7, y: 7 }
+
   const rd = races[p.race] || races.human
   let ac = 0, wc = 0, sc = 0
   for (const slotName in p.equipment) {
     const iid = p.equipment[slotName]; if (!iid) continue
-    const item = p.inventory.find((i: any) => i.instanceId === iid); if (!item) continue
+    const item = Array.isArray(p.inventory) ? p.inventory.find((i: any) => i.instanceId === iid) : null
+    if (!item) continue
     const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) continue
     const mod = SLOT_MODS[base.subType] || {}
     const tier = DROPPER_TIERS.find(t => t.tier === item.tier) || DROPPER_TIERS[0]
@@ -140,16 +148,18 @@ function calcDerived(p: any) {
     if (mod.stat === 'WC') wc += val
     if (mod.stat === 'SC') sc += val
   }
-  const pStat = p.baseStats[rd.primaryStat] || 10
+  const pStat = (p.baseStats && p.baseStats[rd.primaryStat]) || 10
+  const vit = (p.baseStats && p.baseStats.VIT) || 10
+  const dex = (p.baseStats && p.baseStats.DEX) || 10
   p.derivedStats = {
-    maxHp: 100 + (p.baseStats.VIT || 10) * 10,
-    AC: Math.max(10, ac * (1 + (p.baseStats.VIT || 10) * 0.0075)),
+    maxHp: 100 + vit * 10,
+    AC: Math.max(10, ac * (1 + vit * 0.0075)),
     WC: Math.max(12, wc * (1 + pStat * 0.0055)),
     SC: Math.max(10, sc * (1 + pStat * 0.0055)),
-    hitChance: Math.min(99, 90 + (p.baseStats.DEX || 10) * 0.05),
-    critChance: Math.min(60, 5 + (p.baseStats.DEX || 10) * 0.01),
+    hitChance: Math.min(99, 90 + dex * 0.05),
+    critChance: Math.min(60, 5 + dex * 0.01),
   }
-  if (p.hp === undefined || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
+  if (p.hp === undefined || p.hp === null || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
   return p
 }
 
