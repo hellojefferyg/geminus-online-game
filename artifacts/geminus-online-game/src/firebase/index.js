@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, browserSessionPersistence, setPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -15,3 +15,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Fix iOS Safari: Firebase defaults to IndexedDB which Safari blocks.
+// browserSessionPersistence uses sessionStorage instead — works on all browsers.
+setPersistence(auth, browserSessionPersistence).catch(() => {});
