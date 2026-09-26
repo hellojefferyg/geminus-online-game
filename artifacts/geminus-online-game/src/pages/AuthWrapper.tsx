@@ -23,10 +23,10 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
         if (snap.exists() && snap.data().raceSelected) {
           setAuthState('logged-in')
         } else {
-          // Has Firebase account but no completed player doc yet — show race picker
-          const username = snap.exists()
+          // No player doc or raceSelected not true — send to RaceSelect to create it
+          const username = (snap.exists() && snap.data().name)
             ? snap.data().name
-            : user.email?.split('@')[0] || 'Pilot'
+            : user.displayName || user.email?.split('@')[0] || 'Pilot'
           setPendingUser({ uid: user.uid, username })
           setAuthState('needs-race')
         }
