@@ -502,7 +502,7 @@ export default function App({ uid }: { uid: string }) {
   // Logout — save first, then sign out
   const handleLogout = async () => {
     if (!window.confirm('Log out of Geminus?')) return
-    await savePlayer(player, 'logout')
+    await savePlayer(playerRef.current, 'logout')
     signOut(auth).then(() => window.location.reload()).catch(() => window.location.reload())
   }
 
