@@ -183,14 +183,11 @@ function calcDerived(p: any) {
 async function savePlayer(p: any, reason: string = '') {
   if (!p?.uid) return
   try {
-    const user = auth.currentUser
-    if (!user) return
-    const token = await user.getIdToken()
-    await fetch('/api/player/save', {
+      await fetch('/api/player/save', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        
       },
       body: JSON.stringify({
         uid: p.uid,
