@@ -56,7 +56,7 @@ export default function Login({ onSwitchToSignUp }: { onSwitchToSignUp: () => vo
 
         {/* Logo */}
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '11px', color: '#1e3a4a', letterSpacing: '0.2em', marginBottom: '8px' }}>JUUGBOYTV PRESENTS</div>
+          <div style={{ fontSize: '11px', color: '#1e3a4a', letterSpacing: '0.2em', marginBottom: '8px' }}>Geminus</div>
           <h1 style={{ fontSize: '38px', fontWeight: 900, color: '#3EE0FF', letterSpacing: '0.14em', margin: 0, textShadow: '0 0 40px rgba(62,224,255,0.6), 0 0 80px rgba(62,224,255,0.2)' }}>GEMINUS</h1>
           <p style={{ fontSize: '11px', color: '#64748b', letterSpacing: '0.15em', margin: '6px 0 0' }}>ONLINE GAME</p>
         </div>
@@ -130,7 +130,7 @@ export default function Login({ onSwitchToSignUp }: { onSwitchToSignUp: () => vo
         </div>
 
         <p style={{ textAlign: 'center', fontSize: '10px', color: '#1e3a4a', margin: 0, letterSpacing: '0.05em' }}>
-          JuugBoyTV · Geminus Online Game · Beta
+          Coming Soon · Geminus Online Game · Beta
         </p>
       </div>
     </div>
