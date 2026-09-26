@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { auth, db } from './firebase/index'
-import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { signOut } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import AuthWrapper from './pages/AuthWrapper'
 // ─── GAME DATA ───────────────────────────────────────────────
@@ -220,7 +220,7 @@ function ItemIcon({ subType }: { subType: string }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────
-export default function App() {
+export default function App({ uid }: { uid: string }) {
   const [player, setPlayer] = useState<any>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [battleStats, setBattleStats] = useState({ levels: 0, kills: 0, rounds: 0, deaths: 0, oneHitKills: 0 })
@@ -274,62 +274,54 @@ export default function App() {
   }, [])
 
   // ── FIREBASE PLAYER LOAD ──
-  // AuthWrapper already guarantees user is logged in + has raceSelected=true before App renders.
-  // We just read their Firestore doc here.
+  // AuthWrapper already confirmed this uid has a valid player doc with raceSelected:true
+  // We just fetch it directly — no onAuthStateChanged needed here
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) return // AuthWrapper handles redirect
+    const loadPlayerDoc = async () => {
       try {
-        const snap = await getDoc(doc(db, 'players', user.uid))
+        const snap = await getDoc(doc(db, 'players', uid))
         if (!snap.exists()) {
-          // Player doc missing — sign out so AuthWrapper routes through RaceSelect
-          console.warn('Player doc not found for uid:', user.uid, '— signing out to rebuild')
-          setLoadError('Your character data was not found. Please sign out and sign back in to set up your character.')
+          setLoadError('Character data not found. Please sign out and create your character.')
           return
         }
-        if (snap.exists()) {
-          const data = snap.data() as any
-          // Build player object from Firestore doc
-          const p: any = {
-            uid: user.uid,
-            name: data.name || user.email?.split('@')[0] || 'Pilot',
-            level: data.level || 1,
-            xp: data.xp || 0,
-            xpToNextLevel: data.xpToNextLevel || 200,
-            attributePoints: data.attributePoints ?? 40,
-            gold: data.gold || 0,
-            bank: data.bank || 0,
-            race: data.race || 'human',
-            raceName: data.raceName || 'Human',
-            archetype: data.archetype || 'True Fighter',
-            cci: data.cci || 'DEX',
-            baseStats: data.baseStats || { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 },
-            derivedStats: {},
-            hp: data.hp,
-            inventory: data.inventory || [],
-            equipment: data.equipment || {},
-            gems: data.gems || [],
-            pos: data.pos || { x: 7, y: 7 },
-          }
-          calcDerived(p)
-          // hp: use stored value unless it exceeds max
-          if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
-          setPlayer(p)
+        const data = snap.data() as any
+        const p: any = {
+          uid,
+          name: data.name || 'Pilot',
+          level: data.level || 1,
+          xp: data.xp || 0,
+          xpToNextLevel: data.xpToNextLevel || 200,
+          attributePoints: data.attributePoints ?? 40,
+          gold: data.gold || 0,
+          bank: data.bank || 0,
+          race: data.race || 'human',
+          raceName: data.raceName || 'Human',
+          archetype: data.archetype || 'True Fighter',
+          cci: data.cci || 'DEX',
+          baseStats: data.baseStats || { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 },
+          derivedStats: {},
+          hp: data.hp,
+          inventory: data.inventory || [],
+          equipment: data.equipment || {},
+          gems: data.gems || [],
+          pos: data.pos || { x: 7, y: 7 },
         }
+        calcDerived(p)
+        if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
+        setPlayer(p)
       } catch (err: any) {
-        console.error('Failed to load player from Firestore:', err)
         const msg = err?.code === 'permission-denied'
-          ? 'Firestore permission denied — check your security rules in Firebase console.'
-          : `Failed to load your character: ${err?.message || 'Unknown error'}`
+          ? 'Firestore permission denied — check security rules in Firebase console.'
+          : `Failed to load character: ${err?.message || 'Unknown error'}`
         setLoadError(msg)
       }
-    })
+    }
+    loadPlayerDoc()
     const savedTheme = localStorage.getItem('g_theme') || 'aether'
     setTheme(savedTheme)
     document.documentElement.classList.toggle('theme-onyx', savedTheme === 'onyx')
     setChatMessages(prev => ({ ...prev, main: [{ sender: 'System', text: 'Welcome to Geminus. Transmission systems online.', color: '#3EE0FF' }] }))
-    return () => unsub()
-  }, [])
+  }, [uid])
 
   // Theme
   useEffect(() => {
@@ -757,8 +749,7 @@ export default function App() {
   const targets = getTargets()
 
   return (
-    <AuthWrapper>
-    <>
+    <AuthWrapper>{(uid) => <>
       <canvas ref={smokeRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, pointerEvents: 'none', opacity: 0.9 }} />
 
       <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column', background: 'transparent' }} onClick={(e) => { if (equipPopup && !(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null); if (menuOpen && !(e.target as HTMLElement).closest('.menu-container')) setMenuOpen(false) }}>
@@ -1384,7 +1375,7 @@ export default function App() {
         </div>
       )}
     </>
-      </AuthWrapper>
+      }</AuthWrapper>
   )
 }
 
