@@ -222,6 +222,7 @@ function ItemIcon({ subType }: { subType: string }) {
 // ─── MAIN APP ─────────────────────────────────────────────────
 export default function App() {
   const [player, setPlayer] = useState<any>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [battleStats, setBattleStats] = useState({ levels: 0, kills: 0, rounds: 0, deaths: 0, oneHitKills: 0 })
   const [theme, setTheme] = useState('aether')
   const [toast, setToast] = useState('')
@@ -309,8 +310,12 @@ export default function App() {
           if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
           setPlayer(p)
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to load player from Firestore:', err)
+        const msg = err?.code === 'permission-denied'
+          ? 'Firestore permission denied — check your security rules in Firebase console.'
+          : `Failed to load your character: ${err?.message || 'Unknown error'}`
+        setLoadError(msg)
       }
     })
     const savedTheme = localStorage.getItem('g_theme') || 'aether'
@@ -411,7 +416,29 @@ export default function App() {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
   }, [chatMessages, chatChannel, chatSub])
 
-  if (!player) return <div style={{ color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Loading...</div>
+  if (!player) return (
+    <div style={{
+      minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', gap: '16px', padding: '24px',
+      background: 'radial-gradient(circle at 50% 8%, #143044 0%, #0a1a26 38%, #03080c 100%)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif',
+    }}>
+      <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#3EE0FF', letterSpacing: '0.14em', margin: 0, textShadow: '0 0 30px rgba(62,224,255,0.5)' }}>GEMINUS</h1>
+      {loadError ? (
+        <>
+          <p style={{ color: '#f87171', fontSize: '13px', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5, margin: 0 }}>{loadError}</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', borderRadius: '10px', background: 'rgba(62,224,255,0.1)', border: '1px solid rgba(62,224,255,0.4)', color: '#3EE0FF', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>
+            Retry
+          </button>
+          <button onClick={() => { signOut(auth); window.location.reload() }} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '12px', cursor: 'pointer' }}>
+            Sign out
+          </button>
+        </>
+      ) : (
+        <p style={{ color: '#64748b', fontSize: '12px', letterSpacing: '0.08em', margin: 0 }}>Loading your character...</p>
+      )}
+    </div>
+  )
 
   // Logout — real Firebase signOut
   const handleLogout = () => {
