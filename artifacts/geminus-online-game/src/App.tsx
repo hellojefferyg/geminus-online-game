@@ -440,13 +440,20 @@ export default function App() {
       ) : (
         <p style={{ color: '#64748b', fontSize: '12px', letterSpacing: '0.08em', margin: 0 }}>Loading your character...</p>
       )}
-      {/* Always show sign out — lets player escape a stuck loading state */}
-      <button onClick={() => signOut(auth).then(() => window.location.reload())}
-        style={{ marginTop: '8px', background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#475569', fontSize: '12px', cursor: 'pointer', padding: '8px 20px' }}>
+      {/* Sign out — force clears everything so AuthWrapper re-routes */}
+      <button onClick={async () => {
+        try { await signOut(auth) } catch {}
+        // Clear all local storage + caches as fallback
+        try { localStorage.clear() } catch {}
+        try { sessionStorage.clear() } catch {}
+        // Hard navigate to force a full reload
+        window.location.href = window.location.href
+      }}
+        style={{ marginTop: '8px', background: 'rgba(255,55,95,0.1)', border: '1px solid rgba(255,55,95,0.3)', borderRadius: '8px', color: '#f87171', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: '10px 28px' }}>
         Sign Out
       </button>
-      <p style={{ color: '#1e3a4a', fontSize: '10px', margin: 0, textAlign: 'center' }}>
-        If this screen persists, sign out and sign back in to rebuild your character.
+      <p style={{ color: '#1e3a4a', fontSize: '10px', margin: 0, textAlign: 'center', maxWidth: '280px' }}>
+        Tap Sign Out to return to login and create your character
       </p>
     </div>
   )
