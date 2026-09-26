@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { auth, db } from './firebase/index'
 import { signOut } from 'firebase/auth'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 // ─── GAME DATA ───────────────────────────────────────────────
 // All 24 races — must match RaceSelect.tsx exactly
 const races: Record<string, any> = {
@@ -37,13 +37,10 @@ const races: Record<string, any> = {
 
 const GDD = { XP_BASE: 200, XP_GROWTH: 1.12, AP_PER_LEVEL: 40, DAMAGE_CONST: 90, AC_REDUCTION: 0.5 }
 
-// Every 50 levels the bank limit goes up by 1 (starts at 1)
-// Returns stats ordered so primary stat is rightmost
 function getAttributeFocusOrder(raceKey: string): string[] {
   const rd = races[raceKey] || races.human
-  const primaryStat = rd.primaryStat // DEX for fighters, WIS for casters
+  const primaryStat = rd.primaryStat
   const allStats = ['DEX', 'STR', 'NTL', 'WIS', 'VIT']
-  // Remove primary stat and put it last (rightmost)
   const others = allStats.filter(s => s !== primaryStat)
   return [...others, primaryStat]
 }
@@ -52,7 +49,6 @@ function getLevelBank(level: number): number {
   return 1 + Math.floor(level / 50)
 }
 
-// Returns banked free levels (each AP_PER_LEVEL = 1 free level)
 function getBankedLevels(attributePoints: number): number {
   return Math.floor(attributePoints / GDD.AP_PER_LEVEL)
 }
@@ -68,8 +64,6 @@ const BESTIARY: Record<string, any> = {
     ]
   }
 }
-
-// MOCK_PLAYERS removed — PvP targets will come from Firestore in Phase 5
 
 const BASE_ITEMS = [
   { id: 'base_helm_1', name: 'Silver Crest Helm', type: 'Armor', subType: 'Helmet', sockets: 2 },
@@ -149,7 +143,6 @@ function fmt(n: number): string {
 }
 
 function calcDerived(p: any) {
-  // Guard all fields — Firestore may return undefined for unset fields
   if (!p.baseStats) p.baseStats = { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 }
   if (!Array.isArray(p.inventory)) p.inventory = []
   if (!Array.isArray(p.gems)) p.gems = []
@@ -185,33 +178,35 @@ function calcDerived(p: any) {
   return p
 }
 
-// createPlayer is no longer the source of truth — Firestore is.
-// Kept as a helper for calcDerived only. New players are created by RaceSelect.tsx → Firestore.
-
-// Save player to Firestore (called after any stat/combat change)
-async function savePlayer(p: any) {
+// ─── SAVE PLAYER → SUPABASE via API route ────────────────────
+// Only called on: level-up, stat spend, combat end, equip change, logout, tab hide
+async function savePlayer(p: any, reason: string = '') {
   if (!p?.uid) return
   try {
-    await setDoc(doc(db, 'players', p.uid), {
-      name: p.name,
-      level: p.level,
-      xp: p.xp,
-      xpToNextLevel: p.xpToNextLevel,
-      attributePoints: p.attributePoints,
-      gold: p.gold,
-      bank: p.bank,
-      hp: p.hp,
-      baseStats: p.baseStats,
-      inventory: p.inventory,
-      equipment: p.equipment,
-      gems: p.gems,
-      pos: p.pos,
-      race: p.race,
-      raceName: p.raceName,
-      archetype: p.archetype,
-      cci: p.cci,
-      raceSelected: true,
-    }, { merge: true })
+    const user = auth.currentUser
+    if (!user) return
+    const token = await user.getIdToken()
+    await fetch('/api/player/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        xp: p.xp ?? 0,
+        gold: p.gold ?? 0,
+        level: p.level ?? 1,
+        hp: p.hp ?? 100,
+        max_hp: p.derivedStats?.maxHp ?? 100,
+        attribute_points: p.attributePoints ?? 0,
+        base_stats: p.baseStats ?? {},
+        pos: p.pos ?? { zoneId: 'Z01', x: 0, y: 0 },
+        inventory: p.inventory ?? [],
+        gems: p.gems ?? [],
+        kills: 0,
+      }),
+    })
+    if (reason) console.log(`[save] ${reason}`)
   } catch (e) {
     console.error('savePlayer failed:', e)
   }
@@ -277,7 +272,7 @@ export default function App({ uid }: { uid: string }) {
   const [chatInput, setChatInput] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [equipPopup, setEquipPopup] = useState<string | null>(null)
-  const [pendingLevelUp, setPendingLevelUp] = useState(false) // blocked from killing until free levels spent
+  const [pendingLevelUp, setPendingLevelUp] = useState(false)
   const [chatNameColor, setChatNameColor] = useState('#3EE0FF')
   const [inboxOpen, setInboxOpen] = useState(false)
   const [groupNames, setGroupNames] = useState<Record<string, string>>({ g1: 'Group-1', g2: 'Group-2', g3: 'Group-3', g4: 'Group-4' })
@@ -288,13 +283,17 @@ export default function App({ uid }: { uid: string }) {
   const miniMapRef = useRef<HTMLCanvasElement>(null)
   const zoneCanvasRef = useRef<HTMLCanvasElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const playerRef = useRef<any>(null)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(''), 2800)
   }, [])
 
-  // Theme-color meta tag for Safari status bar — set immediately on mount
+  // Keep playerRef in sync so visibilitychange always has latest state
+  useEffect(() => { playerRef.current = player }, [player])
+
+  // Theme-color meta tag for Safari status bar
   useEffect(() => {
     let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement
     if (!meta) {
@@ -306,8 +305,6 @@ export default function App({ uid }: { uid: string }) {
   }, [])
 
   // ── FIREBASE PLAYER LOAD ──
-  // AuthWrapper already confirmed this uid has a valid player doc with raceSelected:true
-  // We just fetch it directly — no onAuthStateChanged needed here
   useEffect(() => {
     const loadPlayerDoc = async () => {
       try {
@@ -354,6 +351,17 @@ export default function App({ uid }: { uid: string }) {
     document.documentElement.classList.toggle('theme-onyx', savedTheme === 'onyx')
     setChatMessages(prev => ({ ...prev, main: [{ sender: 'System', text: 'Welcome to Geminus. Transmission systems online.', color: '#3EE0FF' }] }))
   }, [uid])
+
+  // ── VISIBILITY SAVE — fires when player hides the tab ──
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden' && playerRef.current) {
+        savePlayer(playerRef.current, 'tab-hidden')
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
 
   // Theme
   useEffect(() => {
@@ -410,9 +418,7 @@ export default function App({ uid }: { uid: string }) {
     ctx.scale(dpr, dpr)
     const w = canvas.offsetWidth; const h = canvas.offsetHeight
     ctx.clearRect(0, 0, w, h)
-    // Solid black background
     ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, w, h)
-    // Player dot centered
     const dotX = w / 2; const dotY = h / 2
     ctx.fillStyle = '#3EE0FF'; ctx.shadowBlur = 8; ctx.shadowColor = '#3EE0FF'
     ctx.beginPath(); ctx.arc(dotX, dotY, 5, 0, Math.PI * 2); ctx.fill()
@@ -464,7 +470,6 @@ export default function App({ uid }: { uid: string }) {
       ) : (
         <p style={{ color: '#64748b', fontSize: '12px', letterSpacing: '0.08em', margin: 0 }}>Loading your character...</p>
       )}
-      {/* Sign out — force clears everything so AuthWrapper re-routes */}
       <button onClick={async () => {
         try { await signOut(auth) } catch {}
         try { localStorage.clear() } catch {}
@@ -480,9 +485,10 @@ export default function App({ uid }: { uid: string }) {
     </div>
   )
 
-  // Logout — real Firebase signOut
-  const handleLogout = () => {
+  // Logout — save first, then sign out
+  const handleLogout = async () => {
     if (!window.confirm('Log out of Geminus?')) return
+    await savePlayer(player, 'logout')
     signOut(auth).then(() => window.location.reload()).catch(() => window.location.reload())
   }
 
@@ -496,20 +502,19 @@ export default function App({ uid }: { uid: string }) {
   const spendPoint = (attr: string) => {
     if (!canAllocate) return
     const p = { ...player, baseStats: { ...player.baseStats }, derivedStats: {} }
-    // Use current stat ratios as weights — works for ALL 24 races from Firestore
     const statKeys = ['STR', 'DEX', 'VIT', 'NTL', 'WIS']
     const total = statKeys.reduce((sum, k) => sum + (p.baseStats[k] || 1), 0)
     const baseScale = GDD.AP_PER_LEVEL / total
     for (const k of statKeys) {
       const w = p.baseStats[k] || 1
       const boost = k === attr
-        ? w * baseScale * 1.5   // chosen stat: 50% extra
-        : w * baseScale * 0.5   // others: reduced
+        ? w * baseScale * 1.5
+        : w * baseScale * 0.5
       p.baseStats[k] = (p.baseStats[k] || 1) + boost
     }
     p.attributePoints -= GDD.AP_PER_LEVEL
     calcDerived(p)
-    setPlayer(p); savePlayer(p)
+    setPlayer(p); savePlayer(p, 'stat-spend')
     const remaining = getBankedLevels(p.attributePoints)
     const max = getLevelBank(p.level)
     if (remaining < max) setPendingLevelUp(false)
@@ -517,15 +522,14 @@ export default function App({ uid }: { uid: string }) {
   }
 
   const move = (dx: number, dy: number) => {
-    // Game world coords: UP increases Y, DOWN decreases Y
-    // DPad sends dy=-1 for UP arrow, so we invert dy here
     const newX = Math.max(0, Math.min(15, player.pos.x + dx))
     const newY = Math.max(0, Math.min(15, player.pos.y - dy))
     const p = { ...player, pos: { x: newX, y: newY } }
-    setPlayer(p); savePlayer(p)
+    setPlayer(p)
+    // No save on move — position saves on next real trigger
   }
 
-  const getTargets = () => BESTIARY.Z01.monsters // PvP targets come from Firestore in Phase 5
+  const getTargets = () => BESTIARY.Z01.monsters
 
   const toggleEngage = () => {
     if (!engaged) {
@@ -555,7 +559,6 @@ export default function App({ uid }: { uid: string }) {
 
     if (m.currentHP <= 0) {
       m.currentHP = 0
-      // Check level bank — if player has too many banked levels, block the kill
       const bankedLevels = getBankedLevels(p.attributePoints || 0)
       const maxBank = getLevelBank(p.level)
       if (bankedLevels >= maxBank) {
@@ -565,7 +568,7 @@ export default function App({ uid }: { uid: string }) {
           { text: `Bank limit: ${maxBank} at Level ${p.level}`, color: '#94a3b8' },
         ])
         setEngaged(false)
-        calcDerived(p); setPlayer(p); savePlayer(p)
+        calcDerived(p); setPlayer(p); savePlayer(p, 'bank-full')
         return
       }
       const newStats = { ...battleStats, kills: battleStats.kills + 1, rounds: battleStats.rounds + 1, oneHitKills: battleStats.oneHitKills + (newTurn === 1 ? 1 : 0) }
@@ -581,6 +584,7 @@ export default function App({ uid }: { uid: string }) {
           setLastGem(`${(gData as any).name} G1`); setLastGemColor(RARITY_COLORS['Rare'])
         }
       }
+      let didLevelUp = false
       if (p.xp >= p.xpToNextLevel) {
         p.level++; p.xp -= p.xpToNextLevel
         p.attributePoints += GDD.AP_PER_LEVEL
@@ -589,10 +593,10 @@ export default function App({ uid }: { uid: string }) {
         setBattleStats(ls)
         try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ls)) } catch {}
         showToast(`⬆ Level Up! Level ${p.level}`)
-        // Check if now over bank limit after leveling
         const newBanked = getBankedLevels(p.attributePoints)
         const newMax = getLevelBank(p.level)
         if (newBanked >= newMax) setPendingLevelUp(true)
+        didLevelUp = true
       }
       const statGains = `WIS(1) | NTL(1) | VIT(1) | STR(1) | DEX(1)`
       const killLines: {text: string; color: string}[] = []
@@ -603,6 +607,9 @@ export default function App({ uid }: { uid: string }) {
       setCombatLog(killLines)
       setEnemyCurrentHP(null)
       setEngaged(false)
+      calcDerived(p); setPlayer(p)
+      // Save on level-up or every 10 kills
+      if (didLevelUp || newStats.kills % 10 === 0) savePlayer(p, didLevelUp ? 'level-up' : 'kill-checkpoint')
     } else {
       const monsterDmg = Math.max(1, m.atk - (p.derivedStats.AC * GDD.AC_REDUCTION))
       p.hp -= monsterDmg
@@ -619,6 +626,7 @@ export default function App({ uid }: { uid: string }) {
         setEnemyCurrentHP(null)
         p.hp = p.derivedStats.maxHp
         setEngaged(false)
+        calcDerived(p); setPlayer(p); savePlayer(p, 'death')
       } else {
         setBattleStats(prev => ({ ...prev, rounds: prev.rounds + 1 }))
         const roundLines: {text: string; color: string}[] = []
@@ -629,9 +637,10 @@ export default function App({ uid }: { uid: string }) {
         setCombatLog(roundLines)
         setEnemyCurrentHP(Math.max(0, Math.round(m.currentHP)))
         setCombatMonster(m)
+        calcDerived(p); setPlayer(p)
+        // No save mid-combat — only on kill or death
       }
     }
-    calcDerived(p); setPlayer(p); savePlayer(p)
   }
 
   const sendMessage = (e: React.FormEvent) => {
@@ -743,7 +752,7 @@ export default function App({ uid }: { uid: string }) {
     const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
     const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
     for (const slot in p.equipment) if (p.equipment[slot] === instanceId) p.equipment[slot] = null
-    calcDerived(p); setPlayer(p); savePlayer(p)
+    calcDerived(p); setPlayer(p); savePlayer(p, 'unequip')
     showToast(`${base.name} unequipped.`)
   }
 
@@ -756,20 +765,18 @@ export default function App({ uid }: { uid: string }) {
     const slot = slotMap[base.subType]
     if (slot) {
       p.equipment[slot] = instanceId
-      calcDerived(p); setPlayer(p); savePlayer(p)
+      calcDerived(p); setPlayer(p); savePlayer(p, 'equip')
       showToast(`${base.name} equipped to ${slot}.`)
     }
     setEquipPopup(null)
   }
 
   const handleItemTap = (instanceId: string) => {
-    // Legacy — only used by inventory now to show popup
     setEquipPopup(prev => prev === instanceId ? null : instanceId)
   }
 
   const resetSave = () => {
     if (!confirm('Reset all progress? This cannot be undone.')) return
-    // Clear local battle stats cache; Firestore player doc is source of truth
     localStorage.removeItem('geminus_battle_stats')
     setBattleStats({ levels: 0, kills: 0, rounds: 0, deaths: 0, oneHitKills: 0 })
     showToast('Battle stats reset.')
@@ -792,8 +799,6 @@ export default function App({ uid }: { uid: string }) {
             {activeTab === null && (
               <header className="glass-panel" style={{ flexShrink: 0, position: 'relative', zIndex: 30, padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '8px' }}>
-
-                    {/* Left: Stats */}
                     <section style={{ flex: 1, minWidth: 0, paddingRight: '4px', display: 'flex', flexDirection: 'column' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <p style={{ margin: 0, fontSize: '12px' }}>
@@ -816,7 +821,6 @@ export default function App({ uid }: { uid: string }) {
                           </div>
                         </div>
 
-                        {/* Gold / Bank stacked above Menu */}
                         <div style={{ paddingTop: '4px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Gold:</span>
@@ -851,7 +855,6 @@ export default function App({ uid }: { uid: string }) {
                           )}
                         </div>
 
-                        {/* Zone Info — under Menu (Fix 6 order + Fix 10 Logout) */}
                         <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                             <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span> <span style={{ color: '#cbd5e1' }}>Aether Silver Cavern</span></p>
@@ -868,28 +871,23 @@ export default function App({ uid }: { uid: string }) {
                       </div>
                     </section>
 
-                    {/* Right: Nav Deck — flush to right edge, 4px breathing room so border shows */}
                     {!battleMode && (
                       <section style={{ width: '162px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px', paddingRight: '4px' }}>
-                        {/* Square map */}
                         <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
                           <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
                         </div>
-                        {/* DPad */}
                         <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
                           <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
                         </div>
                       </section>
                     )}
                   </div>
-
               </header>
             )}
 
-            {/* ── STATS PANEL (Health / XP / Last Drop) — own glass section ── */}
+            {/* ── STATS PANEL ── */}
             {activeTab === null && (
               <section className="glass-panel" style={{ flexShrink: 0, padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {/* Health Bar */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
                     <span style={{ color: '#fff', fontWeight: 700 }}>Health:</span>
@@ -899,8 +897,6 @@ export default function App({ uid }: { uid: string }) {
                     <div style={{ height: '100%', borderRadius: '9999px', width: `${hpPct}%`, background: '#30D158', boxShadow: '0 0 10px rgba(48,209,88,0.6)', transition: 'width 0.3s' }} />
                   </div>
                 </div>
-
-                {/* XP row — Experience left, Next Level right, bar below */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
                     <span style={{ color: '#fff', fontWeight: 700 }}>Experience: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{fmt(player.xp)}</span></span>
@@ -910,8 +906,6 @@ export default function App({ uid }: { uid: string }) {
                     <div style={{ height: '100%', borderRadius: '9999px', width: `${Math.max(0, Math.min(100, (player.xp / player.xpToNextLevel) * 100))}%`, background: 'linear-gradient(90deg, #FF6B00, #FF9500)', boxShadow: '0 0 10px rgba(255,149,0,0.6)', transition: 'width 0.3s' }} />
                   </div>
                 </div>
-
-                {/* Last Item + Level on row 1, Last Gem on row 2 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>Last Item: <span style={{ color: lastItemColor, fontWeight: 700 }}>{lastItem}</span> <span style={{ color: '#30D158', fontFamily: 'monospace', fontSize: '11px' }}>{player.inventory.length}/200</span></span>
@@ -926,7 +920,6 @@ export default function App({ uid }: { uid: string }) {
 
             {/* ── INLINE PANEL (tabs) ── */}
             {activeTab !== null && (
-                // Inline Panel
                 <div className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
@@ -952,7 +945,6 @@ export default function App({ uid }: { uid: string }) {
                   </div>
 
                   <div style={{ flex: 1, overflowY: 'auto', maxHeight: '480px' }}>
-                    {/* Equipment */}
                     {activeTab === 'equipment' && (
                       <div className="equipment-grid">
                         {EQUIP_SLOTS.map(slot => {
@@ -965,10 +957,7 @@ export default function App({ uid }: { uid: string }) {
                               <div className="equipment-slot-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <span>{slot.name}</span>
                                 {instId && (
-                                  <button
-                                    onClick={() => unequipItem(instId)}
-                                    style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.02em', flexShrink: 0 }}
-                                  >Unequip</button>
+                                  <button onClick={() => unequipItem(instId)} style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.02em', flexShrink: 0 }}>Unequip</button>
                                 )}
                               </div>
                               <div className="equipment-slot-content" style={{ cursor: 'default' }}>
@@ -991,7 +980,6 @@ export default function App({ uid }: { uid: string }) {
                       </div>
                     )}
 
-                    {/* Inventory */}
                     {activeTab === 'inventory' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ paddingBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1020,7 +1008,6 @@ export default function App({ uid }: { uid: string }) {
                       </div>
                     )}
 
-                    {/* Player Info */}
                     {activeTab === 'stats' && (
                       <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
                         <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Combat Attributes</span>
@@ -1035,7 +1022,6 @@ export default function App({ uid }: { uid: string }) {
                       </div>
                     )}
 
-                    {/* Training */}
                     {activeTab === 'training' && (
                       <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)', fontSize: '12px' }}>
                         <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', textDecoration: 'underline', textUnderlineOffset: '4px', marginBottom: '12px' }}>Battle Statistics</h3>
@@ -1050,7 +1036,6 @@ export default function App({ uid }: { uid: string }) {
                       </div>
                     )}
 
-                    {/* Settings */}
                     {activeTab === 'settings' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
                         <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
@@ -1062,7 +1047,7 @@ export default function App({ uid }: { uid: string }) {
                             </div>
                             <button className="glass-button" style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px' }} onClick={() => {
                               const val = (document.getElementById('settings-name-input') as HTMLInputElement)?.value?.trim()
-                              if (val) { const p = { ...player, name: val }; setPlayer(p); savePlayer(p); showToast('Profile callsign updated.') }
+                              if (val) { const p = { ...player, name: val }; setPlayer(p); savePlayer(p, 'name-update'); showToast('Profile callsign updated.') }
                             }}>Update Profile</button>
                             <button onClick={resetSave} style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', background: 'transparent', cursor: 'pointer' }}>Reset Progress & Restore Chassis</button>
                           </div>
@@ -1089,14 +1074,11 @@ export default function App({ uid }: { uid: string }) {
 
             {/* ── COMBAT CONSOLE ── */}
             <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20 }}>
-              {/* Top row: target selectors + battle button */}
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <div style={{ flexShrink: 0, padding: '6px 12px', borderRadius: '12px', background: 'rgba(0,0,0,0.9)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '12px', fontWeight: 600, color: '#fff' }}>
                   Monsters
                 </div>
-
                 <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                  {/* Fix 9: Remove HP from monster name in dropdown — HP shown separately below */}
                   <select className="editor-input" value={selectedTargetId} onChange={e => { setSelectedTargetId(e.target.value); if (engaged) { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) } }}
                     style={{ width: '100%', paddingTop: '6px', paddingBottom: '6px', paddingRight: '28px', fontSize: '12px', background: 'rgba(0,0,0,0.9)', borderColor: 'rgba(255,255,255,0.2)', appearance: 'none' }}>
                     {targets.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -1105,13 +1087,11 @@ export default function App({ uid }: { uid: string }) {
                     <svg style={{ width: 14, height: 14 }} fill="none" stroke="#9ca3af" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
                   </div>
                 </div>
-
                 <button className={`combat-engage-btn${engaged ? ' active' : ''}`} onClick={toggleEngage}>
                   {engaged ? 'DISENGAGE' : 'BATTLE'}
                 </button>
               </div>
 
-              {/* Attack buttons — only when engaged */}
               {engaged && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', paddingTop: '3px', borderTop: '1px solid rgba(255,255,255,0.12)', height: '40px' }}>
                   <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}>Cast</button>
@@ -1123,7 +1103,6 @@ export default function App({ uid }: { uid: string }) {
                 </div>
               )}
 
-              {/* Fix 9: Enemy HP shown only when engaged, no box */}
               {engaged && enemyCurrentHP !== null && (
                 <div style={{ textAlign: 'center', paddingTop: '2px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#FF375F' }}>
@@ -1132,7 +1111,6 @@ export default function App({ uid }: { uid: string }) {
                 </div>
               )}
 
-              {/* Fix 9: Free-floating combat log lines — no box, just centered text */}
               {combatLog.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '2px', paddingTop: '2px' }}>
                   {combatLog.map((line, i) => (
@@ -1143,14 +1121,12 @@ export default function App({ uid }: { uid: string }) {
                 </div>
               )}
 
-              {/* No-battle idle hint */}
               {!engaged && combatLog.length === 0 && (
                 <div style={{ textAlign: 'center', fontSize: '10px', color: '#475569', paddingTop: '2px' }}>
                   Select target &amp; press BATTLE to fight
                 </div>
               )}
 
-              {/* Attribute Focus Selector — shows when free levels available */}
               {canAllocate && (
                 <div style={{ flexShrink: 0, paddingTop: '6px', borderTop: '1px solid rgba(255,149,0,0.25)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                   <span style={{ fontSize: '10px', color: '#FF9500', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>⬆ Level Up — Choose Focus</span>
@@ -1160,23 +1136,10 @@ export default function App({ uid }: { uid: string }) {
                         <button
                           onClick={() => spendPoint(stat)}
                           style={{
-                            background: 'rgba(255,149,0,0.15)',
-                            border: '1.5px solid rgba(255,149,0,0.7)',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            padding: '6px 8px',
-                            color: '#FF9500',
-                            fontSize: '11.5px',
-                            fontWeight: 800,
-                            fontFamily: 'monospace',
-                            WebkitTapHighlightColor: 'rgba(255,149,0,0.3)',
-                            touchAction: 'manipulation',
-                            minWidth: '44px',
-                            minHeight: '36px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            userSelect: 'none',
+                            background: 'rgba(255,149,0,0.15)', border: '1.5px solid rgba(255,149,0,0.7)', borderRadius: '8px', cursor: 'pointer',
+                            padding: '6px 8px', color: '#FF9500', fontSize: '11.5px', fontWeight: 800, fontFamily: 'monospace',
+                            WebkitTapHighlightColor: 'rgba(255,149,0,0.3)', touchAction: 'manipulation', minWidth: '44px', minHeight: '36px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none',
                           }}
                         >{stat}({freeLevels})</button>
                         {idx < arr.length - 1 && <span style={{ color: '#FF9500', fontSize: '10px', opacity: 0.4, marginLeft: '2px', marginRight: '2px' }}>|</span>}
@@ -1207,7 +1170,6 @@ export default function App({ uid }: { uid: string }) {
                   </button>
                 </div>
 
-                {/* Subs */}
                 {!inboxOpen && (
                   <div className="sub-bar" style={{ flexShrink: 0, marginBottom: '8px' }}>
                     {(CHAT_SUBS[chatChannel] || []).map(([id, label]) => {
@@ -1328,37 +1290,24 @@ export default function App({ uid }: { uid: string }) {
         if (!modalItem || !modalBase) return null
         const modalGems = modalItem.socketedGems || []
         const isEquipped = Object.values(player.equipment).includes(equipPopup)
-
-        // Calculate item stat value
-        const mod = { Weapon: { stat: 'WC' }, Spell: { stat: 'SC' }, Armor: { stat: 'AC' }, Helmet: { stat: 'AC' }, Boots: { stat: 'AC' }, Leggings: { stat: 'AC' }, Gauntlets: { stat: 'AC' } } as any
         const tierData = DROPPER_TIERS.find(t => t.tier === modalItem.tier) || DROPPER_TIERS[0]
         const slotMod = SLOT_MODS[modalBase.subType] || {}
         const statVal = (tierData.cv * (slotMod.prop || 0.8)).toFixed(2)
         const statLabel = slotMod.stat || 'AC'
-
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
             onClick={() => setEquipPopup(null)}>
             <div className="glass-panel" style={{ width: '100%', maxWidth: '340px', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }}
               onClick={e => e.stopPropagation()}>
-
-              {/* Close X */}
-              <button onClick={() => setEquipPopup(null)}
-                style={{ position: 'absolute', top: '14px', right: '14px', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-
-              {/* Item name */}
+              <button onClick={() => setEquipPopup(null)} style={{ position: 'absolute', top: '14px', right: '14px', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               <div>
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#fff' }}>{modalBase.name}</h3>
                 <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3EE0FF', fontWeight: 700 }}>Tier {modalItem.tier} · {modalBase.subType}</p>
               </div>
-
-              {/* Item icon */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
                 <ItemIcon subType={modalBase.subType} />
                 <span style={{ position: 'absolute', bottom: '8px', right: '10px', background: 'rgba(255,214,10,0.95)', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '5px', color: '#09090b' }}>T{modalItem.tier}</span>
               </div>
-
-              {/* Stats */}
               <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                   <span style={{ fontSize: '13px', color: '#94a3b8' }}>Type</span>
@@ -1369,8 +1318,7 @@ export default function App({ uid }: { uid: string }) {
                   <span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{statVal}</span>
                 </div>
                 {modalGems.map((g: any, i: number) => {
-                  const gd = GEMS[g.id]
-                  if (!gd) return null
+                  const gd = GEMS[g.id]; if (!gd) return null
                   const gemColor = gd.category === 'Fighter' ? '#FF375F' : gd.category === 'Caster' ? '#0A84FF' : '#30D158'
                   return (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
@@ -1383,15 +1331,11 @@ export default function App({ uid }: { uid: string }) {
                   )
                 })}
               </div>
-
-              {/* Buttons */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <button onClick={() => equipItem(equipPopup)}
-                  style={{ padding: '14px 0', borderRadius: '12px', background: isEquipped ? 'rgba(48,209,88,0.15)' : 'rgba(62,224,255,0.15)', border: `1.5px solid ${isEquipped ? '#30D158' : '#3EE0FF'}`, color: isEquipped ? '#30D158' : '#3EE0FF', fontSize: '14px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>
+                <button onClick={() => equipItem(equipPopup)} style={{ padding: '14px 0', borderRadius: '12px', background: isEquipped ? 'rgba(48,209,88,0.15)' : 'rgba(62,224,255,0.15)', border: `1.5px solid ${isEquipped ? '#30D158' : '#3EE0FF'}`, color: isEquipped ? '#30D158' : '#3EE0FF', fontSize: '14px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>
                   {isEquipped ? '✓ EQUIPPED' : 'EQUIP'}
                 </button>
-                <button onClick={() => setEquipPopup(null)}
-                  style={{ padding: '14px 0', borderRadius: '12px', background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
+                <button onClick={() => setEquipPopup(null)} style={{ padding: '14px 0', borderRadius: '12px', background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
                   CANCEL
                 </button>
               </div>
@@ -1425,49 +1369,20 @@ function AccordionItem({ title, children }: { title: React.ReactNode; children: 
 }
 
 // ─── D-PAD COMPONENT ─────────────────────────────────────────
-// Grid coords: x increases RIGHT, y increases DOWN (screen coords)
-// UP = y-1, DOWN = y+1, LEFT = x-1, RIGHT = x+1
 function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => void; onEnter: () => void; style?: React.CSSProperties }) {
   const btnSize = { width: '50px', height: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 as const, cursor: 'pointer' }
-  // Diagonal buttons now have the same cyan trim as cardinals
-  const diagBtn: React.CSSProperties = {
-    ...btnSize,
-    background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)',
-    border: '1.5px solid rgba(62,224,255,0.6)',
-    borderRadius: '0.75rem',
-    color: '#e8fbff',
-    fontSize: '13px',
-    boxShadow: '0 0 10px rgba(62,224,255,0.28), inset 0 1px 1px rgba(62,224,255,0.28), 0 3px 8px rgba(0,0,0,0.8)',
-  }
-  const cardinalBtn: React.CSSProperties = {
-    ...btnSize,
-    background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)',
-    border: '1.5px solid rgba(62,224,255,0.85)',
-    borderRadius: '0.75rem',
-    color: '#e8fbff',
-    boxShadow: '0 0 14px rgba(62,224,255,0.45), inset 0 1px 1px rgba(62,224,255,0.4), 0 3px 8px rgba(0,0,0,0.8)',
-  }
+  const diagBtn: React.CSSProperties = { ...btnSize, background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)', border: '1.5px solid rgba(62,224,255,0.6)', borderRadius: '0.75rem', color: '#e8fbff', fontSize: '13px', boxShadow: '0 0 10px rgba(62,224,255,0.28), inset 0 1px 1px rgba(62,224,255,0.28), 0 3px 8px rgba(0,0,0,0.8)' }
+  const cardinalBtn: React.CSSProperties = { ...btnSize, background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)', border: '1.5px solid rgba(62,224,255,0.85)', borderRadius: '0.75rem', color: '#e8fbff', boxShadow: '0 0 14px rgba(62,224,255,0.45), inset 0 1px 1px rgba(62,224,255,0.4), 0 3px 8px rgba(0,0,0,0.8)' }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 50px)', gridTemplateRows: 'repeat(3, 46px)', gap: '6px', justifyContent: 'center', marginTop: '8px', ...style }}>
-      {/* Row 1: ↖  UP  ↗ */}
       <div style={diagBtn} onClick={() => onMove(-1, -1)}>↖</div>
-      <div style={cardinalBtn} onClick={() => onMove(0, -1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
-      </div>
+      <div style={cardinalBtn} onClick={() => onMove(0, -1)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg></div>
       <div style={diagBtn} onClick={() => onMove(1, -1)}>↗</div>
-      {/* Row 2: LEFT  ENTER  RIGHT */}
-      <div style={cardinalBtn} onClick={() => onMove(-1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
-      </div>
+      <div style={cardinalBtn} onClick={() => onMove(-1, 0)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg></div>
       <div style={{ ...diagBtn, border: '1.5px solid rgba(62,224,255,0.6)', fontSize: '9px', fontWeight: 800, letterSpacing: '0.01em', color: '#d9f8ff' }} onClick={onEnter}>Enter</div>
-      <div style={cardinalBtn} onClick={() => onMove(1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
-      </div>
-      {/* Row 3: ↙  DOWN  ↘ */}
+      <div style={cardinalBtn} onClick={() => onMove(1, 0)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg></div>
       <div style={diagBtn} onClick={() => onMove(-1, 1)}>↙</div>
-      <div style={cardinalBtn} onClick={() => onMove(0, 1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
-      </div>
+      <div style={cardinalBtn} onClick={() => onMove(0, 1)}><svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg></div>
       <div style={diagBtn} onClick={() => onMove(1, 1)}>↘</div>
     </div>
   )
@@ -1497,7 +1412,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
     setRgb({ r, g, b })
   }
 
-  // Build color grid
   const hues = [205, 225, 255, 280, 320, 0, 22, 35, 48, 72, 118, 150]
   const gridColors: string[] = []
   for (let row = 0; row < 10; row++) {
@@ -1513,7 +1427,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
     }
   }
 
-  // Draw spectrum wheel
   useEffect(() => {
     if (tab !== 'spectrum' || !wheelRef.current) return
     const canvas = wheelRef.current
@@ -1551,7 +1464,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
 
   return (
     <div style={{ background: '#1c1c1e', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', padding: '14px', overflow: 'hidden' }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
         <button style={{ width: 32, height: 32, borderRadius: '50%', background: '#2c2c2e', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" strokeWidth="2"><path d="M2 22l5.5-5.5"/><path d="M18.4 3.6a2.8 2.8 0 014 4L8 22H4v-4L18.4 3.6z"/></svg>
@@ -1559,8 +1471,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
         <span style={{ fontSize: '17px', fontWeight: 600, color: '#fff' }}>Colors</span>
         <div style={{ width: 32 }} />
       </div>
-
-      {/* Segmented control */}
       <div style={{ background: '#2c2c2e', borderRadius: '9px', padding: '2px', display: 'flex', marginBottom: '12px' }}>
         {(['grid', 'spectrum', 'sliders'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ flex: 1, border: 'none', background: tab === t ? '#636366' : 'transparent', color: '#fff', fontSize: '13px', fontWeight: 600, padding: '6px 0', borderRadius: '7px', cursor: 'pointer' }}>
@@ -1568,8 +1478,6 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
           </button>
         ))}
       </div>
-
-      {/* Grid */}
       {tab === 'grid' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 0, borderRadius: '10px', overflow: 'hidden', marginBottom: '12px' }}>
           {gridColors.map((c, i) => (
@@ -1577,39 +1485,23 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
           ))}
         </div>
       )}
-
-      {/* Spectrum */}
       {tab === 'spectrum' && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '12px' }}>
           <canvas ref={wheelRef} width={240} height={240} style={{ width: '240px', height: '240px', borderRadius: '50%', cursor: 'crosshair', touchAction: 'none', display: 'block' }}
             onClick={handleWheelClick} onMouseMove={e => { if (e.buttons) handleWheelClick(e) }} />
         </div>
       )}
-
-      {/* Sliders */}
       {tab === 'sliders' && (
         <div style={{ marginBottom: '12px' }}>
           {(['r', 'g', 'b'] as const).map(ch => (
             <div key={ch} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '8px 0', fontSize: '13px', color: '#fff' }}>
               <span style={{ width: '12px' }}>{ch.toUpperCase()}</span>
-              <input type="range" min="0" max="255" value={rgb[ch]} onChange={e => {
-                const v = parseInt(e.target.value)
-                const nr = { ...rgb, [ch]: v }
-                setRgb(nr)
-                applyColor(rgbToHex(nr.r, nr.g, nr.b))
-              }} style={{ flex: 1 }} />
-              <input type="number" min="0" max="255" value={rgb[ch]} onChange={e => {
-                const v = Math.max(0, Math.min(255, parseInt(e.target.value) || 0))
-                const nr = { ...rgb, [ch]: v }
-                setRgb(nr)
-                applyColor(rgbToHex(nr.r, nr.g, nr.b))
-              }} style={{ width: '52px', background: '#2c2c2e', border: 'none', color: '#fff', borderRadius: '8px', padding: '4px', textAlign: 'center', fontSize: '13px' }} />
+              <input type="range" min="0" max="255" value={rgb[ch]} onChange={e => { const v = parseInt(e.target.value); const nr = { ...rgb, [ch]: v }; setRgb(nr); applyColor(rgbToHex(nr.r, nr.g, nr.b)) }} style={{ flex: 1 }} />
+              <input type="number" min="0" max="255" value={rgb[ch]} onChange={e => { const v = Math.max(0, Math.min(255, parseInt(e.target.value) || 0)); const nr = { ...rgb, [ch]: v }; setRgb(nr); applyColor(rgbToHex(nr.r, nr.g, nr.b)) }} style={{ width: '52px', background: '#2c2c2e', border: 'none', color: '#fff', borderRadius: '8px', padding: '4px', textAlign: 'center', fontSize: '13px' }} />
             </div>
           ))}
         </div>
       )}
-
-      {/* Opacity */}
       <div style={{ marginBottom: '12px' }}>
         <div style={{ fontSize: '11px', letterSpacing: '0.05em', color: '#8e8e93', marginBottom: '4px' }}>OPACITY</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1617,10 +1509,7 @@ function NameColorPicker({ nameColor, onColorChange }: { nameColor: string; onCo
           <span style={{ fontSize: '12px', background: '#2c2c2e', borderRadius: '8px', padding: '4px 8px', color: '#fff', minWidth: '48px', textAlign: 'center' }}>{opacity}%</span>
         </div>
       </div>
-
       <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '12px 0' }} />
-
-      {/* Preview + presets */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{ width: 48, height: 48, borderRadius: '8px', background: nameColor, border: '1px solid rgba(255,255,255,0.15)', flexShrink: 0 }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
