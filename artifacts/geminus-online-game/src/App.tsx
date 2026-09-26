@@ -864,15 +864,15 @@ export default function App() {
                       </div>
                     </section>
 
-                    {/* Right: Nav Deck — flush to right edge */}
+                    {/* Right: Nav Deck — flush to right edge, 4px breathing room so border shows */}
                     {!battleMode && (
-                      <section style={{ width: '164px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px', marginRight: '-4px', paddingRight: '0' }}>
-                        {/* Square map — flush to right */}
-                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px 4px 4px 10px', border: '1.5px dashed rgba(62,224,255,0.5)', borderRight: 'none', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
+                      <section style={{ width: '162px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px', paddingRight: '4px' }}>
+                        {/* Square map */}
+                        <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
                           <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
                         </div>
-                        {/* DPad pushed right */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px', paddingRight: '0' }}>
+                        {/* DPad */}
+                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
                           <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
                         </div>
                       </section>
@@ -1155,16 +1155,33 @@ export default function App() {
 
               {/* Attribute Focus Selector — shows when free levels available */}
               {canAllocate && (
-                <div style={{ flexShrink: 0, paddingTop: '4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                  <span style={{ fontSize: '10px', color: '#FF6B00', fontWeight: 700, letterSpacing: '0.04em' }}>Select:</span>
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'center' }}>
+                <div style={{ flexShrink: 0, paddingTop: '6px', borderTop: '1px solid rgba(255,149,0,0.25)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#FF9500', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>⬆ Level Up — Choose Focus</span>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'center', gap: '2px' }}>
                     {getAttributeFocusOrder(player.race).map((stat, idx, arr) => (
                       <span key={stat} style={{ display: 'flex', alignItems: 'center' }}>
                         <button
-                          onClick={() => spendPoint(stat)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 3px', color: '#FF6B00', fontSize: '11.5px', fontWeight: 800, fontFamily: 'monospace' }}
-                        >{stat} ({freeLevels})</button>
-                        {idx < arr.length - 1 && <span style={{ color: '#FF6B00', fontSize: '11px', opacity: 0.5 }}>|</span>}
+                          onPointerDown={(e) => { e.preventDefault(); spendPoint(stat) }}
+                          style={{
+                            background: 'rgba(255,149,0,0.15)',
+                            border: '1.5px solid rgba(255,149,0,0.7)',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            padding: '6px 8px',
+                            color: '#FF9500',
+                            fontSize: '11.5px',
+                            fontWeight: 800,
+                            fontFamily: 'monospace',
+                            WebkitTapHighlightColor: 'transparent',
+                            touchAction: 'manipulation',
+                            minWidth: '44px',
+                            minHeight: '36px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >{stat}({freeLevels})</button>
+                        {idx < arr.length - 1 && <span style={{ color: '#FF9500', fontSize: '10px', opacity: 0.4, marginLeft: '2px', marginRight: '2px' }}>|</span>}
                       </span>
                     ))}
                   </div>
