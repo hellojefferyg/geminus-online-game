@@ -370,27 +370,12 @@ export default function App() {
     ctx.scale(dpr, dpr)
     const w = canvas.offsetWidth; const h = canvas.offsetHeight
     ctx.clearRect(0, 0, w, h)
-    ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, w, h)
-    const gridSize = 7; const tileW = w / gridSize; const tileH = h / gridSize
-    const pos = player.pos
-    const startX = pos.x - Math.floor(gridSize / 2)
-    const startY = pos.y - Math.floor(gridSize / 2)
-    for (let gx = 0; gx < gridSize; gx++) {
-      for (let gy = 0; gy < gridSize; gy++) {
-        const mx = startX + gx; const my = startY + gy
-        const px = gx * tileW; const py = gy * tileH
-        const isPlayer = mx === pos.x && my === pos.y
-        const inBounds = mx >= 0 && mx < 16 && my >= 0 && my < 16
-        if (isPlayer) { ctx.fillStyle = 'rgba(62,224,255,0.25)'; ctx.fillRect(px, py, tileW, tileH) }
-        else if (inBounds) { ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fillRect(px, py, tileW, tileH) }
-        ctx.strokeStyle = isPlayer ? 'rgba(62,224,255,0.6)' : inBounds ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)'
-        ctx.lineWidth = 0.5; ctx.strokeRect(px, py, tileW, tileH)
-      }
-    }
-    const dotX = Math.floor(gridSize / 2) * tileW + tileW / 2
-    const dotY = Math.floor(gridSize / 2) * tileH + tileH / 2
-    ctx.fillStyle = '#3EE0FF'; ctx.shadowBlur = 6; ctx.shadowColor = '#3EE0FF'
-    ctx.beginPath(); ctx.arc(dotX, dotY, tileW * 0.22, 0, Math.PI * 2); ctx.fill()
+    // Solid black background
+    ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, w, h)
+    // Player dot centered
+    const dotX = w / 2; const dotY = h / 2
+    ctx.fillStyle = '#3EE0FF'; ctx.shadowBlur = 8; ctx.shadowColor = '#3EE0FF'
+    ctx.beginPath(); ctx.arc(dotX, dotY, 5, 0, Math.PI * 2); ctx.fill()
     ctx.shadowBlur = 0
   }, [player, activeTab])
 
@@ -758,9 +743,10 @@ export default function App() {
                         {/* Zone Info — under Menu */}
                         <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '4px' }}>
-                            <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span> <span style={{ color: '#cbd5e1', fontWeight: 400 }}>Aether Silver Cavern</span></p>
-                            <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3, flexShrink: 0 }}>[{player.pos.x}, {player.pos.y}] · Z01</p>
+                            <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span> <span style={{ color: '#cbd5e1' }}>Aether Silver Cavern</span></p>
+                            <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3, flexShrink: 0 }}>[{player.pos.x}, {player.pos.y}]</p>
                           </div>
+                          <p style={{ margin: 0, fontSize: '10px', color: '#64748b', fontFamily: 'monospace', lineHeight: 1.3 }}>[Z01]</p>
                           <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Type:</span> <span style={{ color: '#3EE0FF', fontWeight: 700 }}>XP Zone</span></p>
                           <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Gem:</span> <span style={{ color: '#30D158' }}>G1 · 1/250</span></p>
                           <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Shadow:</span> <span style={{ color: '#52525b' }}>Off</span></p>
@@ -1295,35 +1281,43 @@ function AccordionItem({ title, children }: { title: React.ReactNode; children: 
 
 // ─── D-PAD COMPONENT ─────────────────────────────────────────
 function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => void; onEnter: () => void; style?: React.CSSProperties }) {
-  const diagStyle: React.CSSProperties = {
-    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'linear-gradient(180deg, #0e1e26 0%, #050a0d 100%)',
-    border: '1px solid rgba(62,224,255,0.2)', borderRadius: '6px',
-    color: 'rgba(62,224,255,0.4)', fontSize: '9px', cursor: 'pointer',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.5)', userSelect: 'none' as const, flexShrink: 0,
+  const btnSize = { width: '44px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 as const, cursor: 'pointer' }
+  const diagBtn: React.CSSProperties = {
+    ...btnSize,
+    background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)',
+    border: '1px solid rgba(62,224,255,0.48)',
+    borderRadius: '0.75rem',
+    color: '#e8fbff',
+    fontSize: '13px',
+    boxShadow: '0 3px 8px rgba(0,0,0,0.8), inset 0 1px 1px rgba(62,224,255,0.28)',
   }
-  const mainStyle: React.CSSProperties = {
-    width: '38px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  const cardinalBtn: React.CSSProperties = {
+    ...btnSize,
+    background: 'linear-gradient(180deg, #12232d 0%, #060c10 100%)',
+    border: '1.5px solid rgba(62,224,255,0.85)',
+    borderRadius: '0.75rem',
+    color: '#e8fbff',
+    boxShadow: '0 0 14px rgba(62,224,255,0.45), inset 0 1px 1px rgba(62,224,255,0.4), 0 3px 8px rgba(0,0,0,0.8)',
   }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '28px 38px 28px', gridTemplateRows: '28px 34px 28px', gap: '3px', justifyContent: 'center', ...style }}>
-      <div style={diagStyle} onClick={() => onMove(-1, -1)}>↖</div>
-      <div className="game-key" style={mainStyle} onClick={() => onMove(0, -1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gridTemplateRows: 'repeat(3, 40px)', gap: '5px', justifyContent: 'center', ...style }}>
+      <div style={diagBtn} onClick={() => onMove(-1, -1)}>↖</div>
+      <div style={cardinalBtn} onClick={() => onMove(0, -1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
       </div>
-      <div style={diagStyle} onClick={() => onMove(1, -1)}>↗</div>
-      <div className="game-key" style={mainStyle} onClick={() => onMove(-1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
+      <div style={diagBtn} onClick={() => onMove(1, -1)}>↗</div>
+      <div style={cardinalBtn} onClick={() => onMove(-1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
       </div>
-      <div className="game-key key-enter-btn" style={{ ...mainStyle, fontSize: '9px', fontWeight: 800 }} onClick={onEnter}>Enter</div>
-      <div className="game-key" style={mainStyle} onClick={() => onMove(1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
+      <div style={{ ...diagBtn, border: '1px solid rgba(62,224,255,0.48)', fontSize: '9px', fontWeight: 800, letterSpacing: '0.01em', color: '#d9f8ff' }} onClick={onEnter}>Enter</div>
+      <div style={cardinalBtn} onClick={() => onMove(1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
       </div>
-      <div style={diagStyle} onClick={() => onMove(-1, 1)}>↙</div>
-      <div className="game-key" style={mainStyle} onClick={() => onMove(0, 1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
+      <div style={diagBtn} onClick={() => onMove(-1, 1)}>↙</div>
+      <div style={cardinalBtn} onClick={() => onMove(0, 1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
       </div>
-      <div style={diagStyle} onClick={() => onMove(1, 1)}>↘</div>
+      <div style={diagBtn} onClick={() => onMove(1, 1)}>↘</div>
     </div>
   )
 }
