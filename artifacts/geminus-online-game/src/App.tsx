@@ -334,8 +334,24 @@ export default function App({ uid }: { uid: string }) {
           pos: data.pos || { x: 7, y: 7 },
         }
         calcDerived(p)
-        if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
-        setPlayer(p)
+          if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
+          try {
+            const res = await fetch(`/api/player?uid=${uid}`)
+            const supa = await res.json()
+            if (supa && !supa.error) {
+              p.xp = supa.xp ?? p.xp
+              p.gold = supa.gold ?? p.gold
+              p.level = supa.level ?? p.level
+              p.hp = supa.hp ?? p.hp
+              p.attributePoints = supa.attribute_points ?? p.attributePoints
+              p.baseStats = supa.base_stats && Object.keys(supa.base_stats).length > 0 ? supa.base_stats : p.baseStats
+              p.gems = supa.gems?.length > 0 ? supa.gems : p.gems
+              p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
+              calcDerived(p)
+            }
+          } catch (e) { console.log('Supabase load skipped', e) }
+          setPlayer(p)
+
       } catch (err: any) {
         const msg = err?.code === 'permission-denied'
           ? 'Firestore permission denied — check security rules in Firebase console.'
