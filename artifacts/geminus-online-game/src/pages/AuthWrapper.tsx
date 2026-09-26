@@ -4,32 +4,42 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import Login from './Login'
 import SignUp from './SignUp'
+import RaceSelect from './RaceSelect'
 
 export default function AuthWrapper({ children }: { children: React.ReactNode }) {
-  const [authState, setAuthState] = useState<'loading' | 'logged-out' | 'logged-in' | 'needs-race'>('loading')
+  const [authState, setAuthState] = useState<'loading' | 'logged-out' | 'needs-race' | 'logged-in'>('loading')
   const [screen, setScreen] = useState<'login' | 'signup'>('login')
+  const [pendingUser, setPendingUser] = useState<{ uid: string; username: string } | null>(null)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setAuthState('logged-out')
+        setPendingUser(null)
         return
       }
-      // Check if player has completed race selection
       try {
         const snap = await getDoc(doc(db, 'players', user.uid))
         if (snap.exists() && snap.data().raceSelected) {
           setAuthState('logged-in')
         } else {
+          // Has Firebase account but no completed player doc yet — show race picker
+          const username = snap.exists()
+            ? snap.data().name
+            : user.email?.split('@')[0] || 'Pilot'
+          setPendingUser({ uid: user.uid, username })
           setAuthState('needs-race')
         }
       } catch {
-        setAuthState('logged-in')
+        // Firestore read failed — send to race select to be safe
+        setPendingUser({ uid: user.uid, username: user.email?.split('@')[0] || 'Pilot' })
+        setAuthState('needs-race')
       }
     })
     return () => unsub()
   }, [])
 
+  // Loading splash
   if (authState === 'loading') {
     return (
       <div style={{
@@ -45,11 +55,18 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
     )
   }
 
+  // Not logged in — show Login or SignUp
   if (authState === 'logged-out') {
     if (screen === 'signup') return <SignUp onSwitchToLogin={() => setScreen('login')} />
     return <Login onSwitchToSignUp={() => setScreen('signup')} />
   }
 
-  // logged-in or needs-race — both show the game (race select handles itself via Firestore)
+  // Logged in but race not selected — show RaceSelect
+  // RaceSelect writes to Firestore with raceSelected:true → onAuthStateChanged fires again → logged-in
+  if (authState === 'needs-race' && pendingUser) {
+    return <RaceSelect username={pendingUser.username} userId={pendingUser.uid} />
+  }
+
+  // Fully authenticated — render the game
   return <>{children}</>
 }
