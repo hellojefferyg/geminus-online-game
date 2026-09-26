@@ -298,13 +298,15 @@ export default function App() {
     setTimeout(() => setToast(''), 2800)
   }, [])
 
-  // Theme-color meta tag for Safari status bar
+  // Theme-color meta tag for Safari status bar — set immediately on mount
   useEffect(() => {
-    const meta = document.createElement('meta')
-    meta.name = 'theme-color'
+    let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement
+    if (!meta) {
+      meta = document.createElement('meta') as HTMLMetaElement
+      meta.name = 'theme-color'
+      document.head.prepend(meta)
+    }
     meta.content = '#03080c'
-    document.head.appendChild(meta)
-    return () => { document.head.removeChild(meta) }
   }, [])
 
   // Init
@@ -1161,7 +1163,7 @@ export default function App() {
                     {getAttributeFocusOrder(player.race).map((stat, idx, arr) => (
                       <span key={stat} style={{ display: 'flex', alignItems: 'center' }}>
                         <button
-                          onPointerDown={(e) => { e.preventDefault(); spendPoint(stat) }}
+                          onClick={() => spendPoint(stat)}
                           style={{
                             background: 'rgba(255,149,0,0.15)',
                             border: '1.5px solid rgba(255,149,0,0.7)',
@@ -1172,13 +1174,14 @@ export default function App() {
                             fontSize: '11.5px',
                             fontWeight: 800,
                             fontFamily: 'monospace',
-                            WebkitTapHighlightColor: 'transparent',
+                            WebkitTapHighlightColor: 'rgba(255,149,0,0.3)',
                             touchAction: 'manipulation',
                             minWidth: '44px',
                             minHeight: '36px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            userSelect: 'none',
                           }}
                         >{stat}({freeLevels})</button>
                         {idx < arr.length - 1 && <span style={{ color: '#FF9500', fontSize: '10px', opacity: 0.4, marginLeft: '2px', marginRight: '2px' }}>|</span>}
