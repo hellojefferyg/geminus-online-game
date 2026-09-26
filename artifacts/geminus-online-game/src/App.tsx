@@ -368,10 +368,30 @@ export default function App() {
     const dpr = window.devicePixelRatio || 1
     canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
     ctx.scale(dpr, dpr)
-    ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight)
-    ctx.save(); ctx.beginPath()
-    ctx.arc(canvas.offsetWidth / 2, canvas.offsetHeight / 2, canvas.offsetWidth / 2, 0, Math.PI * 2); ctx.clip()
-    ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight); ctx.restore()
+    const w = canvas.offsetWidth; const h = canvas.offsetHeight
+    ctx.clearRect(0, 0, w, h)
+    ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, w, h)
+    const gridSize = 7; const tileW = w / gridSize; const tileH = h / gridSize
+    const pos = player.pos
+    const startX = pos.x - Math.floor(gridSize / 2)
+    const startY = pos.y - Math.floor(gridSize / 2)
+    for (let gx = 0; gx < gridSize; gx++) {
+      for (let gy = 0; gy < gridSize; gy++) {
+        const mx = startX + gx; const my = startY + gy
+        const px = gx * tileW; const py = gy * tileH
+        const isPlayer = mx === pos.x && my === pos.y
+        const inBounds = mx >= 0 && mx < 16 && my >= 0 && my < 16
+        if (isPlayer) { ctx.fillStyle = 'rgba(62,224,255,0.25)'; ctx.fillRect(px, py, tileW, tileH) }
+        else if (inBounds) { ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fillRect(px, py, tileW, tileH) }
+        ctx.strokeStyle = isPlayer ? 'rgba(62,224,255,0.6)' : inBounds ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)'
+        ctx.lineWidth = 0.5; ctx.strokeRect(px, py, tileW, tileH)
+      }
+    }
+    const dotX = Math.floor(gridSize / 2) * tileW + tileW / 2
+    const dotY = Math.floor(gridSize / 2) * tileH + tileH / 2
+    ctx.fillStyle = '#3EE0FF'; ctx.shadowBlur = 6; ctx.shadowColor = '#3EE0FF'
+    ctx.beginPath(); ctx.arc(dotX, dotY, tileW * 0.22, 0, Math.PI * 2); ctx.fill()
+    ctx.shadowBlur = 0
   }, [player, activeTab])
 
   // Zone canvas
@@ -672,10 +692,9 @@ export default function App() {
         <div style={{ position: 'relative', zIndex: 10, width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', padding: '10px', gap: '10px', paddingBottom: '112px' }}>
 
-            {/* ── HUD / INLINE PANEL ── */}
-            <div style={{ flexShrink: 0, position: 'relative', zIndex: 30 }}>
-              {activeTab === null ? (
-                <header className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* ── HUD ── */}
+            {activeTab === null && (
+              <header className="glass-panel" style={{ flexShrink: 0, position: 'relative', zIndex: 30, padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '8px' }}>
 
                     {/* Left: Stats */}
@@ -701,15 +720,15 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Gold / Bank above Menu */}
-                        <div style={{ paddingTop: '4px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-                          <div className="info-cell" style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '10px' }}>Gold:</span>
-                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '10px' }}>{fmt(player.gold)}</span>
+                        {/* Gold / Bank stacked above Menu */}
+                        <div style={{ paddingTop: '4px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Gold:</span>
+                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.gold)}</span>
                           </div>
-                          <div className="info-cell" style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '10px' }}>Bank:</span>
-                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '10px' }}>{fmt(player.bank)}</span>
+                          <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Bank:</span>
+                            <span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.bank)}</span>
                           </div>
                         </div>
 
@@ -737,11 +756,14 @@ export default function App() {
                         </div>
 
                         {/* Zone Info — under Menu */}
-                        <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <p style={{ margin: 0, fontSize: '10.5px', fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>Zone: <span style={{ fontWeight: 400, color: '#cbd5e1' }}>Aether Silver Cavern</span></p>
-                          <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos.x}, {player.pos.y}] · Z01 · <span style={{ color: '#3EE0FF', fontWeight: 700, fontFamily: 'sans-serif' }}>XP Zone</span></p>
-                          <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8', lineHeight: 1.3 }}><span style={{ color: '#30D158', fontWeight: 600 }}>Gem:</span> G1 · 1/250</p>
-                          <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8', lineHeight: 1.3 }}><span style={{ color: '#52525b', fontWeight: 600 }}>Shadow:</span> Off</p>
+                        <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '4px' }}>
+                            <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span> <span style={{ color: '#cbd5e1', fontWeight: 400 }}>Aether Silver Cavern</span></p>
+                            <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3, flexShrink: 0 }}>[{player.pos.x}, {player.pos.y}] · Z01</p>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Type:</span> <span style={{ color: '#3EE0FF', fontWeight: 700 }}>XP Zone</span></p>
+                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Gem:</span> <span style={{ color: '#30D158' }}>G1 · 1/250</span></p>
+                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Shadow:</span> <span style={{ color: '#52525b' }}>Off</span></p>
                         </div>
                       </div>
                     </section>
@@ -761,46 +783,55 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Health Bar */}
-                  <div style={{ paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
-                      <span style={{ color: '#fff', fontWeight: 700 }}>Health:</span>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px', color: '#30D158' }}>{fmt(player.hp)} / {fmt(player.derivedStats.maxHp)}</span>
-                    </div>
-                    <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <div style={{ height: '100%', borderRadius: '9999px', width: `${hpPct}%`, background: '#30D158', boxShadow: '0 0 10px rgba(48,209,88,0.6)', transition: 'width 0.3s' }} />
-                    </div>
-                  </div>
+              </header>
+            )}
 
-                  {/* Level / XP Bar */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
-                      <span style={{ color: '#fff', fontWeight: 700 }}>Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{player.level}</span></span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
-                      <span style={{ color: '#fff', fontWeight: 700 }}>Experience: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{fmt(player.xp)}</span></span>
-                      <span style={{ color: '#94a3b8', fontWeight: 600 }}>Next Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>{fmt(player.xpToNextLevel)}</span></span>
-                    </div>
-                    <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <div style={{ height: '100%', borderRadius: '9999px', width: `${Math.max(0, Math.min(100, (player.xp / player.xpToNextLevel) * 100))}%`, background: 'linear-gradient(90deg, #BF5AF2, #9B59F5)', boxShadow: '0 0 10px rgba(191,90,242,0.6)', transition: 'width 0.3s' }} />
-                    </div>
+            {/* ── STATS PANEL (Health / XP / Last Drop) — own glass section ── */}
+            {activeTab === null && (
+              <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {/* Health Bar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <span style={{ color: '#fff', fontWeight: 700 }}>Health:</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px', color: '#30D158' }}>{fmt(player.hp)} / {fmt(player.derivedStats.maxHp)}</span>
                   </div>
+                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ height: '100%', borderRadius: '9999px', width: `${hpPct}%`, background: '#30D158', boxShadow: '0 0 10px rgba(48,209,88,0.6)', transition: 'width 0.3s' }} />
+                  </div>
+                </div>
 
-                  {/* Last Item / Last Gem */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '9.5px', paddingTop: '2px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                      <span style={{ color: '#fff', fontWeight: 600 }}>Last Item:</span>
-                      <span style={{ color: lastItemColor, fontWeight: 700 }}>{lastItem}</span>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', color: '#30D158' }}>{player.inventory.length}/200</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                      <span style={{ color: '#fff', fontWeight: 600 }}>Last Gem:</span>
-                      <span style={{ color: lastGemColor, fontWeight: 700 }}>{lastGem}</span>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', color: '#30D158' }}>{player.gems.length}/200</span>
-                    </div>
+                {/* Level / XP Bar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <span style={{ color: '#fff', fontWeight: 700 }}>Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{player.level}</span></span>
                   </div>
-                </header>
-              ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
+                    <span style={{ color: '#fff', fontWeight: 700 }}>Experience: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{fmt(player.xp)}</span></span>
+                    <span style={{ color: '#94a3b8', fontWeight: 600 }}>Next Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>{fmt(player.xpToNextLevel)}</span></span>
+                  </div>
+                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ height: '100%', borderRadius: '9999px', width: `${Math.max(0, Math.min(100, (player.xp / player.xpToNextLevel) * 100))}%`, background: 'linear-gradient(90deg, #BF5AF2, #9B59F5)', boxShadow: '0 0 10px rgba(191,90,242,0.6)', transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+
+                {/* Last Item / Last Gem */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '9.5px', paddingTop: '2px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <span style={{ color: '#fff', fontWeight: 600 }}>Last Item:</span>
+                    <span style={{ color: lastItemColor, fontWeight: 700 }}>{lastItem}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', color: '#30D158' }}>{player.inventory.length}/200</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <span style={{ color: '#fff', fontWeight: 600 }}>Last Gem:</span>
+                    <span style={{ color: lastGemColor, fontWeight: 700 }}>{lastGem}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '9px', marginLeft: '2px', color: '#30D158' }}>{player.gems.length}/200</span>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ── INLINE PANEL (tabs) ── */}
+            {activeTab !== null && (
                 // Inline Panel
                 <div className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
@@ -960,8 +991,7 @@ export default function App() {
                     )}
                   </div>
                 </div>
-              )}
-            </div>
+            )}
 
             {/* ── COMBAT CONSOLE ── */}
             <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20, minHeight: '120px', justifyContent: 'space-between' }}>
@@ -1266,32 +1296,32 @@ function AccordionItem({ title, children }: { title: React.ReactNode; children: 
 // ─── D-PAD COMPONENT ─────────────────────────────────────────
 function DPad({ onMove, onEnter, style }: { onMove: (dx: number, dy: number) => void; onEnter: () => void; style?: React.CSSProperties }) {
   const diagStyle: React.CSSProperties = {
-    width: '30px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
     background: 'linear-gradient(180deg, #0e1e26 0%, #050a0d 100%)',
-    border: '1px solid rgba(62,224,255,0.22)', borderRadius: '7px',
-    color: 'rgba(62,224,255,0.45)', fontSize: '10px', cursor: 'pointer',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.6)', userSelect: 'none' as const,
+    border: '1px solid rgba(62,224,255,0.2)', borderRadius: '6px',
+    color: 'rgba(62,224,255,0.4)', fontSize: '9px', cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.5)', userSelect: 'none' as const, flexShrink: 0,
+  }
+  const mainStyle: React.CSSProperties = {
+    width: '38px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '30px 44px 30px', gridTemplateRows: '28px 40px 28px', gap: '4px', justifyContent: 'center', ...style }}>
-      {/* Row 1 */}
+    <div style={{ display: 'grid', gridTemplateColumns: '28px 38px 28px', gridTemplateRows: '28px 34px 28px', gap: '3px', justifyContent: 'center', ...style }}>
       <div style={diagStyle} onClick={() => onMove(-1, -1)}>↖</div>
-      <div className="game-key move-key" onClick={() => onMove(0, -1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
+      <div className="game-key" style={mainStyle} onClick={() => onMove(0, -1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, fill: 'currentColor' }}><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" /></svg>
       </div>
       <div style={diagStyle} onClick={() => onMove(1, -1)}>↗</div>
-      {/* Row 2 */}
-      <div className="game-key move-key" style={{ width: '30px' }} onClick={() => onMove(-1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
+      <div className="game-key" style={mainStyle} onClick={() => onMove(-1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, fill: 'currentColor' }}><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" /></svg>
       </div>
-      <div className="game-key move-key key-enter-btn" onClick={onEnter}>Enter</div>
-      <div className="game-key move-key" style={{ width: '30px' }} onClick={() => onMove(1, 0)}>
-        <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
+      <div className="game-key key-enter-btn" style={{ ...mainStyle, fontSize: '9px', fontWeight: 800 }} onClick={onEnter}>Enter</div>
+      <div className="game-key" style={mainStyle} onClick={() => onMove(1, 0)}>
+        <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, fill: 'currentColor' }}><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" /></svg>
       </div>
-      {/* Row 3 */}
       <div style={diagStyle} onClick={() => onMove(-1, 1)}>↙</div>
-      <div className="game-key move-key" onClick={() => onMove(0, 1)}>
-        <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
+      <div className="game-key" style={mainStyle} onClick={() => onMove(0, 1)}>
+        <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, fill: 'currentColor' }}><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" /></svg>
       </div>
       <div style={diagStyle} onClick={() => onMove(1, 1)}>↘</div>
     </div>
