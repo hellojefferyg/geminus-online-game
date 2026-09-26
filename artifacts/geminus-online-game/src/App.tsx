@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { auth, db } from './firebase/index'
 import { signOut } from 'firebase/auth'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
-import AuthWrapper from './pages/AuthWrapper'
 // ─── GAME DATA ───────────────────────────────────────────────
 // All 24 races — must match RaceSelect.tsx exactly
 const races: Record<string, any> = {
@@ -782,7 +781,7 @@ export default function App({ uid }: { uid: string }) {
   const targets = getTargets()
 
   return (
-    <AuthWrapper>{(uid) => <>
+    <>
       <canvas ref={smokeRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, pointerEvents: 'none', opacity: 0.9 }} />
 
       <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column', background: 'transparent' }} onClick={(e) => { if (equipPopup && !(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null); if (menuOpen && !(e.target as HTMLElement).closest('.menu-container')) setMenuOpen(false) }}>
@@ -1408,7 +1407,6 @@ export default function App({ uid }: { uid: string }) {
         </div>
       )}
     </>
-      }</AuthWrapper>
   )
 }
 
