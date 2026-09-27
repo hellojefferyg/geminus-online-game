@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { auth, db } from './firebase/index'
-import { signOut } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { supabase } from './supabase'
 import {
   spendAttributeBank,
   canSpendAP as gddCanSpendAP,
@@ -50,7 +48,7 @@ const races: Record<string, any> = {
   mermaid:    { raceName: 'Mermaid',    archetype: 'True Caster',    primaryStat: 'WIS' },
   gnome:      { raceName: 'Gnome',      archetype: 'True Caster',    primaryStat: 'WIS' },
   griffin:    { raceName: 'Griffin',    archetype: 'True Caster',    primaryStat: 'WIS' },
-  vampire:    { raceName: 'Vampire',    archetype: 'True Caster',    primaryStat: 'VIT' }, // FIX: was WIS
+  vampire:    { raceName: 'Vampire',    archetype: 'True Caster',    primaryStat: 'VIT' },
   elf:        { raceName: 'Elf',        archetype: 'True Caster',    primaryStat: 'WIS' },
   babayaga:   { raceName: 'Baba Yaga',  archetype: 'True Caster',    primaryStat: 'WIS' },
   angel:      { raceName: 'Angel',      archetype: 'Martial Hybrid', primaryStat: 'DEX' },
@@ -71,7 +69,6 @@ function getAttributeFocusOrder(raceKey: string): string[] {
   return [...allStats.filter(s => s !== rd.primaryStat), rd.primaryStat]
 }
 
-// FIX: getLevelBank removed — was not in GDD. freeLevels = floor(AP / 40) is all we need.
 function getBankedLevelsLocal(ap: number): number { return Math.floor((ap || 0) / GDD.AP_PER_LEVEL) }
 
 const BESTIARY: Record<string, any> = {
@@ -87,16 +84,13 @@ const BESTIARY: Record<string, any> = {
 }
 
 const BASE_ITEMS = [
-  // ── Armor (shared by all races) ──
   { id: 'base_helm_1',      name: 'Novice Helm',          type: 'Armor',   subType: 'Helmet',    sockets: 2 },
   { id: 'base_armor_1',     name: 'Novice Cuirass',        type: 'Armor',   subType: 'Armor',     sockets: 2 },
   { id: 'base_gauntlets_1', name: 'Novice Gauntlets',      type: 'Armor',   subType: 'Gauntlets', sockets: 2 },
   { id: 'base_leggings_1',  name: 'Novice Leggings',       type: 'Armor',   subType: 'Leggings',  sockets: 2 },
   { id: 'base_boots_1',     name: 'Novice Boots',          type: 'Armor',   subType: 'Boots',     sockets: 2 },
-  // ── Jewelry (shared by all races) ──
   { id: 'base_amulet_1',    name: 'Novice Pendant',        type: 'Amulet',  subType: 'Amulet',    sockets: 0 },
   { id: 'base_ring_1',      name: 'Novice Ring',           type: 'Ring',    subType: 'Ring',      sockets: 0 },
-  // ── Fighter Weapons ──
   { id: 'base_sword_1',     name: 'Novice Sword',          type: 'Weapons', subType: 'Sword',     sockets: 2 },
   { id: 'base_mace_1',      name: 'Novice Mace',           type: 'Weapons', subType: 'Mace',      sockets: 2 },
   { id: 'base_claw_1',      name: 'Novice Claw',           type: 'Weapons', subType: 'Claw',      sockets: 2 },
@@ -105,9 +99,7 @@ const BASE_ITEMS = [
   { id: 'base_dagger_1',    name: 'Novice Dagger',         type: 'Weapons', subType: 'Dagger',    sockets: 2 },
   { id: 'base_bow_1',       name: 'Novice Bow',            type: 'Weapons', subType: 'Bow',       sockets: 2 },
   { id: 'base_arrow_1',     name: 'Novice Arrow',          type: 'Weapons', subType: 'Arrow',     sockets: 0 },
-  // ── Fighter Buff Spells (25% WC) ──
   { id: 'base_buffspell_1', name: 'Novice Warcry',         type: 'BuffSpells', subType: 'BuffSpell', sockets: 1 },
-  // ── Caster Spells ──
   { id: 'base_fire_1',      name: 'Novice Fire Surge',     type: 'Spells',  subType: 'Fire',      sockets: 2 },
   { id: 'base_cold_1',      name: 'Novice Frost Bolt',     type: 'Spells',  subType: 'Cold',      sockets: 2 },
   { id: 'base_earth_1',     name: 'Novice Stone Spike',    type: 'Spells',  subType: 'Earth',     sockets: 2 },
@@ -115,7 +107,6 @@ const BASE_ITEMS = [
   { id: 'base_drain_1',     name: 'Novice Drain Touch',    type: 'Spells',  subType: 'Drain',     sockets: 2 },
   { id: 'base_arcane_1',    name: 'Novice Arcane Bolt',    type: 'Spells',  subType: 'Arcane',    sockets: 2 },
   { id: 'base_death_1',     name: 'Novice Death Coil',     type: 'Spells',  subType: 'Death',     sockets: 2 },
-  // ── Caster Off-Hands (25% SC) ──
   { id: 'base_offhand_1',   name: 'Novice Focus Orb',      type: 'OffHands', subType: 'OffHand',  sockets: 1 },
 ]
 
@@ -126,13 +117,11 @@ const DROPPER_TIERS = [
 ]
 
 const SLOT_MODS: Record<string, any> = {
-  // Armor
   Armor:     { prop: 1.00, stat: 'AC' },
   Helmet:    { prop: 0.75, stat: 'AC' },
   Boots:     { prop: 0.75, stat: 'AC' },
   Leggings:  { prop: 0.50, stat: 'AC', hitBonus: 0.10 },
   Gauntlets: { prop: 0.50, stat: 'AC', classBonus: 0.15 },
-  // Fighter weapons — 100% WC
   Weapon: { prop: 1.0, stat: 'WC' },
   Sword:  { prop: 1.0, stat: 'WC' },
   Mace:   { prop: 1.0, stat: 'WC' },
@@ -141,10 +130,8 @@ const SLOT_MODS: Record<string, any> = {
   Staff:  { prop: 1.0, stat: 'WC' },
   Dagger: { prop: 1.0, stat: 'WC' },
   Bow:    { prop: 1.0, stat: 'WC' },
-  Arrow:  { prop: 0.0, stat: 'WC' }, // arrow slot — no stat, quiver
-  // Fighter buff spells — 25% WC
+  Arrow:  { prop: 0.0, stat: 'WC' },
   BuffSpell: { prop: 0.25, stat: 'WC' },
-  // Caster spells — 100% SC
   Spell:   { prop: 1.0, stat: 'SC' },
   Fire:    { prop: 1.0, stat: 'SC' },
   Cold:    { prop: 1.0, stat: 'SC' },
@@ -153,19 +140,14 @@ const SLOT_MODS: Record<string, any> = {
   Drain:   { prop: 1.0, stat: 'SC' },
   Arcane:  { prop: 1.0, stat: 'SC' },
   Death:   { prop: 1.0, stat: 'SC' },
-  // Caster off-hands — 25% SC
   OffHand: { prop: 0.25, stat: 'SC' },
-  // Jewelry — no stat contribution (see Appendix I)
   Amulet:    { prop: 0, stat: null },
   Ring:      { prop: 0, stat: null },
   Rune:      { prop: 0, stat: null },
   Accessory: { prop: 0, stat: null },
 }
 
-// ─── STARTING KIT — Appendix H ───────────────────────────────
-// Maps each race to their GDD weapon/spell specialization
 const RACE_WEAPONS: Record<string, { w1: string; w2: string }> = {
-  // True Fighters — weapon slot 1 + 2 = race specialization
   human:      { w1: 'base_sword_1',  w2: 'base_sword_1'  },
   dragonborn: { w1: 'base_sword_1',  w2: 'base_sword_1'  },
   orc:        { w1: 'base_mace_1',   w2: 'base_mace_1'   },
@@ -174,7 +156,6 @@ const RACE_WEAPONS: Record<string, { w1: string; w2: string }> = {
   troll:      { w1: 'base_staff_1',  w2: 'base_staff_1'  },
   hobbit:     { w1: 'base_dagger_1', w2: 'base_dagger_1' },
   centaur:    { w1: 'base_bow_1',    w2: 'base_arrow_1'  },
-  // True Casters — spell slot 1 + 2 = race specialization, off-hands for caster slots
   phoenix:    { w1: 'base_fire_1',   w2: 'base_fire_1'   },
   tiefling:   { w1: 'base_fire_1',   w2: 'base_fire_1'   },
   mermaid:    { w1: 'base_cold_1',   w2: 'base_cold_1'   },
@@ -183,7 +164,6 @@ const RACE_WEAPONS: Record<string, { w1: string; w2: string }> = {
   vampire:    { w1: 'base_drain_1',  w2: 'base_drain_1'  },
   elf:        { w1: 'base_arcane_1', w2: 'base_arcane_1' },
   babayaga:   { w1: 'base_death_1',  w2: 'base_death_1'  },
-  // Hybrids — weapon + spell (race specialization)
   angel:      { w1: 'base_sword_1',  w2: 'base_arcane_1' },
   aasimar:    { w1: 'base_mace_1',   w2: 'base_arcane_1' },
   banshee:    { w1: 'base_dagger_1', w2: 'base_arcane_1' },
@@ -219,7 +199,6 @@ function buildStartingKit(raceKey: string): { inventory: any[]; equipment: Recor
     return item
   }
 
-  // Shared armor for all archetypes
   add('base_helm_1',      'Helmet')
   add('base_armor_1',     'Armor')
   add('base_gauntlets_1', 'Gloves')
@@ -229,21 +208,16 @@ function buildStartingKit(raceKey: string): { inventory: any[]; equipment: Recor
   add('base_ring_1',      'Ring')
 
   if (archetype === 'True Fighter') {
-    // Weapon 1 + Weapon 2 (race specialization)
-    // Buff Spell 1 + Buff Spell 2 (fighter buff spells)
     add(weapons.w1,          'Weapon 1')
     add(weapons.w2,          'Weapon 2')
     add('base_buffspell_1',  'Spell 1')
     add('base_buffspell_1',  'Spell 2')
   } else if (archetype === 'True Caster') {
-    // Spell 1 + Spell 2 (race specialization)
-    // Off-Hand 1 + Off-Hand 2 (caster off-hands)
-    add(weapons.w1,         'Weapon 1') // spell goes in weapon slots
+    add(weapons.w1,         'Weapon 1')
     add(weapons.w2,         'Weapon 2')
     add('base_offhand_1',   'Spell 1')
     add('base_offhand_1',   'Spell 2')
   } else {
-    // Hybrids: Weapon 1 (physical) + Weapon 2 (physical), Spell 1 + Spell 2
     add(weapons.w1,  'Weapon 1')
     add(weapons.w1,  'Weapon 2')
     add(weapons.w2,  'Spell 1')
@@ -253,14 +227,12 @@ function buildStartingKit(raceKey: string): { inventory: any[]; equipment: Recor
   return { inventory: inv, equipment: eq }
 }
 
-// ─── DROP POOL — items that can drop from kills ───────────────
 function rollItemDrop(raceKey: string): any | null {
-  if (Math.random() > 0.40) return null // 40% drop chance
+  if (Math.random() > 0.40) return null
   const rd = races[raceKey] || races.human
   const archetype = rd.archetype
   const weapons = RACE_WEAPONS[raceKey] || RACE_WEAPONS.human
 
-  // Build a pool of droppable items relevant to the player's archetype
   let pool: string[] = ['base_helm_1', 'base_armor_1', 'base_gauntlets_1', 'base_leggings_1', 'base_boots_1']
 
   if (archetype === 'True Fighter') {
@@ -321,7 +293,6 @@ function fmt(n: number): string {
   return Math.floor(n).toLocaleString()
 }
 
-// ─── CALC DERIVED — FIX: Fighter SC=0, Caster WC=0, Vampire/Troll use VIT ──
 function calcDerived(p: any) {
   if (!p.baseStats) p.baseStats = { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 }
   if (!Array.isArray(p.inventory)) p.inventory = []
@@ -347,27 +318,22 @@ function calcDerived(p: any) {
   const dex = p.baseStats.DEX || 10
   const wis = p.baseStats.WIS || 10
 
-  // FIX: archetype gates per GDD §6.3
   let WC = 0
   let SC = 0
   if (rd.archetype === 'True Fighter') {
-    // Troll scales WC on VIT; all other Fighters on DEX
     const scaleStat = rd.primaryStat === 'VIT' ? vit : dex
     WC = Math.max(12, wc * (1 + scaleStat * 0.0055))
-    SC = 0 // True Fighter never gains SC
+    SC = 0
   } else if (rd.archetype === 'True Caster') {
-    // Vampire scales SC on VIT; all other Casters on WIS
     const scaleStat = rd.primaryStat === 'VIT' ? vit : wis
     SC = Math.max(10, sc * (1 + scaleStat * 0.0055))
-    WC = 0 // True Caster never gains WC
+    WC = 0
   } else {
-    // Hybrids: Martial on DEX, Mystic on WIS
     const focus = rd.archetype === 'Mystic Hybrid' ? wis : dex
     WC = Math.max(12, wc * (1 + focus * 0.0055))
     SC = Math.max(10, sc * (1 + focus * 0.0055))
   }
 
-  // Hit/crit use focus stat per GDD §2
   const focus = rd.primaryStat === 'VIT' ? vit : rd.archetype === 'True Caster' || rd.archetype === 'Mystic Hybrid' ? wis : dex
 
   p.derivedStats = {
@@ -382,7 +348,6 @@ function calcDerived(p: any) {
   return p
 }
 
-// ─── SAVE → SUPABASE — FIX: equipment now included ───────────
 async function savePlayer(p: any, reason: string = '') {
   if (!p?.uid) return
   try {
@@ -400,7 +365,7 @@ async function savePlayer(p: any, reason: string = '') {
         base_stats: p.baseStats ?? {},
         pos: p.pos ?? { zoneId: 'Z01', x: 7, y: 7 },
         inventory: p.inventory ?? [],
-        equipment: p.equipment ?? {}, // FIX: equipment was missing
+        equipment: p.equipment ?? {},
         gems: p.gems ?? [],
         kills: p.kills ?? 0,
       }),
@@ -499,54 +464,53 @@ export default function App({ uid }: { uid: string }) {
     meta.content = '#03080c'
   }, [])
 
-  // ── LOAD: Firestore (identity) + Supabase (live stats) ──
+  // ── LOAD: Supabase only (identity + live stats in one row) ──
   useEffect(() => {
     const loadPlayer = async () => {
       try {
-        const snap = await getDoc(doc(db, 'players', uid))
-        if (!snap.exists()) { setLoadError('Character not found. Sign out and create your character.'); return }
-        const data = snap.data() as any
+        const res = await fetch(`/api/player?uid=${uid}`)
+        const supa = await res.json()
+
+        if (!supa || supa.error || !supa.uid) {
+          setLoadError('Character not found. Sign out and create your character.')
+          return
+        }
+
         const p: any = {
           uid,
-          name: data.name || 'Pilot',
-          race: data.race || 'human',
-          raceName: data.raceName || 'Human',
-          archetype: data.archetype || 'True Fighter',
-          cci: data.cci || 'DEX',
-          level: 1, xp: 0, xpToNextLevel: 200,
-          attributePoints: 0,
-          gold: 0, bank: data.bank || 0,
-          baseStats: data.baseStats || { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 },
-          derivedStats: {}, hp: null,
-          inventory: [], equipment: data.equipment || {}, gems: [],
-          pos: data.pos || { zoneId: 'Z01', x: 0, y: 6 }, kills: 0,
+          // Identity columns (new — from Supabase)
+          name:         supa.name || 'Pilot',
+          race:         supa.race || 'human',
+          raceName:     supa.race_name || 'Human',
+          archetype:    supa.archetype || 'True Fighter',
+          cci:          supa.cci || 'DEX',
+          bank:         supa.bank || 0,
+          // Live stats
+          xp:             supa.xp ?? 0,
+          gold:           supa.gold ?? 0,
+          level:          supa.level ?? 1,
+          hp:             supa.hp ?? null,
+          attributePoints: supa.attribute_points ?? 0,
+          kills:          supa.kills ?? 0,
+          baseStats:      (supa.base_stats && Object.keys(supa.base_stats).length > 0)
+                            ? supa.base_stats
+                            : { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 },
+          gems:           Array.isArray(supa.gems) ? supa.gems : [],
+          inventory:      Array.isArray(supa.inventory) ? supa.inventory : [],
+          equipment:      (supa.equipment && typeof supa.equipment === 'object') ? supa.equipment : {},
+          pos:            (supa.pos && typeof supa.pos === 'object')
+                            ? { zoneId: 'Z01', x: 7, y: 7, ...supa.pos }
+                            : { zoneId: 'Z01', x: 0, y: 6 },
+          derivedStats:   {},
         }
-        // Overlay live stats from Supabase
-        try {
-          const res = await fetch(`/api/player?uid=${uid}`)
-          const supa = await res.json()
-          if (supa && !supa.error) {
-            p.xp = supa.xp ?? 0
-            p.gold = supa.gold ?? 0
-            p.level = supa.level ?? 1
-            p.hp = supa.hp ?? null
-            p.attributePoints = supa.attribute_points ?? 0
-            p.kills = supa.kills ?? 0
-            if (supa.base_stats && Object.keys(supa.base_stats).length > 0) p.baseStats = supa.base_stats
-            if (Array.isArray(supa.gems) && supa.gems.length > 0) p.gems = supa.gems
-            if (Array.isArray(supa.inventory) && supa.inventory.length > 0) p.inventory = supa.inventory
-            if (supa.equipment && typeof supa.equipment === 'object') p.equipment = supa.equipment
-            if (supa.pos && typeof supa.pos === 'object') p.pos = { zoneId: 'Z01', x: 7, y: 7, ...supa.pos }
-          }
-        } catch (e) { console.log('Supabase load skipped', e) }
+
         p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
 
-        // Give starting kit if player has no inventory (new character or wiped)
+        // Give starting kit if player has no inventory (new character)
         if (p.inventory.length === 0) {
           const kit = buildStartingKit(p.race)
           p.inventory = kit.inventory
           p.equipment = kit.equipment
-          // Save kit immediately so it persists
           calcDerived(p)
           if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
           playerRef.current = p
@@ -560,11 +524,10 @@ export default function App({ uid }: { uid: string }) {
         playerRef.current = p
         setPlayer(p)
       } catch (err: any) {
-        setLoadError(err?.code === 'permission-denied'
-          ? 'Firestore permission denied -- check security rules.'
-          : `Failed to load character: ${err?.message || 'Unknown error'}`)
+        setLoadError(`Failed to load character: ${err?.message || 'Unknown error'}`)
       }
     }
+
     loadPlayer()
     const savedTheme = localStorage.getItem('g_theme') || 'aether'
     setTheme(savedTheme)
@@ -626,7 +589,6 @@ export default function App({ uid }: { uid: string }) {
     return () => { cancelAnimationFrame(id); window.removeEventListener('resize', onResize) }
   }, [])
 
-  // ── TILE COLORS by type ─────────────────────────────────────
   const TILE_COLORS: Record<string, string> = {
     '.': '#0d1f2d', 'r': '#1a1a1a',
     'E': '#2d3748', 'R': '#14532d', 'B': '#713f12',
@@ -665,19 +627,15 @@ export default function App({ uid }: { uid: string }) {
         const tile = stamp.grid[row]?.[col] ?? '.'
         const cx = col * cellSize; const cy = row * cellSize
         const isPlayer = col === px && row === py
-        // Cell bg
         ctx.fillStyle = TILE_COLORS[tile] || '#0d1f2d'
         ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2)
-        // Player highlight
         if (isPlayer) {
           ctx.fillStyle = 'rgba(62,224,255,0.25)'
           ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2)
         }
-        // Border
         ctx.strokeStyle = isPlayer ? 'rgba(62,224,255,0.9)' : 'rgba(255,255,255,0.08)'
         ctx.lineWidth = isPlayer ? 1.5 : 0.5
         ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1)
-        // Label
         if (showLabels && tile !== '.') {
           const svc = STAMPS._services?.[tile]
           ctx.fillStyle = svc ? svc.color : '#94a3b8'
@@ -686,7 +644,6 @@ export default function App({ uid }: { uid: string }) {
           ctx.textBaseline = 'middle'
           ctx.fillText(TILE_TEXT[tile] || tile, cx + cellSize / 2, cy + cellSize / 2)
         }
-        // Player dot
         if (isPlayer) {
           ctx.fillStyle = '#3EE0FF'
           ctx.beginPath()
@@ -714,6 +671,7 @@ export default function App({ uid }: { uid: string }) {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
   }, [chatMessages, chatChannel, chatSub])
 
+  // ── LOADING / ERROR SCREEN ──────────────────────────────────
   if (!player) return (
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', background: 'radial-gradient(circle at 50% 8%, #143044 0%, #0a1a26 38%, #03080c 100%)', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif' }}>
       <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#3EE0FF', letterSpacing: '0.14em', margin: 0, textShadow: '0 0 30px rgba(62,224,255,0.5)' }}>GEMINUS</h1>
@@ -721,29 +679,28 @@ export default function App({ uid }: { uid: string }) {
         <><p style={{ color: '#f87171', fontSize: '13px', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5, margin: 0 }}>{loadError}</p>
         <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', borderRadius: '10px', background: 'rgba(62,224,255,0.1)', border: '1px solid rgba(62,224,255,0.4)', color: '#3EE0FF', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>Retry</button></>
       ) : <p style={{ color: '#64748b', fontSize: '12px', letterSpacing: '0.08em', margin: 0 }}>Loading your character...</p>}
-      <button onClick={async () => { try { await signOut(auth) } catch {} try { localStorage.clear() } catch {} window.location.replace(window.location.origin) }}
+      {/* CHANGED: was signOut(auth) — now supabase.auth.signOut() */}
+      <button onClick={async () => { try { await supabase.auth.signOut() } catch {} try { localStorage.clear() } catch {} window.location.replace(window.location.origin) }}
         style={{ marginTop: '8px', background: 'rgba(255,55,95,0.1)', border: '1px solid rgba(255,55,95,0.3)', borderRadius: '8px', color: '#f87171', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: '10px 28px' }}>Sign Out</button>
     </div>
   )
 
+  // CHANGED: was signOut(auth) — now supabase.auth.signOut()
   const handleLogout = async () => {
     if (!window.confirm('Log out of Geminus?')) return
     await savePlayer(playerRef.current, 'logout')
-    signOut(auth).then(() => window.location.reload()).catch(() => window.location.reload())
+    await supabase.auth.signOut()
+    window.location.reload()
   }
 
-  // FIX: canAllocate uses GDD rule — AP >= 40 AND level > 1
   const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL && player.level > 1
 
   const handleColorChange = (color: string) => { setChatNameColor(color); localStorage.setItem('g_name', color) }
 
-  // ── SPEND POINT — FIX: uses spendAttributeBank from gdd.js (racial weights + VIT rule + off-stat swap) ──
   const spendPoint = (attr: string) => {
     if (!canAllocate) return
-    // Always pull fresh state from ref to avoid stale closure
     const current = playerRef.current || player
     const p = { ...current, baseStats: { ...current.baseStats } }
-    // FIX: delegate to gdd.js which implements GDD §3 correctly
     p.baseStats = spendAttributeBank(p.baseStats, p.race, attr)
     p.attributePoints = (p.attributePoints || 0) - GDD.AP_PER_LEVEL
     calcDerived(p)
@@ -757,7 +714,6 @@ export default function App({ uid }: { uid: string }) {
     const zoneId = player.pos?.zoneId || 'Z01'
     const stamp = getStamp(zoneId)
     const size = stamp.size
-    // dy is flipped: D-pad up = y decreases (north = lower row index)
     const newX = Math.max(0, Math.min(size - 1, (player.pos?.x ?? 0) + dx))
     const newY = Math.max(0, Math.min(size - 1, (player.pos?.y ?? 0) + dy))
     const tile = stamp.grid[newY]?.[newX] ?? '.'
@@ -770,7 +726,6 @@ export default function App({ uid }: { uid: string }) {
     } else {
       setActiveTile(null)
     }
-    // Save position every move (debounced via no await)
     savePlayer(p, 'move')
   }
 
@@ -784,15 +739,12 @@ export default function App({ uid }: { uid: string }) {
     } else { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) }
   }
 
-  // ── PERFORM TURN — all GDD fixes applied ──────────────────
   const performTurn = (isMagic: boolean) => {
     if (!engaged || !combatMonster) return
-    // FIX: always use playerRef.current to avoid stale closure
     const current = playerRef.current || player
     const p = { ...current, baseStats: { ...current.baseStats }, derivedStats: { ...current.derivedStats } }
     const m = { ...combatMonster }
 
-    // FIX: use WC for fight, SC for magic — archetype gates enforced by calcDerived
     const classVal = isMagic ? (p.derivedStats.SC || 10) : (p.derivedStats.WC || 12)
     const playerDmg = (GDD.DAMAGE_CONST * classVal) / Math.max(5, m.def)
     m.currentHP -= playerDmg
@@ -800,7 +752,6 @@ export default function App({ uid }: { uid: string }) {
 
     if (m.currentHP <= 0) {
       m.currentHP = 0
-      // FIX: Level Bank removed — not in GDD. Just award XP and AP normally.
       const newStats = { ...battleStats, kills: battleStats.kills + 1, rounds: battleStats.rounds + 1, oneHitKills: battleStats.oneHitKills + (newTurn === 1 ? 1 : 0) }
       setBattleStats(newStats)
       try { localStorage.setItem('geminus_battle_stats', JSON.stringify(newStats)) } catch {}
@@ -808,7 +759,6 @@ export default function App({ uid }: { uid: string }) {
       p.gold += m.gold; p.xp += m.xp
       p.kills = (p.kills || 0) + 1
 
-      // Push a real item drop into inventory (40% chance, archetype-appropriate)
       const droppedItem = rollItemDrop(p.race)
       if (droppedItem) {
         if (p.inventory.length < 200) p.inventory = [...p.inventory, droppedItem]
@@ -844,15 +794,12 @@ export default function App({ uid }: { uid: string }) {
       calcDerived(p)
       playerRef.current = p
       setPlayer(p)
-      // FIX: save on every kill (not every 5) so gold/XP survive refresh
       savePlayer(p, didLevelUp ? 'level-up' : 'kill')
     } else {
-      // FIX: monster damage = (90 × ATK) / (AC × 0.5) — DIVISION not subtraction
       const monsterDmg = (GDD.DAMAGE_CONST * m.atk) / Math.max(1, p.derivedStats.AC * GDD.AC_REDUCTION)
       p.hp -= monsterDmg
 
       if (p.hp <= 0) {
-        // FIX: death = chassis reset to MaxHP, record death counter, no gold/XP wipe
         p.hp = p.derivedStats.maxHp
         const ns = { ...battleStats, deaths: battleStats.deaths + 1, rounds: battleStats.rounds + 1 }
         setBattleStats(ns); try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ns)) } catch {}
@@ -966,7 +913,6 @@ export default function App({ uid }: { uid: string }) {
     const item = player.inventory.find((i: any) => i.instanceId === instanceId); if (!item) return
     const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
     const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
-    // Find the first empty slot that fits this item type
     const weaponTypes = ['Sword','Mace','Claw','Axe','Staff','Dagger','Bow']
     const spellTypes  = ['Fire','Cold','Earth','Air','Drain','Arcane','Death']
     const offHandTypes = ['OffHand']
@@ -1007,7 +953,6 @@ export default function App({ uid }: { uid: string }) {
   }
 
   const hpPct = Math.max(0, Math.min(100, (player.hp / player.derivedStats.maxHp) * 100))
-  // FIX: freeLevels = floor(AP / 40) — simple, no Level Bank
   const freeLevels = getBankedLevelsLocal(player.attributePoints || 0)
   const targets = getTargets()
 
@@ -1294,7 +1239,6 @@ export default function App({ uid }: { uid: string }) {
               )}
               {!engaged && combatLog.length === 0 && <div style={{ textAlign: 'center', fontSize: '10px', color: '#475569', paddingTop: '2px' }}>Select target &amp; press BATTLE to fight</div>}
 
-              {/* Stat spend bar — shows when level > 1 and has unspent AP */}
               {canAllocate && (
                 <div style={{ flexShrink: 0, paddingTop: '6px', borderTop: '1px solid rgba(255,149,0,0.25)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                   <span style={{ fontSize: '10px', color: '#FF9500', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>⬆ Level Up -- Choose Focus</span>
