@@ -741,7 +741,13 @@ export default function App({ uid }: { uid: string }) {
   setCombatMonster((prev: any) => ({ ...prev, currentHP: result.monsterHp }))
   setEnemyCurrentHP(result.monsterHp > 0 ? Math.round(result.monsterHp) : null)
 
-  const newPlayer = applyTurnResult(current, result)
+  const newPlayer = applyTurnResult({
+  ...current,
+  inventory: [...(current.inventory || [])],
+  equipment: { ...(current.equipment || {}) },
+  gems: [...(current.gems || [])],
+}, result)
+
 
   if (result.itemDrop) {
     const dropped = rollItemDrop(newPlayer.race)
