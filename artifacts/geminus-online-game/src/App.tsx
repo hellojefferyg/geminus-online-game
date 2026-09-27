@@ -8,6 +8,32 @@ import {
   getBankedLevels,
   isHybrid,
 } from './gdd'
+import ZONES_DATA from './data/zones.json'
+import STAMPS_DATA from './data/stamps.json'
+
+// ─── ZONE HELPERS ─────────────────────────────────────────────
+const ZONES: Record<string, any> = ZONES_DATA
+const STAMPS: Record<string, any> = STAMPS_DATA
+
+function getZone(zoneId: string) {
+  return ZONES[zoneId] || ZONES['Z01']
+}
+
+function getStamp(zoneId: string) {
+  const zone = getZone(zoneId)
+  return STAMPS[zone.stamp] || STAMPS['starter_7x7']
+}
+
+function getTileAt(zoneId: string, x: number, y: number): string {
+  const stamp = getStamp(zoneId)
+  const row = stamp.grid[y]
+  if (!row) return '.'
+  return row[x] ?? '.'
+}
+
+function getTileService(tile: string): any {
+  return STAMPS._services[tile] || null
+}
 
 // ─── RACES (24) — FIX: Vampire primaryStat = VIT ─────────────
 const races: Record<string, any> = {
@@ -454,6 +480,7 @@ export default function App({ uid }: { uid: string }) {
   const [filterState, setFilterState] = useState({ category: 'All', subType: 'All', tier: 'All', quality: 'All', sortBy: 'tier', order: 'desc' })
   const [menuOpen, setMenuOpen] = useState(false)
   const [turnCount, setTurnCount] = useState(0)
+  const [activeTile, setActiveTile] = useState<{ tile: string; service: any; x: number; y: number } | null>(null)
   const smokeRef = useRef<HTMLCanvasElement>(null)
   const miniMapRef = useRef<HTMLCanvasElement>(null)
   const zoneCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -492,7 +519,7 @@ export default function App({ uid }: { uid: string }) {
           baseStats: data.baseStats || { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 },
           derivedStats: {}, hp: null,
           inventory: [], equipment: data.equipment || {}, gems: [],
-          pos: data.pos || { zoneId: 'Z01', x: 7, y: 7 }, kills: 0,
+          pos: data.pos || { zoneId: 'Z01', x: 0, y: 6 }, kills: 0,
         }
         // Overlay live stats from Supabase
         try {
@@ -599,35 +626,88 @@ export default function App({ uid }: { uid: string }) {
     return () => { cancelAnimationFrame(id); window.removeEventListener('resize', onResize) }
   }, [])
 
-  useEffect(() => {
-    if (!miniMapRef.current || !player) return
-    const canvas = miniMapRef.current; const ctx = canvas.getContext('2d')!
+  // ── TILE COLORS by type ─────────────────────────────────────
+  const TILE_COLORS: Record<string, string> = {
+    '.': '#0d1f2d', 'r': '#1a1a1a',
+    'E': '#2d3748', 'R': '#14532d', 'B': '#713f12',
+    'S': '#0c4a6e', 'M': '#4a1d96', 'Q': '#7c2d12',
+    'T': '#7f1d1d', 'G': '#164e63', 'F': '#431407',
+    'C': '#14532d', 'X': '#450a0a',
+  }
+  const TILE_TEXT: Record<string, string> = {
+    '.': '', 'r': 'r',
+    'E': 'E', 'R': 'R', 'B': 'B',
+    'S': 'S', 'M': 'M', 'Q': 'Q',
+    'T': 'T', 'G': 'G', 'F': 'F',
+    'C': 'C', 'X': 'X',
+  }
+
+  function drawZoneMap(canvas: HTMLCanvasElement, zoneId: string, px: number, py: number, cellSize: number, showLabels: boolean) {
+    const ctx = canvas.getContext('2d')!
     const dpr = window.devicePixelRatio || 1
-    canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
+    canvas.width = canvas.offsetWidth * dpr
+    canvas.height = canvas.offsetHeight * dpr
     ctx.scale(dpr, dpr)
     const w = canvas.offsetWidth; const h = canvas.offsetHeight
-    ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, w, h)
-    ctx.fillStyle = '#3EE0FF'; ctx.shadowBlur = 8; ctx.shadowColor = '#3EE0FF'
-    ctx.beginPath(); ctx.arc(w/2, h/2, 5, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0
+    ctx.clearRect(0, 0, w, h)
+    ctx.fillStyle = '#03080c'
+    ctx.fillRect(0, 0, w, h)
+    const stamp = getStamp(zoneId)
+    const size = stamp.size
+    const totalW = size * cellSize
+    const totalH = size * cellSize
+    const ox = Math.floor(w / 2 - px * cellSize - cellSize / 2)
+    const oy = Math.floor(h / 2 - py * cellSize - cellSize / 2)
+    ctx.save()
+    ctx.translate(ox, oy)
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const tile = stamp.grid[row]?.[col] ?? '.'
+        const cx = col * cellSize; const cy = row * cellSize
+        const isPlayer = col === px && row === py
+        // Cell bg
+        ctx.fillStyle = TILE_COLORS[tile] || '#0d1f2d'
+        ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2)
+        // Player highlight
+        if (isPlayer) {
+          ctx.fillStyle = 'rgba(62,224,255,0.25)'
+          ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2)
+        }
+        // Border
+        ctx.strokeStyle = isPlayer ? 'rgba(62,224,255,0.9)' : 'rgba(255,255,255,0.08)'
+        ctx.lineWidth = isPlayer ? 1.5 : 0.5
+        ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1)
+        // Label
+        if (showLabels && tile !== '.') {
+          const svc = STAMPS._services?.[tile]
+          ctx.fillStyle = svc ? svc.color : '#94a3b8'
+          ctx.font = `bold ${Math.floor(cellSize * 0.35)}px monospace`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(TILE_TEXT[tile] || tile, cx + cellSize / 2, cy + cellSize / 2)
+        }
+        // Player dot
+        if (isPlayer) {
+          ctx.fillStyle = '#3EE0FF'
+          ctx.beginPath()
+          ctx.arc(cx + cellSize / 2, cy + cellSize / 2, cellSize * 0.18, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+    }
+    ctx.restore()
+  }
+
+  useEffect(() => {
+    if (!miniMapRef.current || !player) return
+    const zoneId = player.pos?.zoneId || 'Z01'
+    drawZoneMap(miniMapRef.current, zoneId, player.pos?.x ?? 0, player.pos?.y ?? 0, 18, false)
   }, [player, activeTab])
 
   useEffect(() => {
     if (!zoneCanvasRef.current || !player || !mapOverlay) return
-    const canvas = zoneCanvasRef.current; const ctx = canvas.getContext('2d')!
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
-    ctx.scale(dpr, dpr)
-    const w = canvas.offsetWidth; const h = canvas.offsetHeight
-    ctx.clearRect(0, 0, w, h)
-    const t = 28; const pos = player.pos
-    const ox = w/2 - pos.x*t - t/2; const oy = h/2 - pos.y*t - t/2
-    ctx.save(); ctx.translate(ox, oy)
-    for (let x = 0; x < 16; x++) for (let y = 0; y < 16; y++) {
-      const cur = x === pos.x && y === pos.y
-      if (cur) { ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(x*t, y*t, t, t) }
-      ctx.strokeStyle = cur ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.strokeRect(x*t, y*t, t, t)
-    }
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(pos.x*t+t/2, pos.y*t+t/2, t*0.32, 0, Math.PI*2); ctx.fill(); ctx.restore()
+    const zoneId = player.pos?.zoneId || 'Z01'
+    drawZoneMap(zoneCanvasRef.current, zoneId, player.pos?.x ?? 0, player.pos?.y ?? 0, 42, true)
   }, [player, mapOverlay])
 
   useEffect(() => {
@@ -674,11 +754,24 @@ export default function App({ uid }: { uid: string }) {
   }
 
   const move = (dx: number, dy: number) => {
-    const newX = Math.max(0, Math.min(15, player.pos.x + dx))
-    const newY = Math.max(0, Math.min(15, player.pos.y - dy))
-    const p = { ...player, pos: { ...player.pos, x: newX, y: newY } }
+    const zoneId = player.pos?.zoneId || 'Z01'
+    const stamp = getStamp(zoneId)
+    const size = stamp.size
+    // dy is flipped: D-pad up = y decreases (north = lower row index)
+    const newX = Math.max(0, Math.min(size - 1, (player.pos?.x ?? 0) + dx))
+    const newY = Math.max(0, Math.min(size - 1, (player.pos?.y ?? 0) + dy))
+    const tile = stamp.grid[newY]?.[newX] ?? '.'
+    const svc = getTileService(tile)
+    const p = { ...player, pos: { ...player.pos, zoneId, x: newX, y: newY } }
     playerRef.current = p
     setPlayer(p)
+    if (svc) {
+      setActiveTile({ tile, service: svc, x: newX, y: newY })
+    } else {
+      setActiveTile(null)
+    }
+    // Save position every move (debounced via no await)
+    savePlayer(p, 'move')
   }
 
   const getTargets = () => BESTIARY.Z01.monsters
@@ -967,14 +1060,37 @@ export default function App({ uid }: { uid: string }) {
                         )}
                       </div>
                       <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Zone:</span> <span style={{ color: '#cbd5e1' }}>Aether Silver Cavern</span></p>
-                          <button onClick={handleLogout} style={{ flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase' }}>Logout</button>
-                        </div>
-                        <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos.x}, {player.pos.y}]</p>
-                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Type:</span> <span style={{ color: '#3EE0FF', fontWeight: 700 }}>Starter Zone</span></p>
-                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Gem:</span> <span style={{ color: '#30D158' }}>G1 · 1/250</span></p>
-                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Shadow:</span> <span style={{ color: '#52525b' }}>Off</span></p>
+                        {(() => {
+                          const zoneId = player.pos?.zoneId || 'Z01'
+                          const zone = getZone(zoneId)
+                          const typeColors: Record<string, string> = { starter: '#3EE0FF', xp: '#30D158', gold: '#FFD60A', shadow: '#BF5AF2', gem: '#5AC8FA', prestige: '#FF9500' }
+                          return (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                                <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>{zoneId}:</span> <span style={{ color: '#cbd5e1' }}>{zone.name}</span></p>
+                                <button onClick={handleLogout} style={{ flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase' }}>Logout</button>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos?.x ?? 0}, {player.pos?.y ?? 0}] · Tier {zone.gear} · Lv {zone.level?.toLocaleString()}</p>
+                              <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}>
+                                <span style={{ color: '#fff', fontWeight: 700 }}>Type: </span>
+                                <span style={{ color: typeColors[zone.type] || '#fff', fontWeight: 700, textTransform: 'capitalize' }}>{zone.type}</span>
+                                <span style={{ color: '#64748b' }}> · </span>
+                                <span style={{ color: '#fff', fontWeight: 700 }}>Gem: </span>
+                                <span style={{ color: '#30D158' }}>G{zone.gemMin}{zone.gemMin !== zone.gemMax ? `–${zone.gemMax}` : ''} · {zone.gemRate}</span>
+                              </p>
+                              <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}>
+                                <span style={{ color: '#fff', fontWeight: 700 }}>Shadow: </span>
+                                <span style={{ color: zone.shadow === 'off' ? '#52525b' : '#BF5AF2', fontWeight: 700 }}>{zone.shadow === 'off' ? 'Off' : zone.shadow}</span>
+                              </p>
+                              {activeTile && (
+                                <div style={{ marginTop: '4px', padding: '6px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.6)', border: `1px solid ${activeTile.service.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                  <span style={{ fontSize: '11px', color: activeTile.service.color, fontWeight: 700 }}>📍 {activeTile.service.label}</span>
+                                  <button onClick={() => showToast(`${activeTile.service.label} — coming soon!`)} style={{ fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: `${activeTile.service.color}20`, border: `1px solid ${activeTile.service.color}60`, color: activeTile.service.color, cursor: 'pointer' }}>Enter</button>
+                                </div>
+                              )}
+                            </>
+                          )
+                        })()}
                       </div>
                     </div>
                   </section>
@@ -1264,7 +1380,10 @@ export default function App({ uid }: { uid: string }) {
       {/* World Map Overlay */}
       {mapOverlay && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(12px)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}>
-          <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '20px', color: '#fff', marginTop: '8px' }}>World Exploration</h3>
+          <div style={{ textAlign: 'center', marginTop: '8px' }}>
+            <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '18px', color: '#3EE0FF', margin: 0 }}>{player.pos?.zoneId || 'Z01'}</h3>
+            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0' }}>{getZone(player.pos?.zoneId || 'Z01').name}</p>
+          </div>
           <div style={{ width: '100%', maxWidth: '420px', maxHeight: '400px', aspectRatio: '1/1', position: 'relative' }}>
             <div className="glass-panel" style={{ width: '100%', height: '100%', borderRadius: '16px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.25)' }}>
               <canvas ref={zoneCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
