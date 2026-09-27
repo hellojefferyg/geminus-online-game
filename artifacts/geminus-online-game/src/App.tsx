@@ -181,6 +181,7 @@ async function savePlayer(p: any, reason: string = '') {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
+       uid: p.uid,
         xp: p.xp ?? 0,
         gold: p.gold ?? 0,
         level: p.level ?? 1,
