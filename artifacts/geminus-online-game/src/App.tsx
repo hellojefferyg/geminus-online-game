@@ -8,6 +8,7 @@ import {
 } from './gdd'
 import ZONES_DATA from './data/zones.json'
 import STAMPS_DATA from './data/stamps.json'
+import BESTIARY_DATA from './data/bestiary.json'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
 const ZONES: Record<string, any> = ZONES_DATA
@@ -71,16 +72,8 @@ function getAttributeFocusOrder(raceKey: string): string[] {
 
 function getBankedLevelsLocal(ap: number): number { return Math.floor((ap || 0) / GDD.AP_PER_LEVEL) }
 
-const BESTIARY: Record<string, any> = {
-  Z01: {
-    zoneName: 'Aether Silver Cavern', minLevel: 1,
-    monsters: [
-      { id: 'E01', name: 'Glass Construct', hp: 25, atk: 10, def: 13, xp: 18, gold: 8, drop: { name: 'Glass Construct Core', rarity: 'Common' } },
-      { id: 'E02', name: 'Mercury Sprite', hp: 32, atk: 12, def: 15, xp: 24, gold: 12, drop: { name: 'Mercury Essence', rarity: 'Uncommon' } },
-      { id: 'E03', name: 'Mirror Gargoyle', hp: 45, atk: 15, def: 18, xp: 36, gold: 20, drop: { name: 'Polished Mirror Shard', rarity: 'Rare' } },
-      { id: 'E04*', name: 'Prism Titan', hp: 75, atk: 22, def: 25, xp: 120, gold: 75, drop: { name: "Titan's Prism Heart", rarity: 'Epic' } },
-    ]
-  }
+ 
+  
 }
 
 const BASE_ITEMS = [
@@ -729,7 +722,8 @@ export default function App({ uid }: { uid: string }) {
     savePlayer(p, 'move')
   }
 
-  const getTargets = () => BESTIARY.Z01.monsters
+  const getTargets = () => BESTIARY_DATA.starter
+
 
   const toggleEngage = () => {
     if (!engaged) {
