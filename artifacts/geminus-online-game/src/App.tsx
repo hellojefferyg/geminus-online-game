@@ -10,6 +10,7 @@ import ZONES_DATA from './data/zones.json'
 import STAMPS_DATA from './data/stamps.json'
 import BESTIARY_DATA from './data/bestiary.json'
 import { runTurn, applyTurnResult, getDefaultAction } from './managers/CombatManager'
+import { savePlayerNow } from './lib/saveQueue'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
 const ZONES: Record<string, any> = ZONES_DATA
@@ -341,36 +342,7 @@ function calcDerived(p: any) {
   return p
 }
 
-async function savePlayer(p: any, reason: string = '') {
-  if (!p?.uid) return
-  try {
-    const res = await fetch('/api/player/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        uid: p.uid,
-        xp: p.xp ?? 0,
-        gold: p.gold ?? 0,
-        level: p.level ?? 1,
-        hp: p.hp ?? 100,
-        max_hp: p.derivedStats?.maxHp ?? 100,
-        attribute_points: p.attributePoints ?? 0,
-        base_stats: p.baseStats ?? {},
-        pos: p.pos ?? { zoneId: 'Z01', x: 7, y: 7 },
-        inventory: p.inventory ?? [],
-        equipment: p.equipment ?? {},
-        gems: p.gems ?? [],
-        kills: p.kills ?? 0,
-      }),
-    })
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok || json.error) {
-      console.error('[savePlayer]', reason, res.status, json)
-      return
-    }
-    if (reason) console.log(`[save] ${reason}`)
-  } catch (e) { console.error('savePlayer failed:', e) }
-}
+
 
 // ─── ITEM ICONS ───────────────────────────────────────────────
 function ItemIcon({ subType }: { subType: string }) {
@@ -508,7 +480,7 @@ export default function App({ uid }: { uid: string }) {
           if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
           playerRef.current = p
           setPlayer(p)
-          savePlayer(p, 'starting-kit')
+          savePlayerNow(p, 'starting-kit')
           return
         }
 
@@ -531,7 +503,7 @@ export default function App({ uid }: { uid: string }) {
   // Tab-hide save
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === 'hidden' && playerRef.current) savePlayer(playerRef.current, 'tab-hidden')
+      if (document.visibilityState === 'hidden' && playerRef.current) savePlayerNow(playerRef.current, 'tab-hidden')
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
@@ -681,7 +653,7 @@ export default function App({ uid }: { uid: string }) {
   // CHANGED: was signOut(auth) -- now supabase.auth.signOut()
   const handleLogout = async () => {
     if (!window.confirm('Log out of Geminus?')) return
-    await savePlayer(playerRef.current, 'logout')
+    await savePlayerNow(playerRef.current, 'logout')
     await supabase.auth.signOut()
     window.location.reload()
   }
@@ -699,7 +671,7 @@ export default function App({ uid }: { uid: string }) {
     calcDerived(p)
     playerRef.current = p
     setPlayer(p)
-    savePlayer(p, 'stat-spend')
+    savePlayerNow(p, 'stat-spend')
     showToast(attr + ' upgraded!')
   }
 
@@ -719,7 +691,7 @@ export default function App({ uid }: { uid: string }) {
     } else {
       setActiveTile(null)
     }
-    savePlayer(p, 'move')
+    savePlayerNow(p, 'move')
   }
 
   const getTargets = () => BESTIARY_DATA.starter
@@ -783,7 +755,7 @@ export default function App({ uid }: { uid: string }) {
   calcDerived(newPlayer)
   playerRef.current = newPlayer
   setPlayer(newPlayer)
-  savePlayer(newPlayer, result.status === 'VICTORY' ? (result.leveledUp ? 'level-up' : 'kill') : result.status === 'DEFEAT' ? 'death' : 'combat')
+  savePlayerNow(newPlayer, result.status === 'VICTORY' ? (result.leveledUp ? 'level-up' : 'kill') : result.status === 'DEFEAT' ? 'death' : 'combat')
 }
 
 
@@ -866,7 +838,7 @@ export default function App({ uid }: { uid: string }) {
     const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
     const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
     for (const slot in p.equipment) if (p.equipment[slot] === instanceId) p.equipment[slot] = null
-    calcDerived(p); playerRef.current = p; setPlayer(p); savePlayer(p, 'unequip'); showToast(`${base.name} unequipped.`)
+    calcDerived(p); playerRef.current = p; setPlayer(p); savePlayerNow(p, 'unequip'); showToast(`${base.name} unequipped.`)
   }
 
   const equipItem = (instanceId: string) => {
@@ -898,7 +870,7 @@ export default function App({ uid }: { uid: string }) {
       calcDerived(p)
       playerRef.current = p
       setPlayer(p)
-      savePlayer(p, 'equip')
+      savePlayerNow(p, 'equip')
       showToast(`${base.name} → ${slot}`)
     } else {
       showToast('No slot found for this item type.')
@@ -1147,7 +1119,7 @@ export default function App({ uid }: { uid: string }) {
                           </div>
                           <button className="glass-button" style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px' }} onClick={() => {
                             const val = (document.getElementById('settings-name-input') as HTMLInputElement)?.value?.trim()
-                            if (val) { const p = { ...player, name: val }; playerRef.current = p; setPlayer(p); savePlayer(p, 'name-update'); showToast('Profile callsign updated.') }
+                            if (val) { const p = { ...player, name: val }; playerRef.current = p; setPlayer(p); savePlayerNow(p, 'name-update'); showToast('Profile callsign updated.') }
                           }}>Update Profile</button>
                           <button onClick={resetSave} style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', background: 'transparent', cursor: 'pointer' }}>Reset Progress & Restore Chassis</button>
                         </div>
