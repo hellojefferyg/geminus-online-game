@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { auth } from '../firebase/index'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { supabase } from '../supabase'
 import RaceSelect from './RaceSelect'
 
 export default function SignUp({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
@@ -11,7 +10,7 @@ export default function SignUp({ onSwitchToLogin }: { onSwitchToLogin: () => voi
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [firebaseUser, setFirebaseUser] = useState<any>(null)
+  const [supabaseUid, setSupabaseUid] = useState<string | null>(null)
 
   const handleAccountSubmit = async () => {
     setError('')
@@ -22,11 +21,46 @@ export default function SignUp({ onSwitchToLogin }: { onSwitchToLogin: () => voi
     if (password !== confirm) return setError('Passwords do not match.')
     setLoading(true)
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password)
-      setFirebaseUser(cred.user)
+      // 1. Create Supabase auth user
+      const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
+      if (signUpError) throw signUpError
+      const uid = data.user?.id
+      if (!uid) throw new Error('No user ID returned from signup.')
+
+      // 2. Insert base player row with identity columns
+      //    Race/stats filled in by RaceSelect next step
+      const { error: insertError } = await supabase.from('players').insert({
+        uid,
+        name: username.trim(),
+        email,
+        race: '',          // blank until RaceSelect
+        race_name: '',
+        archetype: '',
+        cci: '',
+        bank: 0,
+        xp: 0,
+        gold: 0,
+        level: 1,
+        hp: 100,
+        max_hp: 100,
+        attribute_points: 0,  // granted after race pick
+        kills: 0,
+        base_stats: {},
+        pos: { zoneId: 'Z01', x: 0, y: 6 },
+        inventory: [],
+        equipment: {},
+        gems: [],
+      })
+      if (insertError) throw insertError
+
+      setSupabaseUid(uid)
       setStep('race')
     } catch (e: any) {
-      setError(e.message.replace('Firebase: ', '').replace(/\(auth.*\)\.?/, '').trim())
+      // Clean up Supabase error messages
+      const msg = (e.message || 'Sign up failed.')
+        .replace('AuthApiError: ', '')
+        .trim()
+      setError(msg)
     }
     setLoading(false)
   }
@@ -51,8 +85,17 @@ export default function SignUp({ onSwitchToLogin }: { onSwitchToLogin: () => voi
     letterSpacing: '0.1em',
   }
 
-  if (step === 'race') {
-    return <RaceSelect username={username.trim()} userId={firebaseUser?.uid} />
+  if (step === 'race' && supabaseUid) {
+    return (
+      <RaceSelect
+        username={username.trim()}
+        userId={supabaseUid}
+        onComplete={() => {
+          // AuthWrapper's onAuthStateChange will fire and transition to game
+          // Nothing extra needed here
+        }}
+      />
+    )
   }
 
   return (
