@@ -891,9 +891,8 @@ export default function App({ uid }: { uid: string }) {
     } else if (subType === 'Arrow') {
       slot = 'Weapon 2'
     }
-    const slotMap: Record<string, string> = { Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves', Leggings: 'Leggings', Boots: 'Boots', Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory' }
-    if (!slot) slot = slotMap[subType] || ''
-    const slot = slotMap[base.subType]
+    const armorSlotMap: Record<string, string> = { Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves', Leggings: 'Leggings', Boots: 'Boots', Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory' }
+    if (!slot) slot = armorSlotMap[subType] || ''
     if (slot) {
       p.equipment[slot] = instanceId
       calcDerived(p)
