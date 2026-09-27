@@ -61,20 +61,36 @@ const BESTIARY: Record<string, any> = {
 }
 
 const BASE_ITEMS = [
-  { id: 'base_helm_1', name: 'Silver Crest Helm', type: 'Armor', subType: 'Helmet', sockets: 2 },
-  { id: 'base_armor_1', name: 'Chroma Glass Cuirass', type: 'Armor', subType: 'Armor', sockets: 2 },
-  { id: 'base_gauntlets_1', name: 'Platinum Gauntlets', type: 'Armor', subType: 'Gauntlets', sockets: 2 },
-  { id: 'base_leggings_1', name: 'Obsidian Weave Leggings', type: 'Armor', subType: 'Leggings', sockets: 2 },
-  { id: 'base_boots_1', name: 'Liquid Glass Boots', type: 'Armor', subType: 'Boots', sockets: 2 },
-  { id: 'base_sword_1', name: 'Quicksilver Blade', type: 'Weapons', subType: 'Sword', sockets: 2 },
-  { id: 'base_axe_1', name: 'Brutal War Axe', type: 'Weapons', subType: 'Axe', sockets: 2 },
-  { id: 'base_staff_1', name: 'Monochrome Siphon', type: 'Weapons', subType: 'Staff', sockets: 2 },
-  { id: 'base_firespell_1', name: 'Pyroclastic Surge', type: 'Spells', subType: 'Fire', sockets: 2 },
-  { id: 'base_airspell_1', name: 'Zephyr Vortex', type: 'Spells', subType: 'Air', sockets: 2 },
-  { id: 'base_deathspell_1', name: 'Void Reaping', type: 'Spells', subType: 'Death', sockets: 2 },
-  { id: 'base_accessory_1', name: 'Aether Rune Matrix', type: 'Accessory', subType: 'Rune', sockets: 2 },
-  { id: 'base_amulet_1', name: 'Platinum Pendant', type: 'Amulet', subType: 'Amulet', sockets: 2 },
-  { id: 'base_ring_1', name: 'Polished Silver Ring', type: 'Ring', subType: 'Ring', sockets: 2 },
+  // ── Armor (shared by all races) ──
+  { id: 'base_helm_1',      name: 'Novice Helm',          type: 'Armor',   subType: 'Helmet',    sockets: 2 },
+  { id: 'base_armor_1',     name: 'Novice Cuirass',        type: 'Armor',   subType: 'Armor',     sockets: 2 },
+  { id: 'base_gauntlets_1', name: 'Novice Gauntlets',      type: 'Armor',   subType: 'Gauntlets', sockets: 2 },
+  { id: 'base_leggings_1',  name: 'Novice Leggings',       type: 'Armor',   subType: 'Leggings',  sockets: 2 },
+  { id: 'base_boots_1',     name: 'Novice Boots',          type: 'Armor',   subType: 'Boots',     sockets: 2 },
+  // ── Jewelry (shared by all races) ──
+  { id: 'base_amulet_1',    name: 'Novice Pendant',        type: 'Amulet',  subType: 'Amulet',    sockets: 0 },
+  { id: 'base_ring_1',      name: 'Novice Ring',           type: 'Ring',    subType: 'Ring',      sockets: 0 },
+  // ── Fighter Weapons ──
+  { id: 'base_sword_1',     name: 'Novice Sword',          type: 'Weapons', subType: 'Sword',     sockets: 2 },
+  { id: 'base_mace_1',      name: 'Novice Mace',           type: 'Weapons', subType: 'Mace',      sockets: 2 },
+  { id: 'base_claw_1',      name: 'Novice Claw',           type: 'Weapons', subType: 'Claw',      sockets: 2 },
+  { id: 'base_axe_1',       name: 'Novice Axe',            type: 'Weapons', subType: 'Axe',       sockets: 2 },
+  { id: 'base_staff_1',     name: 'Novice Staff',          type: 'Weapons', subType: 'Staff',     sockets: 2 },
+  { id: 'base_dagger_1',    name: 'Novice Dagger',         type: 'Weapons', subType: 'Dagger',    sockets: 2 },
+  { id: 'base_bow_1',       name: 'Novice Bow',            type: 'Weapons', subType: 'Bow',       sockets: 2 },
+  { id: 'base_arrow_1',     name: 'Novice Arrow',          type: 'Weapons', subType: 'Arrow',     sockets: 0 },
+  // ── Fighter Buff Spells (25% WC) ──
+  { id: 'base_buffspell_1', name: 'Novice Warcry',         type: 'BuffSpells', subType: 'BuffSpell', sockets: 1 },
+  // ── Caster Spells ──
+  { id: 'base_fire_1',      name: 'Novice Fire Surge',     type: 'Spells',  subType: 'Fire',      sockets: 2 },
+  { id: 'base_cold_1',      name: 'Novice Frost Bolt',     type: 'Spells',  subType: 'Cold',      sockets: 2 },
+  { id: 'base_earth_1',     name: 'Novice Stone Spike',    type: 'Spells',  subType: 'Earth',     sockets: 2 },
+  { id: 'base_air_1',       name: 'Novice Zephyr',         type: 'Spells',  subType: 'Air',       sockets: 2 },
+  { id: 'base_drain_1',     name: 'Novice Drain Touch',    type: 'Spells',  subType: 'Drain',     sockets: 2 },
+  { id: 'base_arcane_1',    name: 'Novice Arcane Bolt',    type: 'Spells',  subType: 'Arcane',    sockets: 2 },
+  { id: 'base_death_1',     name: 'Novice Death Coil',     type: 'Spells',  subType: 'Death',     sockets: 2 },
+  // ── Caster Off-Hands (25% SC) ──
+  { id: 'base_offhand_1',   name: 'Novice Focus Orb',      type: 'OffHands', subType: 'OffHand',  sockets: 1 },
 ]
 
 const DROPPER_TIERS = [
@@ -84,13 +100,153 @@ const DROPPER_TIERS = [
 ]
 
 const SLOT_MODS: Record<string, any> = {
-  Weapon: { prop: 1.0, stat: 'WC' }, Spell: { prop: 1.0, stat: 'SC' },
-  Armor: { prop: 1.0, stat: 'AC' }, Helmet: { prop: 0.75, stat: 'AC' },
-  Boots: { prop: 0.75, stat: 'AC' }, Leggings: { prop: 0.50, stat: 'AC' },
-  Gauntlets: { prop: 0.50, stat: 'AC' },
-  Sword: { prop: 1.0, stat: 'WC' }, Axe: { prop: 1.0, stat: 'WC' },
-  Staff: { prop: 1.0, stat: 'WC' }, Fire: { prop: 1.0, stat: 'SC' },
-  Air: { prop: 1.0, stat: 'SC' }, Death: { prop: 1.0, stat: 'SC' },
+  // Armor
+  Armor:     { prop: 1.00, stat: 'AC' },
+  Helmet:    { prop: 0.75, stat: 'AC' },
+  Boots:     { prop: 0.75, stat: 'AC' },
+  Leggings:  { prop: 0.50, stat: 'AC', hitBonus: 0.10 },
+  Gauntlets: { prop: 0.50, stat: 'AC', classBonus: 0.15 },
+  // Fighter weapons — 100% WC
+  Weapon: { prop: 1.0, stat: 'WC' },
+  Sword:  { prop: 1.0, stat: 'WC' },
+  Mace:   { prop: 1.0, stat: 'WC' },
+  Claw:   { prop: 1.0, stat: 'WC' },
+  Axe:    { prop: 1.0, stat: 'WC' },
+  Staff:  { prop: 1.0, stat: 'WC' },
+  Dagger: { prop: 1.0, stat: 'WC' },
+  Bow:    { prop: 1.0, stat: 'WC' },
+  Arrow:  { prop: 0.0, stat: 'WC' }, // arrow slot — no stat, quiver
+  // Fighter buff spells — 25% WC
+  BuffSpell: { prop: 0.25, stat: 'WC' },
+  // Caster spells — 100% SC
+  Spell:   { prop: 1.0, stat: 'SC' },
+  Fire:    { prop: 1.0, stat: 'SC' },
+  Cold:    { prop: 1.0, stat: 'SC' },
+  Earth:   { prop: 1.0, stat: 'SC' },
+  Air:     { prop: 1.0, stat: 'SC' },
+  Drain:   { prop: 1.0, stat: 'SC' },
+  Arcane:  { prop: 1.0, stat: 'SC' },
+  Death:   { prop: 1.0, stat: 'SC' },
+  // Caster off-hands — 25% SC
+  OffHand: { prop: 0.25, stat: 'SC' },
+  // Jewelry — no stat contribution (see Appendix I)
+  Amulet:    { prop: 0, stat: null },
+  Ring:      { prop: 0, stat: null },
+  Rune:      { prop: 0, stat: null },
+  Accessory: { prop: 0, stat: null },
+}
+
+// ─── STARTING KIT — Appendix H ───────────────────────────────
+// Maps each race to their GDD weapon/spell specialization
+const RACE_WEAPONS: Record<string, { w1: string; w2: string }> = {
+  // True Fighters — weapon slot 1 + 2 = race specialization
+  human:      { w1: 'base_sword_1',  w2: 'base_sword_1'  },
+  dragonborn: { w1: 'base_sword_1',  w2: 'base_sword_1'  },
+  orc:        { w1: 'base_mace_1',   w2: 'base_mace_1'   },
+  werewolf:   { w1: 'base_claw_1',   w2: 'base_claw_1'   },
+  minotaur:   { w1: 'base_axe_1',    w2: 'base_axe_1'    },
+  troll:      { w1: 'base_staff_1',  w2: 'base_staff_1'  },
+  hobbit:     { w1: 'base_dagger_1', w2: 'base_dagger_1' },
+  centaur:    { w1: 'base_bow_1',    w2: 'base_arrow_1'  },
+  // True Casters — spell slot 1 + 2 = race specialization, off-hands for caster slots
+  phoenix:    { w1: 'base_fire_1',   w2: 'base_fire_1'   },
+  tiefling:   { w1: 'base_fire_1',   w2: 'base_fire_1'   },
+  mermaid:    { w1: 'base_cold_1',   w2: 'base_cold_1'   },
+  gnome:      { w1: 'base_earth_1',  w2: 'base_earth_1'  },
+  griffin:    { w1: 'base_air_1',    w2: 'base_air_1'    },
+  vampire:    { w1: 'base_drain_1',  w2: 'base_drain_1'  },
+  elf:        { w1: 'base_arcane_1', w2: 'base_arcane_1' },
+  babayaga:   { w1: 'base_death_1',  w2: 'base_death_1'  },
+  // Hybrids — weapon + spell (race specialization)
+  angel:      { w1: 'base_sword_1',  w2: 'base_arcane_1' },
+  aasimar:    { w1: 'base_mace_1',   w2: 'base_arcane_1' },
+  banshee:    { w1: 'base_dagger_1', w2: 'base_arcane_1' },
+  halfling:   { w1: 'base_staff_1',  w2: 'base_arcane_1' },
+  dwarf:      { w1: 'base_axe_1',    w2: 'base_fire_1'   },
+  demon:      { w1: 'base_staff_1',  w2: 'base_fire_1'   },
+  draugr:     { w1: 'base_staff_1',  w2: 'base_death_1'  },
+  unicorn:    { w1: 'base_sword_1',  w2: 'base_death_1'  },
+}
+
+function makeItem(baseItemId: string, tier = 1) {
+  return {
+    instanceId: crypto.randomUUID(),
+    baseItemId,
+    tier,
+    type: 'Dropper',
+    socketedGems: [],
+  }
+}
+
+function buildStartingKit(raceKey: string): { inventory: any[]; equipment: Record<string, string> } {
+  const rd = races[raceKey] || races.human
+  const weapons = RACE_WEAPONS[raceKey] || RACE_WEAPONS.human
+  const archetype = rd.archetype
+
+  const inv: any[] = []
+  const eq: Record<string, string> = {}
+
+  const add = (baseId: string, slot: string) => {
+    const item = makeItem(baseId)
+    inv.push(item)
+    eq[slot] = item.instanceId
+    return item
+  }
+
+  // Shared armor for all archetypes
+  add('base_helm_1',      'Helmet')
+  add('base_armor_1',     'Armor')
+  add('base_gauntlets_1', 'Gloves')
+  add('base_leggings_1',  'Leggings')
+  add('base_boots_1',     'Boots')
+  add('base_amulet_1',    'Amulet')
+  add('base_ring_1',      'Ring')
+
+  if (archetype === 'True Fighter') {
+    // Weapon 1 + Weapon 2 (race specialization)
+    // Buff Spell 1 + Buff Spell 2 (fighter buff spells)
+    add(weapons.w1,          'Weapon 1')
+    add(weapons.w2,          'Weapon 2')
+    add('base_buffspell_1',  'Spell 1')
+    add('base_buffspell_1',  'Spell 2')
+  } else if (archetype === 'True Caster') {
+    // Spell 1 + Spell 2 (race specialization)
+    // Off-Hand 1 + Off-Hand 2 (caster off-hands)
+    add(weapons.w1,         'Weapon 1') // spell goes in weapon slots
+    add(weapons.w2,         'Weapon 2')
+    add('base_offhand_1',   'Spell 1')
+    add('base_offhand_1',   'Spell 2')
+  } else {
+    // Hybrids: Weapon 1 (physical) + Weapon 2 (physical), Spell 1 + Spell 2
+    add(weapons.w1,  'Weapon 1')
+    add(weapons.w1,  'Weapon 2')
+    add(weapons.w2,  'Spell 1')
+    add(weapons.w2,  'Spell 2')
+  }
+
+  return { inventory: inv, equipment: eq }
+}
+
+// ─── DROP POOL — items that can drop from kills ───────────────
+function rollItemDrop(raceKey: string): any | null {
+  if (Math.random() > 0.40) return null // 40% drop chance
+  const rd = races[raceKey] || races.human
+  const archetype = rd.archetype
+  const weapons = RACE_WEAPONS[raceKey] || RACE_WEAPONS.human
+
+  // Build a pool of droppable items relevant to the player's archetype
+  let pool: string[] = ['base_helm_1', 'base_armor_1', 'base_gauntlets_1', 'base_leggings_1', 'base_boots_1']
+
+  if (archetype === 'True Fighter') {
+    pool.push(weapons.w1, weapons.w2, 'base_buffspell_1')
+  } else if (archetype === 'True Caster') {
+    pool.push(weapons.w1, 'base_offhand_1')
+  } else {
+    pool.push(weapons.w1, weapons.w2, 'base_offhand_1')
+  }
+
+  const baseItemId = pool[Math.floor(Math.random() * pool.length)]
+  return makeItem(baseItemId)
 }
 
 const GEMS: Record<string, any> = {
@@ -357,6 +513,21 @@ export default function App({ uid }: { uid: string }) {
           }
         } catch (e) { console.log('Supabase load skipped', e) }
         p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
+
+        // Give starting kit if player has no inventory (new character or wiped)
+        if (p.inventory.length === 0) {
+          const kit = buildStartingKit(p.race)
+          p.inventory = kit.inventory
+          p.equipment = kit.equipment
+          // Save kit immediately so it persists
+          calcDerived(p)
+          if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
+          playerRef.current = p
+          setPlayer(p)
+          savePlayer(p, 'starting-kit')
+          return
+        }
+
         calcDerived(p)
         if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
         playerRef.current = p
@@ -544,7 +715,17 @@ export default function App({ uid }: { uid: string }) {
       p.gold += m.gold; p.xp += m.xp
       p.kills = (p.kills || 0) + 1
 
-      setLastItem(m.drop?.name || 'Item'); setLastItemColor(RARITY_COLORS[m.drop?.rarity] || '#8FA8C7')
+      // Push a real item drop into inventory (40% chance, archetype-appropriate)
+      const droppedItem = rollItemDrop(p.race)
+      if (droppedItem) {
+        if (p.inventory.length < 200) p.inventory = [...p.inventory, droppedItem]
+        const droppedBase = BASE_ITEMS.find(b => b.id === droppedItem.baseItemId)
+        setLastItem(droppedBase?.name || 'Item')
+        setLastItemColor(RARITY_COLORS['Uncommon'])
+      } else {
+        setLastItem('None')
+        setLastItemColor('#8FA8C7')
+      }
       if (Math.random() < 0.35) {
         const allGems = Object.entries(GEMS)
         const [gId, gData] = allGems[Math.floor(Math.random() * allGems.length)]
@@ -692,9 +873,37 @@ export default function App({ uid }: { uid: string }) {
     const item = player.inventory.find((i: any) => i.instanceId === instanceId); if (!item) return
     const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
     const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
-    const slotMap: Record<string, string> = { Sword: 'Weapon 1', Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves', Leggings: 'Leggings', Boots: 'Boots', Fire: 'Spell 1', Air: 'Spell 2', Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory' }
+    // Find the first empty slot that fits this item type
+    const weaponTypes = ['Sword','Mace','Claw','Axe','Staff','Dagger','Bow']
+    const spellTypes  = ['Fire','Cold','Earth','Air','Drain','Arcane','Death']
+    const offHandTypes = ['OffHand']
+    const buffSpellTypes = ['BuffSpell']
+    const subType = base.subType
+    let slot = ''
+    if (weaponTypes.includes(subType)) {
+      slot = !p.equipment['Weapon 1'] ? 'Weapon 1' : 'Weapon 2'
+    } else if (spellTypes.includes(subType)) {
+      slot = !p.equipment['Spell 1'] ? 'Spell 1' : 'Spell 2'
+    } else if (offHandTypes.includes(subType)) {
+      slot = !p.equipment['Spell 1'] ? 'Spell 1' : 'Spell 2'
+    } else if (buffSpellTypes.includes(subType)) {
+      slot = !p.equipment['Spell 1'] ? 'Spell 1' : 'Spell 2'
+    } else if (subType === 'Arrow') {
+      slot = 'Weapon 2'
+    }
+    const slotMap: Record<string, string> = { Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves', Leggings: 'Leggings', Boots: 'Boots', Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory' }
+    if (!slot) slot = slotMap[subType] || ''
     const slot = slotMap[base.subType]
-    if (slot) { p.equipment[slot] = instanceId; calcDerived(p); playerRef.current = p; setPlayer(p); savePlayer(p, 'equip'); showToast(`${base.name} equipped to ${slot}.`) }
+    if (slot) {
+      p.equipment[slot] = instanceId
+      calcDerived(p)
+      playerRef.current = p
+      setPlayer(p)
+      savePlayer(p, 'equip')
+      showToast(`${base.name} → ${slot}`)
+    } else {
+      showToast('No slot found for this item type.')
+    }
     setEquipPopup(null)
   }
 
