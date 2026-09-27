@@ -75,7 +75,6 @@ function getBankedLevelsLocal(ap: number): number { return Math.floor((ap || 0) 
  
   
 
-
 const BASE_ITEMS = [
   { id: 'base_helm_1',      name: 'Novice Helm',          type: 'Armor',   subType: 'Helmet',    sockets: 2 },
   { id: 'base_armor_1',     name: 'Novice Cuirass',        type: 'Armor',   subType: 'Armor',     sockets: 2 },
