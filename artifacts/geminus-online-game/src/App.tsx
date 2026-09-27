@@ -179,10 +179,7 @@ async function savePlayer(p: any, reason: string = '') {
     if (!token) { console.warn('[savePlayer] No auth token — skipping'); return }
     await fetch('/api/player/save', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
         xp: p.xp ?? 0,
         gold: p.gold ?? 0,
@@ -191,7 +188,7 @@ async function savePlayer(p: any, reason: string = '') {
         max_hp: p.derivedStats?.maxHp ?? 100,
         attribute_points: p.attributePoints ?? 0,
         base_stats: p.baseStats ?? {},
-        pos: p.pos ?? { x: 7, y: 7 },
+        pos: p.pos ?? { zoneId: 'Z01', x: 0, y: 0 },
         inventory: p.inventory ?? [],
         gems: p.gems ?? [],
         kills: p.kills ?? 0,
@@ -456,7 +453,7 @@ export default function App({ uid }: { uid: string }) {
   // ── FIX: only show stat bar when player has earned NEW AP from leveling up ──
   // AP starts at 0 from Supabase. RaceSelect gave 40 on creation but that's stored
   // in Firestore, not Supabase. So if Supabase ap > 0, player has unspent level-up AP.
-  const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL && player.level > 1 && player.level > 1
+  const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL && player.level > 1
 
   const handleColorChange = (color: string) => { setChatNameColor(color); localStorage.setItem('g_name', color) }
 
@@ -507,7 +504,7 @@ export default function App({ uid }: { uid: string }) {
       m.currentHP = 0
       const bankedLevels = getBankedLevels(p.attributePoints || 0)
       const maxBank = getLevelBank(p.level)
-      if (p.level > 1 && bankedLevels >= maxBank) {
+      if (bankedLevels >= maxBank) {
         setCombatLog([{ text: 'Level Bank Full -- spend your free levels!', color: '#FF9500' }, { text: `Bank limit: ${maxBank} at Level ${p.level}`, color: '#94a3b8' }])
         setEngaged(false); calcDerived(p); setPlayer(p); savePlayer(p, 'bank-full'); return
       }
@@ -533,10 +530,9 @@ export default function App({ uid }: { uid: string }) {
         showToast(`⬆ Level Up! Level ${p.level}`); didLevelUp = true
       }
       setCombatLog([
-        ...(newTurn > 1 ? [{ text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' }] : []),
         { text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' },
         { text: 'Enemy is DEAD!', color: '#30D158' },
-        { text: `WIS(1) | NTL(1) | VIT(1) | STR(1) | DEX(1)`, color: '#FF9500' },
+        { text: `+${m.xp} XP  +${m.gold} Gold`, color: '#FFD60A' },
       ])
       setEnemyCurrentHP(null); setEngaged(false)
       calcDerived(p); setPlayer(p)
