@@ -13,7 +13,7 @@
  *   - We never trust uid from the JSON body — the server extracts it from the token
  */
 
-import { auth, db } from '../../../firebase/index'
+import { auth, db } from '../../firebase/index'
 import { doc, getDoc } from 'firebase/firestore'
 import type { Player } from '../types'
 import { calcDerived } from '../rules/derived'
