@@ -507,7 +507,7 @@ export default function App({ uid }: { uid: string }) {
       m.currentHP = 0
       const bankedLevels = getBankedLevels(p.attributePoints || 0)
       const maxBank = getLevelBank(p.level)
-      if (bankedLevels >= maxBank) {
+      if (p.level > 1 && bankedLevels >= maxBank) {
         setCombatLog([{ text: 'Level Bank Full -- spend your free levels!', color: '#FF9500' }, { text: `Bank limit: ${maxBank} at Level ${p.level}`, color: '#94a3b8' }])
         setEngaged(false); calcDerived(p); setPlayer(p); savePlayer(p, 'bank-full'); return
       }
