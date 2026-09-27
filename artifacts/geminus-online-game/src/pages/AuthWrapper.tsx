@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
-import { auth, db } from '../firebase/index'
-import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { supabase } from '../supabase'
 import Login from './Login'
 import SignUp from './SignUp'
 import RaceSelect from './RaceSelect'
@@ -17,32 +15,51 @@ export default function AuthWrapper({ children }: Props) {
   const [loggedInUid, setLoggedInUid] = useState<string | null>(null)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
+    // Check initial session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        checkPlayerRow(session.user.id, session.user.email)
+      } else {
+        setAuthState('logged-out')
+      }
+    })
+
+    // Listen for auth changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
         setAuthState('logged-out')
         setLoggedInUid(null)
         setPendingUser(null)
         return
       }
-      try {
-        const snap = await getDoc(doc(db, 'players', user.uid))
-        if (snap.exists() && snap.data().raceSelected) {
-          setLoggedInUid(user.uid)
-          setAuthState('logged-in')
-        } else {
-          const username = (snap.exists() && snap.data().name)
-            ? snap.data().name
-            : user.displayName || user.email?.split('@')[0] || 'Pilot'
-          setPendingUser({ uid: user.uid, username })
-          setAuthState('needs-race')
-        }
-      } catch {
-        setPendingUser({ uid: user.uid, username: user.email?.split('@')[0] || 'Pilot' })
-        setAuthState('needs-race')
-      }
+      checkPlayerRow(session.user.id, session.user.email)
     })
-    return () => unsub()
+
+    return () => subscription.unsubscribe()
   }, [])
+
+  const checkPlayerRow = async (uid: string, email?: string | null) => {
+    try {
+      const res = await fetch(`/api/player?uid=${uid}`)
+      const row = await res.json()
+
+      // Row exists and has a race picked — go to game
+      if (row && !row.error && row.race && row.race !== 'human') {
+        setLoggedInUid(uid)
+        setAuthState('logged-in')
+        return
+      }
+
+      // Row exists but no race yet (just signed up), or row missing
+      const username = (row && row.name) ? row.name : email?.split('@')[0] || 'Pilot'
+      setPendingUser({ uid, username })
+      setAuthState('needs-race')
+    } catch {
+      const username = email?.split('@')[0] || 'Pilot'
+      setPendingUser({ uid, username })
+      setAuthState('needs-race')
+    }
+  }
 
   // ── LOADING ──
   if (authState === 'loading') {
@@ -68,15 +85,24 @@ export default function AuthWrapper({ children }: Props) {
 
   // ── NEEDS RACE SELECT ──
   if (authState === 'needs-race' && pendingUser) {
-    return <RaceSelect username={pendingUser.username} userId={pendingUser.uid} />
+    return (
+      <RaceSelect
+        username={pendingUser.username}
+        userId={pendingUser.uid}
+        onComplete={() => {
+          setLoggedInUid(pendingUser.uid)
+          setAuthState('logged-in')
+        }}
+      />
+    )
   }
 
-  // ── GAME ── only renders when logged-in AND uid is confirmed
+  // ── GAME ──
   if (authState === 'logged-in' && loggedInUid) {
     return <>{children(loggedInUid)}</>
   }
 
-  // Fallback — should never reach here
+  // Fallback
   return (
     <div style={{
       minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -86,7 +112,7 @@ export default function AuthWrapper({ children }: Props) {
     }}>
       <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#3EE0FF', letterSpacing: '0.14em', margin: 0 }}>GEMINUS</h1>
       <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Something went wrong.</p>
-      <button onClick={() => signOut(auth).then(() => window.location.replace(window.location.origin))}
+      <button onClick={async () => { await supabase.auth.signOut(); window.location.replace(window.location.origin) }}
         style={{ padding: '10px 24px', borderRadius: '8px', background: 'rgba(255,55,95,0.1)', border: '1px solid rgba(255,55,95,0.3)', color: '#f87171', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>
         Sign Out
       </button>
