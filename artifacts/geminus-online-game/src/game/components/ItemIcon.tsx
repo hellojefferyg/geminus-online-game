@@ -1,20 +1,34 @@
-interface ItemIconProps { subType: string }
+// src/components/ItemIcon.tsx
 
-export function ItemIcon({ subType }: ItemIconProps) {
-  const n = subType.toLowerCase()
-  if (n.includes('helm'))                        return <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9 9 0 0 0-9 9v4a2 2 0 0 0 2 2h1a6 6 0 0 0 12 0h1a2 2 0 0 0 2-2v-4a9 9 0 0 0-9-9zm-5 9a1 1 0 1 1 0-2 1 1 0 0 1 0 2zm10 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
-  if (n.includes('sword') || n.includes('blade')) return <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="currentColor"><path d="M19.7 4.3a1 1 0 0 0-1.4 0l-9.8 9.8-2.1-2.1-1.4 1.4 2.1 2.1-4.2 4.2 1.4 1.4 4.2-4.2 2.1 2.1 1.4-1.4-2.1-2.1 9.8-9.8a1 1 0 0 0 0-1.4z"/></svg>
-  if (n.includes('axe'))                          return <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 19.5l9-9 1.4 1.4-9 9zM15 4c-1.1 0-2.2.4-3 1.2 1.5 1.5 1.5 4 0 5.5l1.4 1.4c2.3-2.3 2.3-6.1 0-8.4.5-.4 1.1-.7 1.6-.7 1.7 0 3 1.3 3 3 0 1.2-.7 2.3-1.8 2.8l1.3 1.3C19 9.8 20 8 20 6c0-2.8-2.2-5-5-5z"/></svg>
-  if (n.includes('staff'))                        return <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="currentColor"><path d="M18.5 2.5a2.5 2.5 0 0 0-3.5 0l-12 12 1.5 1.5 12-12a2.5 2.5 0 0 0 0-3.5zm-5 5l-10 10 1.5 1.5 10-10z"/></svg>
-  if (n.includes('armor') || n.includes('cuirass')) return <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4 5v6c0 5.5 3.8 10.7 8 12 4.2-1.3 8-6.5 8-12V5l-8-3zm0 4a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm-4 7c0-2.2 1.8-4 4-4s4 1.8 4 4v4.5c-2.3 1.1-4.7 1.5-8 .5V13z"/></svg>
-  if (n.includes('gauntlet') || n.includes('glove')) return <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8h-2V5a2 2 0 0 0-2-2h-1a2 2 0 0 0-2 2v3h-1V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v10l-2.5-2.5a1.5 1.5 0 0 0-2.1 2.1l5.3 5.3A6 6 0 0 0 11 22h5a4 4 0 0 0 4-4v-8a2 2 0 0 0-1-2z"/></svg>
-  if (n.includes('legging'))                      return <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h12v4l-2 14h-3l-1-9-1 9H8L6 7V3z"/></svg>
-  if (n.includes('boot'))                         return <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="currentColor"><path d="M16 14V3h-6v8l-4 3v5a2 2 0 0 0 2 2h10a4 4 0 0 0 4-4v-3h-6z"/></svg>
-  if (n.includes('fire'))                         return <svg className="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c-.5 2.5-3 5-3 8 0 3.3 2.7 6 6 6 1.7 0 3.2-.7 4.2-1.8C18.5 19.5 15.5 22 12 22 7 22 3 18 3 13c0-4.5 3.5-7.5 5-9 .5 2 2 3.5 4 4-.5-2 0-4.5 0-6z"/></svg>
-  if (n.includes('air') || n.includes('zephyr'))  return <svg className="w-5 h-5 text-cyan-300" viewBox="0 0 24 24" fill="currentColor"><path d="M4 10h11a3 3 0 1 0-3-3h2a1 1 0 1 1 1 1H4v2zm0 4h15a3 3 0 1 0-3-3h2a1 1 0 1 1 1 1H4v2zm0 4h9a3 3 0 1 0-3-3h2a1 1 0 1 1 1 1H4v2z"/></svg>
-  if (n.includes('death') || n.includes('void'))  return <svg className="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a9 9 0 0 0-9 9c0 3.6 2.1 6.7 5.2 8.1V22h7.6v-2.9C18.9 17.7 21 14.6 21 11a9 9 0 0 0-9-9zm-3 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm6 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>
-  if (n.includes('rune') || n.includes('accessory')) return <svg className="w-5 h-5 text-neutral-300" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5zm0 3.3L18.4 8 12 11.6 5.6 8 12 5.3zM5 9.7l6 3.4v6.6l-6-3.3V9.7zm8 10V13.1l6-3.4v6.7l-6 3.3z"/></svg>
-  if (n.includes('amulet') || n.includes('pendant')) return <svg className="w-5 h-5 text-yellow-300" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V17l4 4 4-4v-2.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7zm0 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg>
-  if (n.includes('ring'))                         return <svg className="w-5 h-5 text-yellow-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm0 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm0 5c-3.3 0-6.2 1.3-8 3.5.5.3 1 .5 1.5.5h13c.5 0 1-.2 1.5-.5-1.8-2.2-4.7-3.5-8-3.5z"/></svg>
-  return <svg className="w-5 h-5 text-neutral-400" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.4-1.4 3.6 3.6 7.6-7.6L18 8l-6 9z"/></svg>
+export default function ItemIcon({ subType }: { subType: string }) {
+  const s = (subType || '').toLowerCase()
+  if (s.includes('helmet') || s.includes('helm'))
+    return <svg className="w-7 h-7" style={{ color: '#e4e4e7', filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.4))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2a8 8 0 00-8 8v4a4 4 0 004 4h8a4 4 0 004-4v-4a8 8 0 00-8-8z"/><path d="M9 12h6M12 2v10M8 15h8"/></svg>
+  if (s.includes('sword') || s.includes('blade'))
+    return <svg className="w-7 h-7" style={{ color: '#fb7185', filter: 'drop-shadow(0 0 8px rgba(255,55,95,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14.5 4l5.5 5.5L7 22l-4-1 1-4L14.5 4z"/><path d="M18 7.5l-3.5-3.5M4 20l3.5-3.5"/></svg>
+  if (s.includes('axe'))
+    return <svg className="w-7 h-7" style={{ color: '#fbbf24', filter: 'drop-shadow(0 0 8px rgba(255,149,0,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 12l6-6-4-4-6 6M4 20l10-10M9 7l4 4"/></svg>
+  if (s.includes('staff'))
+    return <svg className="w-7 h-7" style={{ color: '#38bdf8', filter: 'drop-shadow(0 0 8px rgba(10,132,255,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 19L19 5M17 3l4 4M19 7l-2-2M12 12l2 2"/></svg>
+  if (s.includes('armor') || s.includes('cuirass'))
+    return <svg className="w-7 h-7" style={{ color: '#34d399', filter: 'drop-shadow(0 0 8px rgba(48,209,88,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3L4 7v6c0 5 4 8 8 9 4-1 8-4 8-9V7l-8-4z"/><path d="M12 3v19"/></svg>
+  if (s.includes('gauntlet') || s.includes('glove'))
+    return <svg className="w-7 h-7" style={{ color: '#5eead4', filter: 'drop-shadow(0 0 8px rgba(45,212,191,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="6" y="8" width="12" height="12" rx="3"/><path d="M9 4v4M12 3v5M15 4v4"/></svg>
+  if (s.includes('legging'))
+    return <svg className="w-7 h-7" style={{ color: '#818cf8', filter: 'drop-shadow(0 0 8px rgba(129,140,248,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 3h12v4l-2 13-3-1-1-9-1 9-3 1L6 7V3z"/></svg>
+  if (s.includes('boot'))
+    return <svg className="w-7 h-7" style={{ color: '#d4d4d8', filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.4))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 4h6v9l5 2v4H5v-4l2-2V4z"/></svg>
+  if (s.includes('fire'))
+    return <svg className="w-7 h-7" style={{ color: '#f87171', filter: 'drop-shadow(0 0 8px rgba(239,68,68,0.7))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2c1 3.5 4 5 4 8.5 0 3-2 5.5-4 7.5-2-2-4-4.5-4-7.5 0-3.5 3-5 4-8.5z"/></svg>
+  if (s.includes('air') || s.includes('zephyr'))
+    return <svg className="w-7 h-7" style={{ color: '#7dd3fc', filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 8h13a3 3 0 10-3-3M3 12h14a3 3 0 11-3 3M6 16h8a2 2 0 10-2-2"/></svg>
+  if (s.includes('death') || s.includes('void'))
+    return <svg className="w-7 h-7" style={{ color: '#c084fc', filter: 'drop-shadow(0 0 8px rgba(192,132,252,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2a9 9 0 00-9 9c0 4 2.5 7 6 8.5V22h6v-2.5c3.5-1.5 6-4.5 6-8.5a9 9 0 00-9-9z"/><circle cx="9" cy="11" r="1"/><circle cx="15" cy="11" r="1"/></svg>
+  if (s.includes('rune') || s.includes('accessory'))
+    return <svg className="w-7 h-7" style={{ color: '#e4e4e7', filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.4))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+  if (s.includes('amulet') || s.includes('pendant'))
+    return <svg className="w-7 h-7" style={{ color: '#fcd34d', filter: 'drop-shadow(0 0 8px rgba(251,191,36,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 3l6 9 6-9"/><circle cx="12" cy="16" r="4"/><path d="M12 14v4M10 16h4"/></svg>
+  if (s.includes('ring'))
+    return <svg className="w-7 h-7" style={{ color: '#fde047', filter: 'drop-shadow(0 0 8px rgba(253,224,71,0.6))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="13" r="7"/><polygon points="12 3 14 6 10 6 12 3"/></svg>
+  return <svg className="w-7 h-7" style={{ color: '#e4e4e7' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="12" r="3"/></svg>
 }
