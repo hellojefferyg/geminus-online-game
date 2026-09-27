@@ -732,6 +732,54 @@ export default function App({ uid }: { uid: string }) {
       setCombatMonster({ ...t, currentHP: t.hp }); setTurnCount(0); setEnemyCurrentHP(t.hp); setCombatLog([]); setEngaged(true)
     } else { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) }
   }
+  const performTurn = (isMagic: boolean) => {
+  if (!engaged || !combatMonster) return
+  const current = playerRef.current || player
+  const action = isMagic ? 'cast' : getDefaultAction(current.race)
+  const result = runTurn(current, combatMonster, action, { id: current.pos?.zoneId })
+  
+  setCombatMonster((prev: any) => ({ ...prev, currentHP: result.monsterHp }))
+  setEnemyCurrentHP(result.monsterHp > 0 ? Math.round(result.monsterHp) : null)
+
+  const newPlayer = applyTurnResult(current, result)
+
+  if (result.itemDrop) {
+    const dropped = rollItemDrop(newPlayer.race)
+    if (dropped && newPlayer.inventory.length < 200) {
+      newPlayer.inventory = [...newPlayer.inventory, dropped]
+    }
+  }
+
+  if (result.status === 'VICTORY') {
+    setCombatLog([
+      { text: `You hit ${combatMonster.name} for ${Math.round(result.playerDmg)}!`, color: result.crit ? '#FFD60A' : '#fff' },
+      { text: 'Enemy is DEAD!', color: '#30D158' },
+      { text: `+${result.xpGained} XP  +${result.goldGained} Gold`, color: '#FFD60A' },
+    ])
+    setEngaged(false)
+    setEnemyCurrentHP(null)
+    if (result.leveledUp) showToast(`⬆ Level Up! Level ${result.newLevel}`)
+  } else if (result.status === 'DEFEAT') {
+    setCombatLog([
+      { text: `${combatMonster.name} hit you for ${Math.round(result.monsterDmg)}!`, color: '#FF375F' },
+      { text: 'Chassis Integrity Depleted!', color: '#fbbf24' },
+      { text: '💀 Defeated! Press BATTLE to retry', color: '#94a3b8' },
+    ])
+    setEngaged(false)
+    setEnemyCurrentHP(null)
+  } else {
+    setCombatLog([
+      { text: `You hit ${combatMonster.name} for ${Math.round(result.playerDmg)}!`, color: '#fff' },
+      { text: `${combatMonster.name} hits you for ${Math.round(result.monsterDmg)}!`, color: '#FF375F' },
+    ])
+  }
+
+  calcDerived(newPlayer)
+  playerRef.current = newPlayer
+  setPlayer(newPlayer)
+  savePlayer(newPlayer, result.status === 'VICTORY' ? (result.leveledUp ? 'level-up' : 'kill') : result.status === 'DEFEAT' ? 'death' : 'combat')
+}
+
 
 
   const sendMessage = (e: React.FormEvent) => {
