@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { auth } from '../firebase/index'
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
+import { supabase } from '../supabase'
 
 export default function Login({ onSwitchToSignUp }: { onSwitchToSignUp: () => void }) {
   const [mode, setMode] = useState<'signin' | 'reset'>('signin')
@@ -14,13 +13,19 @@ export default function Login({ onSwitchToSignUp }: { onSwitchToSignUp: () => vo
     setError(''); setMessage(''); setLoading(true)
     try {
       if (mode === 'signin') {
-        await signInWithEmailAndPassword(auth, email, password)
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+        if (signInError) throw signInError
+        // AuthWrapper's onAuthStateChange fires automatically — nothing else needed here
       } else {
-        await sendPasswordResetEmail(auth, email)
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email)
+        if (resetError) throw resetError
         setMessage('Reset email sent — check your inbox.')
       }
     } catch (e: any) {
-      setError(e.message.replace('Firebase: ', '').replace(/\(auth.*\)\.?/, '').trim())
+      const msg = (e.message || 'Sign in failed.')
+        .replace('AuthApiError: ', '')
+        .trim()
+      setError(msg)
     }
     setLoading(false)
   }
