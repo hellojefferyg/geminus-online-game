@@ -175,11 +175,13 @@ function calcDerived(p: any) {
 async function savePlayer(p: any, reason: string = '') {
   if (!p?.uid) return
   try {
+    const token = await auth.currentUser?.getIdToken()
+    if (!token) { console.warn('[savePlayer] No auth token — skipping'); return }
     await fetch('/api/player/save', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
-        uid: p.uid,
+       uid: p.uid,
         xp: p.xp ?? 0,
         gold: p.gold ?? 0,
         level: p.level ?? 1,
@@ -308,7 +310,10 @@ export default function App({ uid }: { uid: string }) {
         }
         // Overlay live stats from Supabase
         try {
-          const res = await fetch(`/api/player?uid=${uid}`)
+          const token = await auth.currentUser?.getIdToken()
+          const res = await fetch(`/api/player?uid=${uid}`, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+          })
           const supa = await res.json()
           if (supa && !supa.error) {
             p.xp = supa.xp ?? 0
@@ -455,8 +460,7 @@ export default function App({ uid }: { uid: string }) {
 
   const spendPoint = (attr: string) => {
     if (!canAllocate) return
-    const current = playerRef.current || player
-    const p = { ...current, baseStats: { ...current.baseStats }, derivedStats: {} }
+    const p = { ...player, baseStats: { ...player.baseStats }, derivedStats: {} }
     const statKeys = ['STR', 'DEX', 'VIT', 'NTL', 'WIS']
     const total = statKeys.reduce((sum, k) => sum + (p.baseStats[k] || 1), 0)
     const baseScale = GDD.AP_PER_LEVEL / total
@@ -466,7 +470,6 @@ export default function App({ uid }: { uid: string }) {
     }
     p.attributePoints -= GDD.AP_PER_LEVEL
     calcDerived(p)
-    playerRef.current = p
     setPlayer(p); savePlayer(p, 'stat-spend')
     showToast(attr + ' upgraded!')
   }
@@ -528,15 +531,14 @@ export default function App({ uid }: { uid: string }) {
         showToast(`⬆ Level Up! Level ${p.level}`); didLevelUp = true
       }
       setCombatLog([
-        ...(newTurn > 1 ? [{ text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' }] : []),
         { text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' },
         { text: 'Enemy is DEAD!', color: '#30D158' },
-        { text: `WIS(1) | NTL(1) | VIT(1) | STR(1) | DEX(1)`, color: '#FF9500' },
+        { text: `+${m.xp} XP  +${m.gold} Gold`, color: '#FFD60A' },
       ])
       setEnemyCurrentHP(null); setEngaged(false)
       calcDerived(p); setPlayer(p)
-      // Save on every kill to ensure level and AP are always persisted
-      savePlayer(p, didLevelUp ? 'level-up' : 'kill')
+      // Save on level-up or every 5 kills
+      if (didLevelUp || sessionKillsRef.current % 5 === 0) savePlayer(p, didLevelUp ? 'level-up' : 'kill-checkpoint')
     } else {
       const monsterDmg = Math.max(1, m.atk - (p.derivedStats.AC * GDD.AC_REDUCTION))
       p.hp -= monsterDmg
@@ -678,7 +680,7 @@ export default function App({ uid }: { uid: string }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>{player.name}:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>Level {player.level}</span></p>
                       <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Race:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.raceName || player.race}</span></p>
-                      <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>A-Spec:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.archetype} · {player.cci}</span></p>
+                      <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>A-Spec:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.archetype} · {races[player.race]?.primaryStat || player.cci}</span></p>
                       <div style={{ paddingTop: '4px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px' }}>
                         {(['DEX', 'STR', 'WIS', 'NTL', 'VIT'] as const).map(stat => (
                           <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
