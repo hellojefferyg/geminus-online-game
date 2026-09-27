@@ -1,41 +1,40 @@
 import { useState } from 'react'
-import { db } from '../firebase/index'
-import { doc, setDoc } from 'firebase/firestore'
+import { supabase } from '../supabase'
 
 const RACES = [
   // True Fighters
-  { key: 'human',      name: 'Human',      archetype: 'True Fighter', color: '#FF375F', cci: 'The Versatile Duelist',       weapons: 'Sword / Sword',   passive: 'DEX → Double Hit%' },
-  { key: 'dragonborn', name: 'Dragonborn', archetype: 'True Fighter', color: '#FF375F', cci: 'The Powerhouse Knight',       weapons: 'Sword / Sword',   passive: 'DEX → Weapon Class' },
-  { key: 'orc',        name: 'Orc',        archetype: 'True Fighter', color: '#FF375F', cci: 'The Definitive Mace Wielder', weapons: 'Mace / Mace',     passive: 'DEX → Weapon Class' },
-  { key: 'werewolf',   name: 'Werewolf',   archetype: 'True Fighter', color: '#FF375F', cci: 'The Definitive Claw Wielder', weapons: 'Claw / Claw',     passive: 'DEX → Double Hit%' },
-  { key: 'minotaur',   name: 'Minotaur',   archetype: 'True Fighter', color: '#FF375F', cci: 'The Definitive Axe Wielder',  weapons: 'Axe / Axe',       passive: 'DEX → Crit Damage%' },
-  { key: 'troll',      name: 'Troll',      archetype: 'True Fighter', color: '#BF5AF2', cci: 'The Definitive Staff Wielder',weapons: 'Staff / Staff',   passive: 'VIT → Weapon Class ⚡' },
-  { key: 'hobbit',     name: 'Hobbit',     archetype: 'True Fighter', color: '#FF375F', cci: 'The Definitive Dagger Wielder',weapons: 'Dagger / Dagger', passive: 'DEX → Crit Damage%' },
-  { key: 'centaur',    name: 'Centaur',    archetype: 'True Fighter', color: '#FF375F', cci: 'The Definitive Ranged Wielder',weapons: 'Bow / Arrow',     passive: 'DEX → Hit Chance%' },
+  { key: 'human',      name: 'Human',      archetype: 'True Fighter',  color: '#FF375F', cci: 'The Versatile Duelist',        weapons: 'Sword / Sword',    passive: 'DEX → Double Hit%' },
+  { key: 'dragonborn', name: 'Dragonborn', archetype: 'True Fighter',  color: '#FF375F', cci: 'The Powerhouse Knight',        weapons: 'Sword / Sword',    passive: 'DEX → Weapon Class' },
+  { key: 'orc',        name: 'Orc',        archetype: 'True Fighter',  color: '#FF375F', cci: 'The Definitive Mace Wielder',  weapons: 'Mace / Mace',      passive: 'DEX → Weapon Class' },
+  { key: 'werewolf',   name: 'Werewolf',   archetype: 'True Fighter',  color: '#FF375F', cci: 'The Definitive Claw Wielder',  weapons: 'Claw / Claw',      passive: 'DEX → Double Hit%' },
+  { key: 'minotaur',   name: 'Minotaur',   archetype: 'True Fighter',  color: '#FF375F', cci: 'The Definitive Axe Wielder',   weapons: 'Axe / Axe',        passive: 'DEX → Crit Damage%' },
+  { key: 'troll',      name: 'Troll',      archetype: 'True Fighter',  color: '#BF5AF2', cci: 'The Definitive Staff Wielder', weapons: 'Staff / Staff',    passive: 'VIT → Weapon Class ⚡' },
+  { key: 'hobbit',     name: 'Hobbit',     archetype: 'True Fighter',  color: '#FF375F', cci: 'The Definitive Dagger Wielder',weapons: 'Dagger / Dagger',  passive: 'DEX → Crit Damage%' },
+  { key: 'centaur',    name: 'Centaur',    archetype: 'True Fighter',  color: '#FF375F', cci: 'The Definitive Ranged Wielder',weapons: 'Bow / Arrow',      passive: 'DEX → Hit Chance%' },
   // True Casters
-  { key: 'phoenix',    name: 'Phoenix',    archetype: 'True Caster',  color: '#0A84FF', cci: 'The Explosive Pyromancer',    weapons: 'Fire / Fire',     passive: 'WIS → Crit Damage%' },
-  { key: 'tiefling',   name: 'Tiefling',   archetype: 'True Caster',  color: '#0A84FF', cci: 'The Infernal Sorcerer',       weapons: 'Fire / Fire',     passive: 'WIS → Spell Class' },
-  { key: 'mermaid',    name: 'Mermaid',    archetype: 'True Caster',  color: '#0A84FF', cci: 'The Definitive Cold Caster',  weapons: 'Cold / Cold',     passive: 'WIS → Spell Class' },
-  { key: 'gnome',      name: 'Gnome',      archetype: 'True Caster',  color: '#0A84FF', cci: 'The Definitive Earth Caster', weapons: 'Earth / Earth',   passive: 'WIS → Spell Crit%' },
-  { key: 'griffin',    name: 'Griffin',    archetype: 'True Caster',  color: '#0A84FF', cci: 'The Definitive Air Caster',   weapons: 'Air / Air',       passive: 'WIS → Spell Class' },
-  { key: 'vampire',    name: 'Vampire',    archetype: 'True Caster',  color: '#BF5AF2', cci: 'The Definitive Drain Caster', weapons: 'Drain / Drain',   passive: 'VIT → Spell Class ⚡' },
-  { key: 'elf',        name: 'Elf',        archetype: 'True Caster',  color: '#0A84FF', cci: 'The Definitive Arcane Caster',weapons: 'Arcane / Arcane', passive: 'WIS → Spell Class' },
-  { key: 'babayaga',   name: 'Baba Yaga',  archetype: 'True Caster',  color: '#0A84FF', cci: 'The Definitive Death Caster', weapons: 'Death / Death',   passive: 'WIS → Spell Class' },
+  { key: 'phoenix',    name: 'Phoenix',    archetype: 'True Caster',   color: '#0A84FF', cci: 'The Explosive Pyromancer',     weapons: 'Fire / Fire',      passive: 'WIS → Crit Damage%' },
+  { key: 'tiefling',   name: 'Tiefling',   archetype: 'True Caster',   color: '#0A84FF', cci: 'The Infernal Sorcerer',        weapons: 'Fire / Fire',      passive: 'WIS → Spell Class' },
+  { key: 'mermaid',    name: 'Mermaid',    archetype: 'True Caster',   color: '#0A84FF', cci: 'The Definitive Cold Caster',   weapons: 'Cold / Cold',      passive: 'WIS → Spell Class' },
+  { key: 'gnome',      name: 'Gnome',      archetype: 'True Caster',   color: '#0A84FF', cci: 'The Definitive Earth Caster',  weapons: 'Earth / Earth',    passive: 'WIS → Spell Crit%' },
+  { key: 'griffin',    name: 'Griffin',    archetype: 'True Caster',   color: '#0A84FF', cci: 'The Definitive Air Caster',    weapons: 'Air / Air',        passive: 'WIS → Spell Class' },
+  { key: 'vampire',    name: 'Vampire',    archetype: 'True Caster',   color: '#BF5AF2', cci: 'The Definitive Drain Caster',  weapons: 'Drain / Drain',    passive: 'VIT → Spell Class ⚡' },
+  { key: 'elf',        name: 'Elf',        archetype: 'True Caster',   color: '#0A84FF', cci: 'The Definitive Arcane Caster', weapons: 'Arcane / Arcane',  passive: 'WIS → Spell Class' },
+  { key: 'babayaga',   name: 'Baba Yaga',  archetype: 'True Caster',   color: '#0A84FF', cci: 'The Definitive Death Caster',  weapons: 'Death / Death',    passive: 'WIS → Spell Class' },
   // Martial Hybrids
-  { key: 'angel',      name: 'Angel',      archetype: 'Martial Hybrid',color: '#FFD60A', cci: 'Celestial Spellblade',       weapons: 'Sword / Arcane',  passive: 'DEX → Spellstrike%' },
-  { key: 'aasimar',    name: 'Aasimar',    archetype: 'Martial Hybrid',color: '#FFD60A', cci: 'Divine Arbiter',             weapons: 'Mace / Arcane',   passive: 'DEX → Spellstrike%' },
-  { key: 'banshee',    name: 'Banshee',    archetype: 'Martial Hybrid',color: '#FFD60A', cci: 'Trickster Rogue',            weapons: 'Dagger / Arcane', passive: 'DEX → Spellstrike%' },
-  { key: 'halfling',   name: 'Halfling',   archetype: 'Martial Hybrid',color: '#FFD60A', cci: 'Mystical Guardian',          weapons: 'Staff / Arcane',  passive: 'DEX → Spellstrike%' },
+  { key: 'angel',      name: 'Angel',      archetype: 'Martial Hybrid',color: '#FFD60A', cci: 'Celestial Spellblade',         weapons: 'Sword / Arcane',   passive: 'DEX → Spellstrike%' },
+  { key: 'aasimar',    name: 'Aasimar',    archetype: 'Martial Hybrid',color: '#FFD60A', cci: 'Divine Arbiter',               weapons: 'Mace / Arcane',    passive: 'DEX → Spellstrike%' },
+  { key: 'banshee',    name: 'Banshee',    archetype: 'Martial Hybrid',color: '#FFD60A', cci: 'Trickster Rogue',              weapons: 'Dagger / Arcane',  passive: 'DEX → Spellstrike%' },
+  { key: 'halfling',   name: 'Halfling',   archetype: 'Martial Hybrid',color: '#FFD60A', cci: 'Mystical Guardian',            weapons: 'Staff / Arcane',   passive: 'DEX → Spellstrike%' },
   // Mystic Hybrids
-  { key: 'dwarf',      name: 'Dwarf',      archetype: 'Mystic Hybrid', color: '#30D158', cci: 'Runic Forgemaster',          weapons: 'Axe / Fire',      passive: 'WIS → Spellstrike%' },
-  { key: 'demon',      name: 'Demon',      archetype: 'Mystic Hybrid', color: '#30D158', cci: 'Hellfire Acolyte',           weapons: 'Staff / Fire',    passive: 'WIS → Spellstrike%' },
-  { key: 'draugr',     name: 'Draugr',     archetype: 'Mystic Hybrid', color: '#30D158', cci: 'Wailing Executioner',        weapons: 'Staff / Death',   passive: 'WIS → Spellstrike%' },
-  { key: 'unicorn',    name: 'Unicorn',    archetype: 'Mystic Hybrid', color: '#30D158', cci: 'Undead Blightknight',        weapons: 'Sword / Death',   passive: 'WIS → Spellstrike%' },
+  { key: 'dwarf',      name: 'Dwarf',      archetype: 'Mystic Hybrid', color: '#30D158', cci: 'Runic Forgemaster',            weapons: 'Axe / Fire',       passive: 'WIS → Spellstrike%' },
+  { key: 'demon',      name: 'Demon',      archetype: 'Mystic Hybrid', color: '#30D158', cci: 'Hellfire Acolyte',             weapons: 'Staff / Fire',     passive: 'WIS → Spellstrike%' },
+  { key: 'draugr',     name: 'Draugr',     archetype: 'Mystic Hybrid', color: '#30D158', cci: 'Wailing Executioner',          weapons: 'Staff / Death',    passive: 'WIS → Spellstrike%' },
+  { key: 'unicorn',    name: 'Unicorn',    archetype: 'Mystic Hybrid', color: '#30D158', cci: 'Undead Blightknight',          weapons: 'Sword / Death',    passive: 'WIS → Spellstrike%' },
 ]
 
 const GROUPS = [
-  { label: 'True Fighters', archetype: 'True Fighter', desc: 'Primary Stat: DEX · Masters of physical combat' },
-  { label: 'True Casters',  archetype: 'True Caster',  desc: 'Primary Stat: WIS · Masters of magical power' },
+  { label: 'True Fighters',   archetype: 'True Fighter',   desc: 'Primary Stat: DEX · Masters of physical combat' },
+  { label: 'True Casters',    archetype: 'True Caster',    desc: 'Primary Stat: WIS · Masters of magical power' },
   { label: 'Martial Hybrids', archetype: 'Martial Hybrid', desc: 'Primary Stat: DEX · Blend weapon and spell' },
   { label: 'Mystic Hybrids',  archetype: 'Mystic Hybrid',  desc: 'Primary Stat: WIS · Blend magic and weapon' },
 ]
@@ -67,7 +66,13 @@ const BASE_STATS: Record<string, any> = {
   unicorn:    { STR: 12, DEX: 10, VIT: 8,  NTL: 12, WIS: 18 },
 }
 
-export default function RaceSelect({ username, userId }: { username: string; userId: string }) {
+interface Props {
+  username: string
+  userId: string
+  onComplete: () => void
+}
+
+export default function RaceSelect({ username, userId, onComplete }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -80,37 +85,36 @@ export default function RaceSelect({ username, userId }: { username: string; use
     setLoading(true); setError('')
     try {
       const stats = BASE_STATS[selected]
-      await setDoc(doc(db, 'players', userId), {
-        name: username,
-        userId,
-        race: selected,
-        raceName: selectedRace.name,
-        archetype: selectedRace.archetype,
-        cci: selectedRace.cci,
-        level: 1,
-        xp: 0,
-        xpToNextLevel: 200,
-        attributePoints: 40,
-        gold: 0,
-        bank: 0,
-        hp: 100 + (stats.VIT * 10),
-        baseStats: stats,
-        currentZone: 'Z01',
-        equipment: {},
-        inventory: [],
-        gems: [],
-        pos: { x: 7, y: 7 },
-        createdAt: new Date().toISOString(),
-        raceSelected: true,
-      })
+      const maxHp = 100 + (stats.VIT * 10)
+
+      // Update the player row with race + stats (row was inserted in SignUp)
+      const { error: updateError } = await supabase
+        .from('players')
+        .update({
+          race:            selected,
+          race_name:       selectedRace.name,
+          archetype:       selectedRace.archetype,
+          cci:             selectedRace.cci,
+          base_stats:      stats,
+          hp:              maxHp,
+          max_hp:          maxHp,
+          attribute_points: 0,  // AP starts at 0; granted on first level-up
+        })
+        .eq('uid', userId)
+
+      if (updateError) throw updateError
+
       setConfirmed(true)
+      // Brief delay so the confirmation screen shows, then transition
+      setTimeout(() => onComplete(), 1400)
     } catch (e: any) {
       setError('Failed to save. Please try again.')
+      console.error('RaceSelect save error:', e)
     }
     setLoading(false)
   }
 
-  if (confirmed) {
+  if (confirmed && selectedRace) {
     return (
       <div style={{
         minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -120,7 +124,9 @@ export default function RaceSelect({ username, userId }: { username: string; use
         <div style={{ textAlign: 'center', padding: '24px' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚔️</div>
           <h2 style={{ color: '#3EE0FF', fontSize: '24px', fontWeight: 800, margin: '0 0 8px' }}>Welcome, {username}</h2>
-          <p style={{ color: '#94a3b8', fontSize: '14px', margin: '0 0 4px' }}>You are a <span style={{ color: selectedRace?.color, fontWeight: 700 }}>{selectedRace?.name}</span></p>
+          <p style={{ color: '#94a3b8', fontSize: '14px', margin: '0 0 4px' }}>
+            You are a <span style={{ color: selectedRace.color, fontWeight: 700 }}>{selectedRace.name}</span>
+          </p>
           <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Entering Geminus...</p>
         </div>
       </div>
@@ -148,19 +154,25 @@ export default function RaceSelect({ username, userId }: { username: string; use
           const groupColor = races[0]?.color || '#fff'
           return (
             <div key={group.archetype} style={{ marginBottom: '28px' }}>
-              {/* Group header */}
               <div style={{ marginBottom: '12px' }}>
                 <h2 style={{ fontSize: '13px', fontWeight: 800, color: groupColor, margin: '0 0 2px', letterSpacing: '0.08em' }}>{group.label}</h2>
                 <p style={{ fontSize: '11px', color: '#64748b', margin: 0 }}>{group.desc}</p>
               </div>
-
-              {/* Race cards */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 {races.map(race => {
                   const isSelected = selected === race.key
+                  // Derive rgb from hex for transparent bg
+                  const colorMap: Record<string, string> = {
+                    '#FF375F': '255,55,95',
+                    '#0A84FF': '10,132,255',
+                    '#FFD60A': '255,214,10',
+                    '#30D158': '48,209,88',
+                    '#BF5AF2': '191,90,242',
+                  }
+                  const rgb = colorMap[race.color] || '62,224,255'
                   return (
                     <div key={race.key} onClick={() => setSelected(race.key)} style={{
-                      background: isSelected ? `rgba(${race.color === '#FF375F' ? '255,55,95' : race.color === '#0A84FF' ? '10,132,255' : race.color === '#FFD60A' ? '255,214,10' : race.color === '#30D158' ? '48,209,88' : '191,90,242'},0.12)` : 'rgba(3,12,20,0.7)',
+                      background: isSelected ? `rgba(${rgb},0.12)` : 'rgba(3,12,20,0.7)',
                       border: `1.5px solid ${isSelected ? race.color : 'rgba(255,255,255,0.08)'}`,
                       borderRadius: '14px',
                       padding: '14px 12px',
@@ -172,7 +184,6 @@ export default function RaceSelect({ username, userId }: { username: string; use
                       {isSelected && (
                         <div style={{ position: 'absolute', top: '8px', right: '8px', width: '16px', height: '16px', borderRadius: '50%', background: race.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#000', fontWeight: 800 }}>✓</div>
                       )}
-                      {/* Archetype badge */}
                       <div style={{ fontSize: '9px', fontWeight: 700, color: race.color, letterSpacing: '0.06em', marginBottom: '5px', opacity: 0.9 }}>
                         {race.archetype === 'True Fighter' ? '⚔ FIGHTER' : race.archetype === 'True Caster' ? '✦ CASTER' : race.archetype === 'Martial Hybrid' ? '⚡ M.HYBRID' : '✦ M.HYBRID'}
                       </div>
