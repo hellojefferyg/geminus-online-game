@@ -2,7 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { auth, db } from './firebase/index'
 import { signOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
+import {
+  spendAttributeBank,
+  canSpendAP as gddCanSpendAP,
+  getBankedLevels,
+  isHybrid,
+} from './gdd'
 
+// ─── RACES (24) — FIX: Vampire primaryStat = VIT ─────────────
 const races: Record<string, any> = {
   human:      { raceName: 'Human',      archetype: 'True Fighter',   primaryStat: 'DEX' },
   dragonborn: { raceName: 'Dragonborn', archetype: 'True Fighter',   primaryStat: 'DEX' },
@@ -17,7 +24,7 @@ const races: Record<string, any> = {
   mermaid:    { raceName: 'Mermaid',    archetype: 'True Caster',    primaryStat: 'WIS' },
   gnome:      { raceName: 'Gnome',      archetype: 'True Caster',    primaryStat: 'WIS' },
   griffin:    { raceName: 'Griffin',    archetype: 'True Caster',    primaryStat: 'WIS' },
-  vampire:    { raceName: 'Vampire',    archetype: 'True Caster',    primaryStat: 'WIS' },
+  vampire:    { raceName: 'Vampire',    archetype: 'True Caster',    primaryStat: 'VIT' }, // FIX: was WIS
   elf:        { raceName: 'Elf',        archetype: 'True Caster',    primaryStat: 'WIS' },
   babayaga:   { raceName: 'Baba Yaga',  archetype: 'True Caster',    primaryStat: 'WIS' },
   angel:      { raceName: 'Angel',      archetype: 'Martial Hybrid', primaryStat: 'DEX' },
@@ -38,16 +45,8 @@ function getAttributeFocusOrder(raceKey: string): string[] {
   return [...allStats.filter(s => s !== rd.primaryStat), rd.primaryStat]
 }
 
-function getLevelBank(level: number): number { return 1 + Math.floor(level / 50) }
-function getBankedLevels(ap: number): number { return Math.floor(ap / GDD.AP_PER_LEVEL) }
-
-// AP earned at level 1 from RaceSelect -- not spendable points
-const INITIAL_AP = GDD.AP_PER_LEVEL // 40 given on character creation
-function canSpendAP(ap: number, level: number): boolean {
-  // Only show spend bar if AP > what was given at creation
-  // i.e. player has actually leveled up and earned new AP
-  return ap > INITIAL_AP || getBankedLevels(ap) > 0 && level > 1
-}
+// FIX: getLevelBank removed — was not in GDD. freeLevels = floor(AP / 40) is all we need.
+function getBankedLevelsLocal(ap: number): number { return Math.floor((ap || 0) / GDD.AP_PER_LEVEL) }
 
 const BESTIARY: Record<string, any> = {
   Z01: {
@@ -89,6 +88,9 @@ const SLOT_MODS: Record<string, any> = {
   Armor: { prop: 1.0, stat: 'AC' }, Helmet: { prop: 0.75, stat: 'AC' },
   Boots: { prop: 0.75, stat: 'AC' }, Leggings: { prop: 0.50, stat: 'AC' },
   Gauntlets: { prop: 0.50, stat: 'AC' },
+  Sword: { prop: 1.0, stat: 'WC' }, Axe: { prop: 1.0, stat: 'WC' },
+  Staff: { prop: 1.0, stat: 'WC' }, Fire: { prop: 1.0, stat: 'SC' },
+  Air: { prop: 1.0, stat: 'SC' }, Death: { prop: 1.0, stat: 'SC' },
 }
 
 const GEMS: Record<string, any> = {
@@ -137,12 +139,14 @@ function fmt(n: number): string {
   return Math.floor(n).toLocaleString()
 }
 
+// ─── CALC DERIVED — FIX: Fighter SC=0, Caster WC=0, Vampire/Troll use VIT ──
 function calcDerived(p: any) {
   if (!p.baseStats) p.baseStats = { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 }
   if (!Array.isArray(p.inventory)) p.inventory = []
   if (!Array.isArray(p.gems)) p.gems = []
   if (!p.equipment || typeof p.equipment !== 'object') p.equipment = {}
-  if (!p.pos || typeof p.pos !== 'object') p.pos = { x: 7, y: 7 }
+  if (!p.pos || typeof p.pos !== 'object') p.pos = { zoneId: 'Z01', x: 7, y: 7 }
+
   const rd = races[p.race] || races.human
   let ac = 0, wc = 0, sc = 0
   for (const slotName in p.equipment) {
@@ -156,32 +160,55 @@ function calcDerived(p: any) {
     if (mod.stat === 'WC') wc += val
     if (mod.stat === 'SC') sc += val
   }
-  const pStat = (p.baseStats[rd.primaryStat]) || 10
-  const vit = (p.baseStats.VIT) || 10
-  const dex = (p.baseStats.DEX) || 10
+
+  const vit = p.baseStats.VIT || 10
+  const dex = p.baseStats.DEX || 10
+  const wis = p.baseStats.WIS || 10
+
+  // FIX: archetype gates per GDD §6.3
+  let WC = 0
+  let SC = 0
+  if (rd.archetype === 'True Fighter') {
+    // Troll scales WC on VIT; all other Fighters on DEX
+    const scaleStat = rd.primaryStat === 'VIT' ? vit : dex
+    WC = Math.max(12, wc * (1 + scaleStat * 0.0055))
+    SC = 0 // True Fighter never gains SC
+  } else if (rd.archetype === 'True Caster') {
+    // Vampire scales SC on VIT; all other Casters on WIS
+    const scaleStat = rd.primaryStat === 'VIT' ? vit : wis
+    SC = Math.max(10, sc * (1 + scaleStat * 0.0055))
+    WC = 0 // True Caster never gains WC
+  } else {
+    // Hybrids: Martial on DEX, Mystic on WIS
+    const focus = rd.archetype === 'Mystic Hybrid' ? wis : dex
+    WC = Math.max(12, wc * (1 + focus * 0.0055))
+    SC = Math.max(10, sc * (1 + focus * 0.0055))
+  }
+
+  // Hit/crit use focus stat per GDD §2
+  const focus = rd.primaryStat === 'VIT' ? vit : rd.archetype === 'True Caster' || rd.archetype === 'Mystic Hybrid' ? wis : dex
+
   p.derivedStats = {
     maxHp: 100 + vit * 10,
     AC: Math.max(10, ac * (1 + vit * 0.0075)),
-    WC: Math.max(12, wc * (1 + pStat * 0.0055)),
-    SC: Math.max(10, sc * (1 + pStat * 0.0055)),
-    hitChance: Math.min(99, 90 + dex * 0.05),
-    critChance: Math.min(60, 5 + dex * 0.01),
+    WC,
+    SC,
+    hitChance: Math.min(99, 90 + focus * 0.05),
+    critChance: Math.min(60, 5 + focus * 0.01),
   }
   if (p.hp === undefined || p.hp === null || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
   return p
 }
 
-// ─── SAVE → SUPABASE ─────────────────────────────────────────
+// ─── SAVE → SUPABASE — FIX: equipment now included ───────────
 async function savePlayer(p: any, reason: string = '') {
   if (!p?.uid) return
   try {
-    const token = await auth.currentUser?.getIdToken()
-    if (!token) { console.warn('[savePlayer] No auth token — skipping'); return }
-    await fetch('/api/player/save', {
+    const res = await fetch('/api/player/save', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-       uid: p.uid,
+        uid: p.uid,
         xp: p.xp ?? 0,
         gold: p.gold ?? 0,
         level: p.level ?? 1,
@@ -189,12 +216,18 @@ async function savePlayer(p: any, reason: string = '') {
         max_hp: p.derivedStats?.maxHp ?? 100,
         attribute_points: p.attributePoints ?? 0,
         base_stats: p.baseStats ?? {},
-        pos: p.pos ?? { zoneId: 'Z01', x: 0, y: 0 },
+        pos: p.pos ?? { zoneId: 'Z01', x: 7, y: 7 },
         inventory: p.inventory ?? [],
+        equipment: p.equipment ?? {}, // FIX: equipment was missing
         gems: p.gems ?? [],
         kills: p.kills ?? 0,
       }),
     })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.error) {
+      console.error('[savePlayer]', reason, res.status, json)
+      return
+    }
     if (reason) console.log(`[save] ${reason}`)
   } catch (e) { console.error('savePlayer failed:', e) }
 }
@@ -265,8 +298,6 @@ export default function App({ uid }: { uid: string }) {
   const [filterState, setFilterState] = useState({ category: 'All', subType: 'All', tier: 'All', quality: 'All', sortBy: 'tier', order: 'desc' })
   const [menuOpen, setMenuOpen] = useState(false)
   const [turnCount, setTurnCount] = useState(0)
-  // Track kills in session for save cadence
-  const sessionKillsRef = useRef(0)
   const smokeRef = useRef<HTMLCanvasElement>(null)
   const miniMapRef = useRef<HTMLCanvasElement>(null)
   const zoneCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -299,21 +330,17 @@ export default function App({ uid }: { uid: string }) {
           raceName: data.raceName || 'Human',
           archetype: data.archetype || 'True Fighter',
           cci: data.cci || 'DEX',
-          // defaults -- will be overwritten by Supabase if row exists
           level: 1, xp: 0, xpToNextLevel: 200,
-          attributePoints: 0, // start at 0, Supabase has real value
+          attributePoints: 0,
           gold: 0, bank: data.bank || 0,
           baseStats: data.baseStats || { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 },
           derivedStats: {}, hp: null,
           inventory: [], equipment: data.equipment || {}, gems: [],
-          pos: data.pos || { x: 7, y: 7 }, kills: 0,
+          pos: data.pos || { zoneId: 'Z01', x: 7, y: 7 }, kills: 0,
         }
         // Overlay live stats from Supabase
         try {
-          const token = await auth.currentUser?.getIdToken()
-          const res = await fetch(`/api/player?uid=${uid}`, {
-            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-          })
+          const res = await fetch(`/api/player?uid=${uid}`)
           const supa = await res.json()
           if (supa && !supa.error) {
             p.xp = supa.xp ?? 0
@@ -325,11 +352,14 @@ export default function App({ uid }: { uid: string }) {
             if (supa.base_stats && Object.keys(supa.base_stats).length > 0) p.baseStats = supa.base_stats
             if (Array.isArray(supa.gems) && supa.gems.length > 0) p.gems = supa.gems
             if (Array.isArray(supa.inventory) && supa.inventory.length > 0) p.inventory = supa.inventory
+            if (supa.equipment && typeof supa.equipment === 'object') p.equipment = supa.equipment
+            if (supa.pos && typeof supa.pos === 'object') p.pos = { zoneId: 'Z01', x: 7, y: 7, ...supa.pos }
           }
         } catch (e) { console.log('Supabase load skipped', e) }
         p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
         calcDerived(p)
         if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
+        playerRef.current = p
         setPlayer(p)
       } catch (err: any) {
         setLoadError(err?.code === 'permission-denied'
@@ -358,7 +388,7 @@ export default function App({ uid }: { uid: string }) {
     localStorage.setItem('g_theme', theme)
   }, [theme])
 
-  // Smoke
+  // Smoke canvas
   useEffect(() => {
     const canvas = smokeRef.current; if (!canvas) return
     const ctx = canvas.getContext('2d')!
@@ -451,33 +481,33 @@ export default function App({ uid }: { uid: string }) {
     signOut(auth).then(() => window.location.reload()).catch(() => window.location.reload())
   }
 
-  // ── FIX: only show stat bar when player has earned NEW AP from leveling up ──
-  // AP starts at 0 from Supabase. RaceSelect gave 40 on creation but that's stored
-  // in Firestore, not Supabase. So if Supabase ap > 0, player has unspent level-up AP.
+  // FIX: canAllocate uses GDD rule — AP >= 40 AND level > 1
   const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL && player.level > 1
 
   const handleColorChange = (color: string) => { setChatNameColor(color); localStorage.setItem('g_name', color) }
 
+  // ── SPEND POINT — FIX: uses spendAttributeBank from gdd.js (racial weights + VIT rule + off-stat swap) ──
   const spendPoint = (attr: string) => {
     if (!canAllocate) return
-    const p = { ...player, baseStats: { ...player.baseStats }, derivedStats: {} }
-    const statKeys = ['STR', 'DEX', 'VIT', 'NTL', 'WIS']
-    const total = statKeys.reduce((sum, k) => sum + (p.baseStats[k] || 1), 0)
-    const baseScale = GDD.AP_PER_LEVEL / total
-    for (const k of statKeys) {
-      const w = p.baseStats[k] || 1
-      p.baseStats[k] = (p.baseStats[k] || 1) + (k === attr ? w * baseScale * 1.5 : w * baseScale * 0.5)
-    }
-    p.attributePoints -= GDD.AP_PER_LEVEL
+    // Always pull fresh state from ref to avoid stale closure
+    const current = playerRef.current || player
+    const p = { ...current, baseStats: { ...current.baseStats } }
+    // FIX: delegate to gdd.js which implements GDD §3 correctly
+    p.baseStats = spendAttributeBank(p.baseStats, p.race, attr)
+    p.attributePoints = (p.attributePoints || 0) - GDD.AP_PER_LEVEL
     calcDerived(p)
-    setPlayer(p); savePlayer(p, 'stat-spend')
+    playerRef.current = p
+    setPlayer(p)
+    savePlayer(p, 'stat-spend')
     showToast(attr + ' upgraded!')
   }
 
   const move = (dx: number, dy: number) => {
     const newX = Math.max(0, Math.min(15, player.pos.x + dx))
     const newY = Math.max(0, Math.min(15, player.pos.y - dy))
-    setPlayer({ ...player, pos: { x: newX, y: newY } })
+    const p = { ...player, pos: { ...player.pos, x: newX, y: newY } }
+    playerRef.current = p
+    setPlayer(p)
   }
 
   const getTargets = () => BESTIARY.Z01.monsters
@@ -490,37 +520,37 @@ export default function App({ uid }: { uid: string }) {
     } else { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) }
   }
 
+  // ── PERFORM TURN — all GDD fixes applied ──────────────────
   const performTurn = (isMagic: boolean) => {
     if (!engaged || !combatMonster) return
-    // ── FIX: always use playerRef.current to avoid stale closure ──
+    // FIX: always use playerRef.current to avoid stale closure
     const current = playerRef.current || player
     const p = { ...current, baseStats: { ...current.baseStats }, derivedStats: { ...current.derivedStats } }
     const m = { ...combatMonster }
-    const classVal = isMagic ? (p.derivedStats.SC || 12) : (p.derivedStats.WC || 15)
+
+    // FIX: use WC for fight, SC for magic — archetype gates enforced by calcDerived
+    const classVal = isMagic ? (p.derivedStats.SC || 10) : (p.derivedStats.WC || 12)
     const playerDmg = (GDD.DAMAGE_CONST * classVal) / Math.max(5, m.def)
     m.currentHP -= playerDmg
     const newTurn = turnCount + 1; setTurnCount(newTurn)
 
     if (m.currentHP <= 0) {
       m.currentHP = 0
-      const bankedLevels = getBankedLevels(p.attributePoints || 0)
-      const maxBank = getLevelBank(p.level)
-      if (bankedLevels >= maxBank) {
-        setCombatLog([{ text: 'Level Bank Full -- spend your free levels!', color: '#FF9500' }, { text: `Bank limit: ${maxBank} at Level ${p.level}`, color: '#94a3b8' }])
-        setEngaged(false); calcDerived(p); setPlayer(p); savePlayer(p, 'bank-full'); return
-      }
+      // FIX: Level Bank removed — not in GDD. Just award XP and AP normally.
       const newStats = { ...battleStats, kills: battleStats.kills + 1, rounds: battleStats.rounds + 1, oneHitKills: battleStats.oneHitKills + (newTurn === 1 ? 1 : 0) }
       setBattleStats(newStats)
       try { localStorage.setItem('geminus_battle_stats', JSON.stringify(newStats)) } catch {}
+
       p.gold += m.gold; p.xp += m.xp
       p.kills = (p.kills || 0) + 1
-      sessionKillsRef.current += 1
+
       setLastItem(m.drop?.name || 'Item'); setLastItemColor(RARITY_COLORS[m.drop?.rarity] || '#8FA8C7')
       if (Math.random() < 0.35) {
         const allGems = Object.entries(GEMS)
         const [gId, gData] = allGems[Math.floor(Math.random() * allGems.length)]
         if (p.gems.length < 200) { p.gems = [...p.gems, { id: gId, grade: 1 }]; setLastGem(`${(gData as any).name} G1`); setLastGemColor(RARITY_COLORS['Rare']) }
       }
+
       let didLevelUp = false
       if (p.xp >= p.xpToNextLevel) {
         p.level++; p.xp -= p.xpToNextLevel
@@ -530,34 +560,48 @@ export default function App({ uid }: { uid: string }) {
         setBattleStats(ls); try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ls)) } catch {}
         showToast(`⬆ Level Up! Level ${p.level}`); didLevelUp = true
       }
+
       setCombatLog([
         { text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' },
         { text: 'Enemy is DEAD!', color: '#30D158' },
         { text: `+${m.xp} XP  +${m.gold} Gold`, color: '#FFD60A' },
       ])
       setEnemyCurrentHP(null); setEngaged(false)
-      calcDerived(p); setPlayer(p)
-      // Save on level-up or every 5 kills
-      if (didLevelUp || sessionKillsRef.current % 5 === 0) savePlayer(p, didLevelUp ? 'level-up' : 'kill-checkpoint')
+      calcDerived(p)
+      playerRef.current = p
+      setPlayer(p)
+      // FIX: save on every kill (not every 5) so gold/XP survive refresh
+      savePlayer(p, didLevelUp ? 'level-up' : 'kill')
     } else {
-      const monsterDmg = Math.max(1, m.atk - (p.derivedStats.AC * GDD.AC_REDUCTION))
+      // FIX: monster damage = (90 × ATK) / (AC × 0.5) — DIVISION not subtraction
+      const monsterDmg = (GDD.DAMAGE_CONST * m.atk) / Math.max(1, p.derivedStats.AC * GDD.AC_REDUCTION)
       p.hp -= monsterDmg
+
       if (p.hp <= 0) {
+        // FIX: death = chassis reset to MaxHP, record death counter, no gold/XP wipe
         p.hp = p.derivedStats.maxHp
         const ns = { ...battleStats, deaths: battleStats.deaths + 1, rounds: battleStats.rounds + 1 }
         setBattleStats(ns); try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ns)) } catch {}
-        setCombatLog([{ text: `${m.name} hit you for ${Math.round(monsterDmg)} dmg!`, color: '#FF375F' }, { text: 'Chassis Integrity Depleted!', color: '#fbbf24' }, { text: '💀 Defeated! Press BATTLE', color: '#94a3b8' }])
-        setEnemyCurrentHP(null); setEngaged(false); calcDerived(p); setPlayer(p); savePlayer(p, 'death')
+        setCombatLog([
+          { text: `${m.name} hit you for ${Math.round(monsterDmg)} dmg!`, color: '#FF375F' },
+          { text: 'Chassis Integrity Depleted!', color: '#fbbf24' },
+          { text: '💀 Defeated! Press BATTLE to retry', color: '#94a3b8' },
+        ])
+        setEnemyCurrentHP(null); setEngaged(false)
+        calcDerived(p)
+        playerRef.current = p
+        setPlayer(p)
+        savePlayer(p, 'death')
       } else {
         setBattleStats(prev => ({ ...prev, rounds: prev.rounds + 1 }))
         setCombatLog([
-          { text: `You attack ${m.name}`, color: '#cbd5e1' },
-          { text: `${m.name} hit you for ${Math.round(monsterDmg)}!`, color: '#FF375F' },
-          ...(newTurn > 1 ? [{ text: `You hit ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' }] : []),
-          { text: `You hit ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' },
+          { text: `You attack ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' },
+          { text: `${m.name} hits you for ${Math.round(monsterDmg)}!`, color: '#FF375F' },
         ])
         setEnemyCurrentHP(Math.max(0, Math.round(m.currentHP))); setCombatMonster(m)
-        calcDerived(p); setPlayer(p)
+        calcDerived(p)
+        playerRef.current = p
+        setPlayer(p)
       }
     }
   }
@@ -640,7 +684,7 @@ export default function App({ uid }: { uid: string }) {
     const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
     const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
     for (const slot in p.equipment) if (p.equipment[slot] === instanceId) p.equipment[slot] = null
-    calcDerived(p); setPlayer(p); savePlayer(p, 'unequip'); showToast(`${base.name} unequipped.`)
+    calcDerived(p); playerRef.current = p; setPlayer(p); savePlayer(p, 'unequip'); showToast(`${base.name} unequipped.`)
   }
 
   const equipItem = (instanceId: string) => {
@@ -650,7 +694,7 @@ export default function App({ uid }: { uid: string }) {
     const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
     const slotMap: Record<string, string> = { Sword: 'Weapon 1', Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves', Leggings: 'Leggings', Boots: 'Boots', Fire: 'Spell 1', Air: 'Spell 2', Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory' }
     const slot = slotMap[base.subType]
-    if (slot) { p.equipment[slot] = instanceId; calcDerived(p); setPlayer(p); savePlayer(p, 'equip'); showToast(`${base.name} equipped to ${slot}.`) }
+    if (slot) { p.equipment[slot] = instanceId; calcDerived(p); playerRef.current = p; setPlayer(p); savePlayer(p, 'equip'); showToast(`${base.name} equipped to ${slot}.`) }
     setEquipPopup(null)
   }
 
@@ -662,7 +706,8 @@ export default function App({ uid }: { uid: string }) {
   }
 
   const hpPct = Math.max(0, Math.min(100, (player.hp / player.derivedStats.maxHp) * 100))
-  const freeLevels = Math.floor((player.attributePoints || 0) / GDD.AP_PER_LEVEL)
+  // FIX: freeLevels = floor(AP / 40) — simple, no Level Bank
+  const freeLevels = getBankedLevelsLocal(player.attributePoints || 0)
   const targets = getTargets()
 
   return (
@@ -719,7 +764,7 @@ export default function App({ uid }: { uid: string }) {
                           <button onClick={handleLogout} style={{ flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase' }}>Logout</button>
                         </div>
                         <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos.x}, {player.pos.y}]</p>
-                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Type:</span> <span style={{ color: '#3EE0FF', fontWeight: 700 }}>XP Zone</span></p>
+                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Type:</span> <span style={{ color: '#3EE0FF', fontWeight: 700 }}>Starter Zone</span></p>
                         <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Gem:</span> <span style={{ color: '#30D158' }}>G1 · 1/250</span></p>
                         <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>Shadow:</span> <span style={{ color: '#52525b' }}>Off</span></p>
                       </div>
@@ -872,7 +917,7 @@ export default function App({ uid }: { uid: string }) {
                           </div>
                           <button className="glass-button" style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px' }} onClick={() => {
                             const val = (document.getElementById('settings-name-input') as HTMLInputElement)?.value?.trim()
-                            if (val) { const p = { ...player, name: val }; setPlayer(p); savePlayer(p, 'name-update'); showToast('Profile callsign updated.') }
+                            if (val) { const p = { ...player, name: val }; playerRef.current = p; setPlayer(p); savePlayer(p, 'name-update'); showToast('Profile callsign updated.') }
                           }}>Update Profile</button>
                           <button onClick={resetSave} style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', background: 'transparent', cursor: 'pointer' }}>Reset Progress & Restore Chassis</button>
                         </div>
@@ -908,8 +953,8 @@ export default function App({ uid }: { uid: string }) {
               {engaged && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', paddingTop: '3px', borderTop: '1px solid rgba(255,255,255,0.12)', height: '40px' }}>
                   <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}>Cast</button>
-                  <button className="combat-tactile-btn" onClick={() => { performTurn(true); setTimeout(() => performTurn(false), 0) }}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>Cast+Fight</button>
+                  <button className="combat-tactile-btn" onClick={() => performTurn(false)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>Spellstrike</button>
                   <button className="combat-tactile-btn combat-fight-slab" onClick={() => performTurn(false)}>Fight</button>
                 </div>
               )}
@@ -925,7 +970,7 @@ export default function App({ uid }: { uid: string }) {
               )}
               {!engaged && combatLog.length === 0 && <div style={{ textAlign: 'center', fontSize: '10px', color: '#475569', paddingTop: '2px' }}>Select target &amp; press BATTLE to fight</div>}
 
-              {/* ── FIX: stat bar only shows when level > 1 and has real AP to spend ── */}
+              {/* Stat spend bar — shows when level > 1 and has unspent AP */}
               {canAllocate && (
                 <div style={{ flexShrink: 0, paddingTop: '6px', borderTop: '1px solid rgba(255,149,0,0.25)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                   <span style={{ fontSize: '10px', color: '#FF9500', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>⬆ Level Up -- Choose Focus</span>
