@@ -1,38 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from './supabase'
-import {
-  spendAttributeBank,
-  canSpendAP as gddCanSpendAP,
-  getBankedLevels,
-  isHybrid,
-} from './gdd'
+import { spendAttributeBank, getBankedLevels } from './gdd'
 import ZONES_DATA from './data/zones.json'
 import STAMPS_DATA from './data/stamps.json'
 import BESTIARY_DATA from './data/bestiary.json'
 import { runTurn, applyTurnResult, getDefaultAction } from './managers/CombatManager'
 import { savePlayerNow } from './lib/saveQueue'
-import ItemIcon from './game/components/ItemIcon'
-import DPad from './game/components/DPad'
-import AccordionItem from './game/components/AccordionItem'
-import NameColorPicker from './game/components/NameColorPicker'
-
+import PlayerHUD from './game/components/PlayerHUD'
+import CombatPanel from './game/components/CombatPanel'
+import CombatConsole from './game/components/CombatConsole'
+import ChatConsole from './game/components/ChatConsole'
+import InlinePanel from './game/components/InlinePanel'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
 const ZONES: Record<string, any> = ZONES_DATA
 const STAMPS: Record<string, any> = STAMPS_DATA
-
-function getZone(zoneId: string) {
-  return ZONES[zoneId] || ZONES['Z01']
-}
-
-function getStamp(zoneId: string) {
-  const zone = getZone(zoneId)
-  return STAMPS[zone.stamp] || STAMPS['starter_7x7']
-}
-
-function getTileService(tile: string): any {
-  return STAMPS._services[tile] || null
-}
+function getZone(zoneId: string) { return ZONES[zoneId] || ZONES['Z01'] }
+function getStamp(zoneId: string) { const zone = getZone(zoneId); return STAMPS[zone.stamp] || STAMPS['starter_7x7'] }
+function getTileService(tile: string): any { return STAMPS._services[tile] || null }
 
 // ─── RACES ────────────────────────────────────────────────────
 const races: Record<string, any> = {
@@ -62,253 +47,148 @@ const races: Record<string, any> = {
   unicorn:    { raceName: 'Unicorn',    archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
 }
 
-const GDD = { XP_BASE: 200, XP_GROWTH: 1.12, AP_PER_LEVEL: 40, DAMAGE_CONST: 90, AC_REDUCTION: 0.5 }
+const GDD = { XP_BASE: 200, XP_GROWTH: 1.12, AP_PER_LEVEL: 40 }
 
 function getAttributeFocusOrder(raceKey: string): string[] {
   const rd = races[raceKey] || races.human
-  const allStats = ['DEX', 'STR', 'NTL', 'WIS', 'VIT']
-  return [...allStats.filter(s => s !== rd.primaryStat), rd.primaryStat]
+  return [...['DEX', 'STR', 'NTL', 'WIS', 'VIT'].filter(s => s !== rd.primaryStat), rd.primaryStat]
 }
+function getBankedLevelsLocal(ap: number): number { return Math.floor((ap || 0) / GDD.AP_PER_LEVEL) }
 
-function getBankedLevelsLocal(ap: number): number {
-  return Math.floor((ap || 0) / GDD.AP_PER_LEVEL)
-}
-
-// ─── ITEMS / GEAR ─────────────────────────────────────────────
+// ─── ITEMS ────────────────────────────────────────────────────
 const BASE_ITEMS = [
-  { id: 'base_helm_1',      name: 'Novice Helm',       type: 'Armor',      subType: 'Helmet',    sockets: 2 },
-  { id: 'base_armor_1',     name: 'Novice Cuirass',    type: 'Armor',      subType: 'Armor',     sockets: 2 },
-  { id: 'base_gauntlets_1', name: 'Novice Gauntlets',  type: 'Armor',      subType: 'Gauntlets', sockets: 2 },
-  { id: 'base_leggings_1',  name: 'Novice Leggings',   type: 'Armor',      subType: 'Leggings',  sockets: 2 },
-  { id: 'base_boots_1',     name: 'Novice Boots',      type: 'Armor',      subType: 'Boots',     sockets: 2 },
-  { id: 'base_amulet_1',    name: 'Novice Pendant',    type: 'Amulet',     subType: 'Amulet',    sockets: 0 },
-  { id: 'base_ring_1',      name: 'Novice Ring',       type: 'Ring',       subType: 'Ring',      sockets: 0 },
-  { id: 'base_sword_1',     name: 'Novice Sword',      type: 'Weapons',    subType: 'Sword',     sockets: 2 },
-  { id: 'base_mace_1',      name: 'Novice Mace',       type: 'Weapons',    subType: 'Mace',      sockets: 2 },
-  { id: 'base_claw_1',      name: 'Novice Claw',       type: 'Weapons',    subType: 'Claw',      sockets: 2 },
-  { id: 'base_axe_1',       name: 'Novice Axe',        type: 'Weapons',    subType: 'Axe',       sockets: 2 },
-  { id: 'base_staff_1',     name: 'Novice Staff',      type: 'Weapons',    subType: 'Staff',     sockets: 2 },
-  { id: 'base_dagger_1',    name: 'Novice Dagger',     type: 'Weapons',    subType: 'Dagger',    sockets: 2 },
-  { id: 'base_bow_1',       name: 'Novice Bow',        type: 'Weapons',    subType: 'Bow',       sockets: 2 },
-  { id: 'base_arrow_1',     name: 'Novice Arrow',      type: 'Weapons',    subType: 'Arrow',     sockets: 0 },
-  { id: 'base_buffspell_1', name: 'Novice Warcry',     type: 'BuffSpells', subType: 'BuffSpell', sockets: 1 },
-  { id: 'base_fire_1',      name: 'Novice Fire Surge', type: 'Spells',     subType: 'Fire',      sockets: 2 },
-  { id: 'base_cold_1',      name: 'Novice Frost Bolt', type: 'Spells',     subType: 'Cold',      sockets: 2 },
-  { id: 'base_earth_1',     name: 'Novice Stone Spike',type: 'Spells',     subType: 'Earth',     sockets: 2 },
-  { id: 'base_air_1',       name: 'Novice Zephyr',     type: 'Spells',     subType: 'Air',       sockets: 2 },
-  { id: 'base_drain_1',     name: 'Novice Drain Touch',type: 'Spells',     subType: 'Drain',     sockets: 2 },
-  { id: 'base_arcane_1',    name: 'Novice Arcane Bolt',type: 'Spells',     subType: 'Arcane',    sockets: 2 },
-  { id: 'base_death_1',     name: 'Novice Death Coil', type: 'Spells',     subType: 'Death',     sockets: 2 },
-  { id: 'base_offhand_1',   name: 'Novice Focus Orb',  type: 'OffHands',   subType: 'OffHand',   sockets: 1 },
+  { id: 'base_helm_1',      name: 'Novice Helm',        type: 'Armor',      subType: 'Helmet',    sockets: 2 },
+  { id: 'base_armor_1',     name: 'Novice Cuirass',     type: 'Armor',      subType: 'Armor',     sockets: 2 },
+  { id: 'base_gauntlets_1', name: 'Novice Gauntlets',   type: 'Armor',      subType: 'Gauntlets', sockets: 2 },
+  { id: 'base_leggings_1',  name: 'Novice Leggings',    type: 'Armor',      subType: 'Leggings',  sockets: 2 },
+  { id: 'base_boots_1',     name: 'Novice Boots',       type: 'Armor',      subType: 'Boots',     sockets: 2 },
+  { id: 'base_amulet_1',    name: 'Novice Pendant',     type: 'Amulet',     subType: 'Amulet',    sockets: 0 },
+  { id: 'base_ring_1',      name: 'Novice Ring',        type: 'Ring',       subType: 'Ring',      sockets: 0 },
+  { id: 'base_sword_1',     name: 'Novice Sword',       type: 'Weapons',    subType: 'Sword',     sockets: 2 },
+  { id: 'base_mace_1',      name: 'Novice Mace',        type: 'Weapons',    subType: 'Mace',      sockets: 2 },
+  { id: 'base_claw_1',      name: 'Novice Claw',        type: 'Weapons',    subType: 'Claw',      sockets: 2 },
+  { id: 'base_axe_1',       name: 'Novice Axe',         type: 'Weapons',    subType: 'Axe',       sockets: 2 },
+  { id: 'base_staff_1',     name: 'Novice Staff',       type: 'Weapons',    subType: 'Staff',     sockets: 2 },
+  { id: 'base_dagger_1',    name: 'Novice Dagger',      type: 'Weapons',    subType: 'Dagger',    sockets: 2 },
+  { id: 'base_bow_1',       name: 'Novice Bow',         type: 'Weapons',    subType: 'Bow',       sockets: 2 },
+  { id: 'base_arrow_1',     name: 'Novice Arrow',       type: 'Weapons',    subType: 'Arrow',     sockets: 0 },
+  { id: 'base_buffspell_1', name: 'Novice Warcry',      type: 'BuffSpells', subType: 'BuffSpell', sockets: 1 },
+  { id: 'base_fire_1',      name: 'Novice Fire Surge',  type: 'Spells',     subType: 'Fire',      sockets: 2 },
+  { id: 'base_cold_1',      name: 'Novice Frost Bolt',  type: 'Spells',     subType: 'Cold',      sockets: 2 },
+  { id: 'base_earth_1',     name: 'Novice Stone Spike', type: 'Spells',     subType: 'Earth',     sockets: 2 },
+  { id: 'base_air_1',       name: 'Novice Zephyr',      type: 'Spells',     subType: 'Air',       sockets: 2 },
+  { id: 'base_drain_1',     name: 'Novice Drain Touch', type: 'Spells',     subType: 'Drain',     sockets: 2 },
+  { id: 'base_arcane_1',    name: 'Novice Arcane Bolt', type: 'Spells',     subType: 'Arcane',    sockets: 2 },
+  { id: 'base_death_1',     name: 'Novice Death Coil',  type: 'Spells',     subType: 'Death',     sockets: 2 },
+  { id: 'base_offhand_1',   name: 'Novice Focus Orb',   type: 'OffHands',   subType: 'OffHand',   sockets: 1 },
 ]
-
 const DROPPER_TIERS = [
   { tier: 1, levelReq: 1,   gold: 50000,  cv: 13.00 },
   { tier: 2, levelReq: 1,   gold: 87500,  cv: 15.86 },
   { tier: 3, levelReq: 100, gold: 153125, cv: 19.35 },
 ]
-
 const SLOT_MODS: Record<string, any> = {
-  Armor:     { prop: 1.00, stat: 'AC' },
-  Helmet:    { prop: 0.75, stat: 'AC' },
-  Boots:     { prop: 0.75, stat: 'AC' },
-  Leggings:  { prop: 0.50, stat: 'AC', hitBonus: 0.10 },
-  Gauntlets: { prop: 0.50, stat: 'AC', classBonus: 0.15 },
-  Weapon: { prop: 1.0, stat: 'WC' }, Sword:  { prop: 1.0, stat: 'WC' },
-  Mace:   { prop: 1.0, stat: 'WC' }, Claw:   { prop: 1.0, stat: 'WC' },
-  Axe:    { prop: 1.0, stat: 'WC' }, Staff:  { prop: 1.0, stat: 'WC' },
-  Dagger: { prop: 1.0, stat: 'WC' }, Bow:    { prop: 1.0, stat: 'WC' },
-  Arrow:  { prop: 0.0, stat: 'WC' }, BuffSpell: { prop: 0.25, stat: 'WC' },
-  Spell:  { prop: 1.0, stat: 'SC' }, Fire:   { prop: 1.0, stat: 'SC' },
-  Cold:   { prop: 1.0, stat: 'SC' }, Earth:  { prop: 1.0, stat: 'SC' },
-  Air:    { prop: 1.0, stat: 'SC' }, Drain:  { prop: 1.0, stat: 'SC' },
-  Arcane: { prop: 1.0, stat: 'SC' }, Death:  { prop: 1.0, stat: 'SC' },
-  OffHand: { prop: 0.25, stat: 'SC' },
-  Amulet: { prop: 0, stat: null }, Ring: { prop: 0, stat: null },
-  Rune:   { prop: 0, stat: null }, Accessory: { prop: 0, stat: null },
+  Armor: { prop: 1.00, stat: 'AC' }, Helmet: { prop: 0.75, stat: 'AC' }, Boots: { prop: 0.75, stat: 'AC' },
+  Leggings: { prop: 0.50, stat: 'AC', hitBonus: 0.10 }, Gauntlets: { prop: 0.50, stat: 'AC', classBonus: 0.15 },
+  Weapon: { prop: 1.0, stat: 'WC' }, Sword: { prop: 1.0, stat: 'WC' }, Mace: { prop: 1.0, stat: 'WC' },
+  Claw: { prop: 1.0, stat: 'WC' }, Axe: { prop: 1.0, stat: 'WC' }, Staff: { prop: 1.0, stat: 'WC' },
+  Dagger: { prop: 1.0, stat: 'WC' }, Bow: { prop: 1.0, stat: 'WC' }, Arrow: { prop: 0.0, stat: 'WC' },
+  BuffSpell: { prop: 0.25, stat: 'WC' }, Spell: { prop: 1.0, stat: 'SC' }, Fire: { prop: 1.0, stat: 'SC' },
+  Cold: { prop: 1.0, stat: 'SC' }, Earth: { prop: 1.0, stat: 'SC' }, Air: { prop: 1.0, stat: 'SC' },
+  Drain: { prop: 1.0, stat: 'SC' }, Arcane: { prop: 1.0, stat: 'SC' }, Death: { prop: 1.0, stat: 'SC' },
+  OffHand: { prop: 0.25, stat: 'SC' }, Amulet: { prop: 0, stat: null }, Ring: { prop: 0, stat: null },
+  Rune: { prop: 0, stat: null }, Accessory: { prop: 0, stat: null },
 }
-
 const RACE_WEAPONS: Record<string, { w1: string; w2: string }> = {
-  human:      { w1: 'base_sword_1',  w2: 'base_sword_1'  },
-  dragonborn: { w1: 'base_sword_1',  w2: 'base_sword_1'  },
-  orc:        { w1: 'base_mace_1',   w2: 'base_mace_1'   },
-  werewolf:   { w1: 'base_claw_1',   w2: 'base_claw_1'   },
-  minotaur:   { w1: 'base_axe_1',    w2: 'base_axe_1'    },
-  troll:      { w1: 'base_staff_1',  w2: 'base_staff_1'  },
-  hobbit:     { w1: 'base_dagger_1', w2: 'base_dagger_1' },
-  centaur:    { w1: 'base_bow_1',    w2: 'base_arrow_1'  },
-  phoenix:    { w1: 'base_fire_1',   w2: 'base_fire_1'   },
-  tiefling:   { w1: 'base_fire_1',   w2: 'base_fire_1'   },
-  mermaid:    { w1: 'base_cold_1',   w2: 'base_cold_1'   },
-  gnome:      { w1: 'base_earth_1',  w2: 'base_earth_1'  },
-  griffin:    { w1: 'base_air_1',    w2: 'base_air_1'    },
-  vampire:    { w1: 'base_drain_1',  w2: 'base_drain_1'  },
-  elf:        { w1: 'base_arcane_1', w2: 'base_arcane_1' },
-  babayaga:   { w1: 'base_death_1',  w2: 'base_death_1'  },
-  angel:      { w1: 'base_sword_1',  w2: 'base_arcane_1' },
-  aasimar:    { w1: 'base_mace_1',   w2: 'base_arcane_1' },
-  banshee:    { w1: 'base_dagger_1', w2: 'base_arcane_1' },
-  halfling:   { w1: 'base_staff_1',  w2: 'base_arcane_1' },
-  dwarf:      { w1: 'base_axe_1',    w2: 'base_fire_1'   },
-  demon:      { w1: 'base_staff_1',  w2: 'base_fire_1'   },
-  draugr:     { w1: 'base_staff_1',  w2: 'base_death_1'  },
-  unicorn:    { w1: 'base_sword_1',  w2: 'base_death_1'  },
+  human: { w1: 'base_sword_1', w2: 'base_sword_1' }, dragonborn: { w1: 'base_sword_1', w2: 'base_sword_1' },
+  orc: { w1: 'base_mace_1', w2: 'base_mace_1' }, werewolf: { w1: 'base_claw_1', w2: 'base_claw_1' },
+  minotaur: { w1: 'base_axe_1', w2: 'base_axe_1' }, troll: { w1: 'base_staff_1', w2: 'base_staff_1' },
+  hobbit: { w1: 'base_dagger_1', w2: 'base_dagger_1' }, centaur: { w1: 'base_bow_1', w2: 'base_arrow_1' },
+  phoenix: { w1: 'base_fire_1', w2: 'base_fire_1' }, tiefling: { w1: 'base_fire_1', w2: 'base_fire_1' },
+  mermaid: { w1: 'base_cold_1', w2: 'base_cold_1' }, gnome: { w1: 'base_earth_1', w2: 'base_earth_1' },
+  griffin: { w1: 'base_air_1', w2: 'base_air_1' }, vampire: { w1: 'base_drain_1', w2: 'base_drain_1' },
+  elf: { w1: 'base_arcane_1', w2: 'base_arcane_1' }, babayaga: { w1: 'base_death_1', w2: 'base_death_1' },
+  angel: { w1: 'base_sword_1', w2: 'base_arcane_1' }, aasimar: { w1: 'base_mace_1', w2: 'base_arcane_1' },
+  banshee: { w1: 'base_dagger_1', w2: 'base_arcane_1' }, halfling: { w1: 'base_staff_1', w2: 'base_arcane_1' },
+  dwarf: { w1: 'base_axe_1', w2: 'base_fire_1' }, demon: { w1: 'base_staff_1', w2: 'base_fire_1' },
+  draugr: { w1: 'base_staff_1', w2: 'base_death_1' }, unicorn: { w1: 'base_sword_1', w2: 'base_death_1' },
 }
-
 const GEMS: Record<string, any> = {
-  warStone:      { name: 'WarStone',      category: 'Fighter', color: 'Red',    effect: 'Increase Base Weapon Class' },
-  mightrite:     { name: 'Mightrite',     category: 'Fighter', color: 'Red',    effect: 'Increase Dexterity' },
-  mightStone:    { name: 'MightStone',    category: 'Fighter', color: 'Red',    effect: 'Increase Strength' },
-  loreStone:     { name: 'LoreStone',     category: 'Caster',  color: 'Blue',   effect: 'Increase Base Spell Class' },
-  mindrite:      { name: 'Mindrite',      category: 'Caster',  color: 'Blue',   effect: 'Increase Wisdom' },
-  mindStone:     { name: 'MindStone',     category: 'Caster',  color: 'Blue',   effect: 'Increase Intelligence' },
-  obsidianHeart: { name: 'Obsidian Heart',category: 'Misc',    color: 'Green',  effect: 'Increase Base Armor Class' },
-  spikeCore:     { name: 'Spike-Core',    category: 'Misc',    color: 'Yellow', effect: 'Increase Critical Hit Chance' },
-  trueCore:      { name: 'True-Core',     category: 'Misc',    color: 'Green',  effect: 'Increase Hit Chance' },
-  vitalCore:     { name: 'Vital-Core',    category: 'Misc',    color: 'Green',  effect: 'Increase Vitality' },
-  treasureCore:  { name: 'Treasure-Core', category: 'Misc',    color: 'Yellow', effect: 'Increase Drop Chance' },
+  warStone: { name: 'WarStone', category: 'Fighter', color: 'Red' },
+  loreStone: { name: 'LoreStone', category: 'Caster', color: 'Blue' },
+  obsidianHeart: { name: 'Obsidian Heart', category: 'Misc', color: 'Green' },
+  spikeCore: { name: 'Spike-Core', category: 'Misc', color: 'Yellow' },
+  trueCore: { name: 'True-Core', category: 'Misc', color: 'Green' },
+  vitalCore: { name: 'Vital-Core', category: 'Misc', color: 'Green' },
 }
-
 const RARITY_COLORS: Record<string, string> = {
-  Common: '#D1D5DB', Uncommon: '#30D158', Rare: '#0A84FF',
-  Epic: '#BF5AF2', Legendary: '#FF9F0A', Mythic: '#FF375F', None: '#8FA8C7',
-}
-
-const EQUIP_SLOTS = [
-  { name: 'Helmet' }, { name: 'Weapon 1' }, { name: 'Gloves' }, { name: 'Weapon 2' },
-  { name: 'Armor' },  { name: 'Spell 1' },  { name: 'Leggings' },{ name: 'Spell 2' },
-  { name: 'Boots' },  { name: 'Accessory' },{ name: 'Amulet' },  { name: 'Ring' },
-]
-
-const INVENTORY_BAGS: Record<string, string[]> = {
-  'Weapon Chest': ['Weapons'],
-  'Bag of Gear':  ['Armor'],
-  'Jewelry Box':  ['Amulet', 'Ring', 'Accessory'],
-  'Spell Satchel':['Spells'],
-}
-
-const CHAT_SUBS: Record<string, [string, string][]> = {
-  main:   [['feed', 'Main Chat'], ['settings', 'Name Color']],
-  sales:  [['chat', 'Sales Chat'], ['auction', 'Auction']],
-  clan:   [['chat', 'Clan Chat'], ['wars', 'Wars'], ['contrib', 'Contributions']],
-  groups: [['g1', ''], ['g2', ''], ['g3', ''], ['g4', '']],
+  Common: '#D1D5DB', Uncommon: '#30D158', Rare: '#0A84FF', Epic: '#BF5AF2', None: '#8FA8C7',
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────
-function fmt(n: number): string {
-  if (!n || isNaN(n)) return '0'
-  const a = Math.abs(n)
-  if (a >= 1e9) return (n / 1e9).toFixed(2) + 'B'
-  if (a >= 1e6) return (n / 1e6).toFixed(2) + 'M'
-  if (a >= 1e3) return (n / 1e3).toFixed(1) + 'K'
-  return Math.floor(n).toLocaleString()
-}
-
 function makeItem(baseItemId: string, tier = 1) {
   return { instanceId: crypto.randomUUID(), baseItemId, tier, type: 'Dropper', socketedGems: [] }
 }
-
 function buildStartingKit(raceKey: string): { inventory: any[]; equipment: Record<string, string> } {
-  const rd = races[raceKey] || races.human
-  const weapons = RACE_WEAPONS[raceKey] || RACE_WEAPONS.human
-  const archetype = rd.archetype
-  const inv: any[] = []
-  const eq: Record<string, string> = {}
-  const add = (baseId: string, slot: string) => { const item = makeItem(baseId); inv.push(item); eq[slot] = item.instanceId; return item }
-  add('base_helm_1', 'Helmet'); add('base_armor_1', 'Armor'); add('base_gauntlets_1', 'Gloves')
-  add('base_leggings_1', 'Leggings'); add('base_boots_1', 'Boots'); add('base_amulet_1', 'Amulet'); add('base_ring_1', 'Ring')
-  if (archetype === 'True Fighter') {
-    add(weapons.w1, 'Weapon 1'); add(weapons.w2, 'Weapon 2')
-    add('base_buffspell_1', 'Spell 1'); add('base_buffspell_1', 'Spell 2')
-  } else if (archetype === 'True Caster') {
-    add(weapons.w1, 'Weapon 1'); add(weapons.w2, 'Weapon 2')
-    add('base_offhand_1', 'Spell 1'); add('base_offhand_1', 'Spell 2')
-  } else {
-    add(weapons.w1, 'Weapon 1'); add(weapons.w1, 'Weapon 2')
-    add(weapons.w2, 'Spell 1'); add(weapons.w2, 'Spell 2')
-  }
+  const rd = races[raceKey] || races.human; const weapons = RACE_WEAPONS[raceKey] || RACE_WEAPONS.human
+  const inv: any[] = []; const eq: Record<string, string> = {}
+  const add = (baseId: string, slot: string) => { const item = makeItem(baseId); inv.push(item); eq[slot] = item.instanceId }
+  add('base_helm_1','Helmet'); add('base_armor_1','Armor'); add('base_gauntlets_1','Gloves')
+  add('base_leggings_1','Leggings'); add('base_boots_1','Boots'); add('base_amulet_1','Amulet'); add('base_ring_1','Ring')
+  if (rd.archetype==='True Fighter') { add(weapons.w1,'Weapon 1'); add(weapons.w2,'Weapon 2'); add('base_buffspell_1','Spell 1'); add('base_buffspell_1','Spell 2') }
+  else if (rd.archetype==='True Caster') { add(weapons.w1,'Weapon 1'); add(weapons.w2,'Weapon 2'); add('base_offhand_1','Spell 1'); add('base_offhand_1','Spell 2') }
+  else { add(weapons.w1,'Weapon 1'); add(weapons.w1,'Weapon 2'); add(weapons.w2,'Spell 1'); add(weapons.w2,'Spell 2') }
   return { inventory: inv, equipment: eq }
 }
-
 function rollItemDrop(raceKey: string): any | null {
   if (Math.random() > 0.40) return null
-  const rd = races[raceKey] || races.human
-  const weapons = RACE_WEAPONS[raceKey] || RACE_WEAPONS.human
-  let pool: string[] = ['base_helm_1', 'base_armor_1', 'base_gauntlets_1', 'base_leggings_1', 'base_boots_1']
-  if (rd.archetype === 'True Fighter') pool.push(weapons.w1, weapons.w2, 'base_buffspell_1')
-  else if (rd.archetype === 'True Caster') pool.push(weapons.w1, 'base_offhand_1')
-  else pool.push(weapons.w1, weapons.w2, 'base_offhand_1')
-  return makeItem(pool[Math.floor(Math.random() * pool.length)])
+  const rd = races[raceKey] || races.human; const weapons = RACE_WEAPONS[raceKey] || RACE_WEAPONS.human
+  let pool = ['base_helm_1','base_armor_1','base_gauntlets_1','base_leggings_1','base_boots_1']
+  if (rd.archetype==='True Fighter') pool.push(weapons.w1,weapons.w2,'base_buffspell_1')
+  else if (rd.archetype==='True Caster') pool.push(weapons.w1,'base_offhand_1')
+  else pool.push(weapons.w1,weapons.w2,'base_offhand_1')
+  return makeItem(pool[Math.floor(Math.random()*pool.length)])
 }
-
 function calcDerived(p: any) {
-  if (!p.baseStats) p.baseStats = { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 }
+  if (!p.baseStats) p.baseStats = { STR:15, DEX:20, VIT:10, NTL:5, WIS:5 }
   if (!Array.isArray(p.inventory)) p.inventory = []
   if (!Array.isArray(p.gems)) p.gems = []
   if (!p.equipment || typeof p.equipment !== 'object') p.equipment = {}
-  if (!p.pos || typeof p.pos !== 'object') p.pos = { zoneId: 'Z01', x: 7, y: 7 }
+  if (!p.pos || typeof p.pos !== 'object') p.pos = { zoneId:'Z01', x:7, y:7 }
   const rd = races[p.race] || races.human
-  let ac = 0, wc = 0, sc = 0
+  let ac=0, wc=0, sc=0
   for (const slotName in p.equipment) {
     const iid = p.equipment[slotName]; if (!iid) continue
-    const item = p.inventory.find((i: any) => i.instanceId === iid); if (!item) continue
-    const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) continue
+    const item = p.inventory.find((i:any) => i.instanceId===iid); if (!item) continue
+    const base = BASE_ITEMS.find(b => b.id===item.baseItemId); if (!base) continue
     const mod = SLOT_MODS[base.subType] || {}
-    const tier = DROPPER_TIERS.find(t => t.tier === item.tier) || DROPPER_TIERS[0]
+    const tier = DROPPER_TIERS.find(t => t.tier===item.tier) || DROPPER_TIERS[0]
     const val = tier.cv * (mod.prop || 0.8)
-    if (mod.stat === 'AC') ac += val
-    if (mod.stat === 'WC') wc += val
-    if (mod.stat === 'SC') sc += val
+    if (mod.stat==='AC') ac+=val; if (mod.stat==='WC') wc+=val; if (mod.stat==='SC') sc+=val
   }
-  const vit = p.baseStats.VIT || 10
-  const dex = p.baseStats.DEX || 10
-  const wis = p.baseStats.WIS || 10
-  let WC = 0, SC = 0
-  if (rd.archetype === 'True Fighter') {
-    WC = Math.max(12, wc * (1 + (rd.primaryStat === 'VIT' ? vit : dex) * 0.0055)); SC = 0
-  } else if (rd.archetype === 'True Caster') {
-    SC = Math.max(10, sc * (1 + (rd.primaryStat === 'VIT' ? vit : wis) * 0.0055)); WC = 0
-  } else {
-    const focus = rd.archetype === 'Mystic Hybrid' ? wis : dex
-    WC = Math.max(12, wc * (1 + focus * 0.0055))
-    SC = Math.max(10, sc * (1 + focus * 0.0055))
-  }
-  const focus = rd.primaryStat === 'VIT' ? vit : (rd.archetype === 'True Caster' || rd.archetype === 'Mystic Hybrid') ? wis : dex
-  p.derivedStats = {
-    maxHp: 100 + vit * 10,
-    AC: Math.max(10, ac * (1 + vit * 0.0075)),
-    WC, SC,
-    hitChance: Math.min(99, 90 + focus * 0.05),
-    critChance: Math.min(60, 5 + focus * 0.01),
-  }
-  if (p.hp === undefined || p.hp === null || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
+  const vit=p.baseStats.VIT||10; const dex=p.baseStats.DEX||10; const wis=p.baseStats.WIS||10
+  let WC=0, SC=0
+  if (rd.archetype==='True Fighter') { WC=Math.max(12,wc*(1+(rd.primaryStat==='VIT'?vit:dex)*0.0055)); SC=0 }
+  else if (rd.archetype==='True Caster') { SC=Math.max(10,sc*(1+(rd.primaryStat==='VIT'?vit:wis)*0.0055)); WC=0 }
+  else { const f=rd.archetype==='Mystic Hybrid'?wis:dex; WC=Math.max(12,wc*(1+f*0.0055)); SC=Math.max(10,sc*(1+f*0.0055)) }
+  const focus = rd.primaryStat==='VIT'?vit:(rd.archetype==='True Caster'||rd.archetype==='Mystic Hybrid')?wis:dex
+  p.derivedStats = { maxHp:100+vit*10, AC:Math.max(10,ac*(1+vit*0.0075)), WC, SC, hitChance:Math.min(99,90+focus*0.05), critChance:Math.min(60,5+focus*0.01) }
+  if (p.hp===undefined||p.hp===null||p.hp>p.derivedStats.maxHp) p.hp=p.derivedStats.maxHp
   return p
-}
-
-// ─── TILE COLORS / TEXT ───────────────────────────────────────
-const TILE_COLORS: Record<string, string> = {
-  '.': '#0d1f2d', 'r': '#1a1a1a', 'E': '#2d3748', 'R': '#14532d', 'B': '#713f12',
-  'S': '#0c4a6e', 'M': '#4a1d96', 'Q': '#7c2d12', 'T': '#7f1d1d', 'G': '#164e63',
-  'F': '#431407', 'C': '#14532d', 'X': '#450a0a',
-}
-const TILE_TEXT: Record<string, string> = {
-  '.': '', 'r': 'r', 'E': 'E', 'R': 'R', 'B': 'B', 'S': 'S',
-  'M': 'M', 'Q': 'Q', 'T': 'T', 'G': 'G', 'F': 'F', 'C': 'C', 'X': 'X',
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────
 export default function App({ uid }: { uid: string }) {
   const [player, setPlayer] = useState<any>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [battleStats, setBattleStats] = useState({ levels: 0, kills: 0, rounds: 0, deaths: 0, oneHitKills: 0 })
+  const [battleStats, setBattleStats] = useState({ levels:0, kills:0, rounds:0, deaths:0, oneHitKills:0 })
   const [theme, setTheme] = useState('aether')
   const [toast, setToast] = useState('')
   const [activeTab, setActiveTab] = useState<string | null>(null)
-  const [battleMode] = useState(false)
   const [engaged, setEngaged] = useState(false)
   const [selectedTargetId, setSelectedTargetId] = useState('E01')
   const [combatMonster, setCombatMonster] = useState<any>(null)
-  const [combatLog, setCombatLog] = useState<{ text: string; color: string }[]>([])
+  const [combatLog, setCombatLog] = useState<{ text:string; color:string }[]>([])
   const [enemyCurrentHP, setEnemyCurrentHP] = useState<number | null>(null)
   const [lastItem, setLastItem] = useState('None')
   const [lastItemColor, setLastItemColor] = useState('#8FA8C7')
@@ -317,27 +197,21 @@ export default function App({ uid }: { uid: string }) {
   const [mapOverlay, setMapOverlay] = useState(false)
   const [chatOverlay, setChatOverlay] = useState(false)
   const [chatChannel, setChatChannel] = useState('main')
-  const [chatSub, setChatSub] = useState<Record<string, string>>({ main: 'feed', sales: 'chat', clan: 'chat', groups: 'g1' })
-  const [chatMessages, setChatMessages] = useState<Record<string, any[]>>({ main: [], sales: [], clan: [], groups: [], g1: [], g2: [], g3: [], g4: [] })
+  const [chatSub, setChatSub] = useState<Record<string,string>>({ main:'feed', sales:'chat', clan:'chat', groups:'g1' })
+  const [chatMessages, setChatMessages] = useState<Record<string,any[]>>({ main:[], sales:[], clan:[], groups:[], g1:[], g2:[], g3:[], g4:[] })
   const [chatInput, setChatInput] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [equipPopup, setEquipPopup] = useState<string | null>(null)
   const [chatNameColor, setChatNameColor] = useState('#3EE0FF')
   const [inboxOpen, setInboxOpen] = useState(false)
-  const [groupNames] = useState<Record<string, string>>({ g1: 'Group-1', g2: 'Group-2', g3: 'Group-3', g4: 'Group-4' })
-  const [filterState, setFilterState] = useState({ category: 'All', subType: 'All', tier: 'All', quality: 'All', sortBy: 'tier', order: 'desc' })
+  const [groupNames] = useState<Record<string,string>>({ g1:'Group-1', g2:'Group-2', g3:'Group-3', g4:'Group-4' })
+  const [filterState, setFilterState] = useState({ category:'All', subType:'All', tier:'All', quality:'All', sortBy:'tier', order:'desc' })
   const [menuOpen, setMenuOpen] = useState(false)
-  const [activeTile, setActiveTile] = useState<{ tile: string; service: any; x: number; y: number } | null>(null)
+  const [activeTile, setActiveTile] = useState<{ tile:string; service:any; x:number; y:number } | null>(null)
   const smokeRef = useRef<HTMLCanvasElement>(null)
-  const miniMapRef = useRef<HTMLCanvasElement>(null)
-  const zoneCanvasRef = useRef<HTMLCanvasElement>(null)
-  const chatScrollRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<any>(null)
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg); setTimeout(() => setToast(''), 2800)
-  }, [])
-
+  const showToast = useCallback((msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2800) }, [])
   useEffect(() => { playerRef.current = player }, [player])
 
   useEffect(() => {
@@ -346,811 +220,301 @@ export default function App({ uid }: { uid: string }) {
     meta.content = '#03080c'
   }, [])
 
-  // ── LOAD ──────────────────────────────────────────────────────
   useEffect(() => {
     const loadPlayer = async () => {
       try {
         const res = await fetch(`/api/player?uid=${uid}`)
         const supa = await res.json()
-        if (!supa || supa.error || !supa.uid) {
-          setLoadError('Character not found. Sign out and create your character.')
-          return
-        }
+        if (!supa || supa.error || !supa.uid) { setLoadError('Character not found. Sign out and create your character.'); return }
         const p: any = {
-          uid,
-          name: supa.name || 'Pilot', race: supa.race || 'human',
-          raceName: supa.race_name || 'Human', archetype: supa.archetype || 'True Fighter',
-          cci: supa.cci || 'DEX', bank: supa.bank || 0,
-          xp: supa.xp ?? 0, gold: supa.gold ?? 0, level: supa.level ?? 1,
-          hp: supa.hp ?? null, attributePoints: supa.attribute_points ?? 0, kills: supa.kills ?? 0,
-          baseStats: (supa.base_stats && Object.keys(supa.base_stats).length > 0) ? supa.base_stats : { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 },
-          gems: Array.isArray(supa.gems) ? supa.gems : [],
-          inventory: Array.isArray(supa.inventory) ? supa.inventory : [],
-          equipment: (supa.equipment && typeof supa.equipment === 'object') ? supa.equipment : {},
-          pos: (supa.pos && typeof supa.pos === 'object') ? { zoneId: 'Z01', x: 7, y: 7, ...supa.pos } : { zoneId: 'Z01', x: 0, y: 6 },
-          derivedStats: {},
+          uid, name:supa.name||'Pilot', race:supa.race||'human', raceName:supa.race_name||'Human',
+          archetype:supa.archetype||'True Fighter', cci:supa.cci||'DEX', bank:supa.bank||0,
+          xp:supa.xp??0, gold:supa.gold??0, level:supa.level??1, hp:supa.hp??null,
+          attributePoints:supa.attribute_points??0, kills:supa.kills??0,
+          baseStats:(supa.base_stats&&Object.keys(supa.base_stats).length>0)?supa.base_stats:{STR:15,DEX:20,VIT:10,NTL:5,WIS:5},
+          gems:Array.isArray(supa.gems)?supa.gems:[],
+          inventory:Array.isArray(supa.inventory)?supa.inventory:[],
+          equipment:(supa.equipment&&typeof supa.equipment==='object')?supa.equipment:{},
+          pos:(supa.pos&&typeof supa.pos==='object')?{zoneId:'Z01',x:7,y:7,...supa.pos}:{zoneId:'Z01',x:0,y:6},
+          derivedStats:{},
         }
         p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
-        if (p.inventory.length === 0) {
-          const kit = buildStartingKit(p.race)
-          p.inventory = kit.inventory; p.equipment = kit.equipment
-          calcDerived(p)
-          if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
-          playerRef.current = p; setPlayer(p); savePlayerNow(p, 'starting-kit'); return
+        if (p.inventory.length===0) {
+          const kit = buildStartingKit(p.race); p.inventory=kit.inventory; p.equipment=kit.equipment
+          calcDerived(p); if (!p.hp||p.hp>p.derivedStats.maxHp) p.hp=p.derivedStats.maxHp
+          playerRef.current=p; setPlayer(p); savePlayerNow(p,'starting-kit'); return
         }
-        calcDerived(p)
-        if (!p.hp || p.hp > p.derivedStats.maxHp) p.hp = p.derivedStats.maxHp
-        playerRef.current = p; setPlayer(p)
-      } catch (err: any) {
-        setLoadError(`Failed to load character: ${err?.message || 'Unknown error'}`)
-      }
+        calcDerived(p); if (!p.hp||p.hp>p.derivedStats.maxHp) p.hp=p.derivedStats.maxHp
+        playerRef.current=p; setPlayer(p)
+      } catch (err:any) { setLoadError(`Failed to load character: ${err?.message||'Unknown error'}`) }
     }
     loadPlayer()
-    const savedTheme = localStorage.getItem('g_theme') || 'aether'
-    setTheme(savedTheme)
-    document.documentElement.classList.toggle('theme-onyx', savedTheme === 'onyx')
-    setChatMessages(prev => ({ ...prev, main: [{ sender: 'System', text: 'Welcome to Geminus. Transmission systems online.', color: '#3EE0FF' }] }))
+    const savedTheme = localStorage.getItem('g_theme')||'aether'
+    setTheme(savedTheme); document.documentElement.classList.toggle('theme-onyx',savedTheme==='onyx')
+    setChatMessages(prev => ({ ...prev, main:[{ sender:'System', text:'Welcome to Geminus. Transmission systems online.', color:'#3EE0FF' }] }))
   }, [uid])
 
   useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'hidden' && playerRef.current) savePlayerNow(playerRef.current, 'tab-hidden')
-    }
+    const handleVisibility = () => { if (document.visibilityState==='hidden'&&playerRef.current) savePlayerNow(playerRef.current,'tab-hidden') }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('theme-onyx', theme === 'onyx')
-    localStorage.setItem('g_theme', theme)
-  }, [theme])
+  useEffect(() => { document.documentElement.classList.toggle('theme-onyx',theme==='onyx'); localStorage.setItem('g_theme',theme) }, [theme])
 
-  // ── SMOKE CANVAS ──────────────────────────────────────────────
   useEffect(() => {
     const canvas = smokeRef.current; if (!canvas) return
     const ctx = canvas.getContext('2d')!
-    canvas.width = window.innerWidth; canvas.height = window.innerHeight
+    canvas.width=window.innerWidth; canvas.height=window.innerHeight
     class Smoke {
-      x: number; y: number; size: number; sx: number; sy: number
-      rot: number; rs: number; type: string; alpha: number; r: number; g: number; b: number
-      constructor(init = false) {
-        this.x = init ? Math.random() * canvas.width : (Math.random() > 0.5 ? -100 : canvas.width + 100)
-        this.y = Math.random() * canvas.height; this.size = Math.random() * 240 + 80
-        this.sx = (Math.random() - 0.5) * 0.45; this.sy = (Math.random() - 0.5) * 0.35
-        this.rot = Math.random() * Math.PI * 2; this.rs = (Math.random() - 0.5) * 0.004
-        const roll = Math.random()
-        if (roll < 0.35) { this.type = 'white'; this.alpha = Math.random() * 0.05 + 0.02; this.r = 240; this.g = 245; this.b = 255 }
-        else if (roll < 0.70) { this.type = 'black'; this.alpha = Math.random() * 0.22 + 0.08; this.r = 0; this.g = 0; this.b = 0 }
-        else { this.type = 'onyx'; this.alpha = Math.random() * 0.18 + 0.06; this.r = 12; this.g = 12; this.b = 16 }
+      x:number; y:number; size:number; sx:number; sy:number; rot:number; rs:number; type:string; alpha:number; r:number; g:number; b:number
+      constructor(init=false) {
+        this.x=init?Math.random()*canvas.width:(Math.random()>0.5?-100:canvas.width+100)
+        this.y=Math.random()*canvas.height; this.size=Math.random()*240+80
+        this.sx=(Math.random()-0.5)*0.45; this.sy=(Math.random()-0.5)*0.35
+        this.rot=Math.random()*Math.PI*2; this.rs=(Math.random()-0.5)*0.004
+        const roll=Math.random()
+        if (roll<0.35) { this.type='white'; this.alpha=Math.random()*0.05+0.02; this.r=240; this.g=245; this.b=255 }
+        else if (roll<0.70) { this.type='black'; this.alpha=Math.random()*0.22+0.08; this.r=0; this.g=0; this.b=0 }
+        else { this.type='onyx'; this.alpha=Math.random()*0.18+0.06; this.r=12; this.g=12; this.b=16 }
       }
       update() {
-        this.x += this.sx; this.y += this.sy; this.rot += this.rs
-        if (this.x < -this.size * 1.5 || this.x > canvas.width + this.size * 1.5 || this.y < -this.size * 1.5 || this.y > canvas.height + this.size * 1.5) Object.assign(this, new Smoke())
+        this.x+=this.sx; this.y+=this.sy; this.rot+=this.rs
+        if (this.x<-this.size*1.5||this.x>canvas.width+this.size*1.5||this.y<-this.size*1.5||this.y>canvas.height+this.size*1.5) Object.assign(this,new Smoke())
       }
       draw() {
-        ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rot)
-        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, this.size)
-        if (this.type === 'black') { g.addColorStop(0, `rgba(0,0,0,${this.alpha * 1.4})`); g.addColorStop(0.5, `rgba(0,0,0,${this.alpha * 0.7})`); g.addColorStop(1, 'rgba(0,0,0,0)') }
-        else if (this.type === 'white') { g.addColorStop(0, `rgba(${this.r},${this.g},${this.b},${this.alpha * 1.2})`); g.addColorStop(0.4, `rgba(200,210,225,${this.alpha * 0.5})`); g.addColorStop(1, 'rgba(255,255,255,0)') }
-        else { g.addColorStop(0, `rgba(${this.r},${this.g},${this.b},${this.alpha * 1.3})`); g.addColorStop(0.5, `rgba(5,5,8,${this.alpha * 0.6})`); g.addColorStop(1, 'rgba(0,0,0,0)') }
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, this.size, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+        ctx.save(); ctx.translate(this.x,this.y); ctx.rotate(this.rot)
+        const g=ctx.createRadialGradient(0,0,0,0,0,this.size)
+        if (this.type==='black') { g.addColorStop(0,`rgba(0,0,0,${this.alpha*1.4})`); g.addColorStop(0.5,`rgba(0,0,0,${this.alpha*0.7})`); g.addColorStop(1,'rgba(0,0,0,0)') }
+        else if (this.type==='white') { g.addColorStop(0,`rgba(${this.r},${this.g},${this.b},${this.alpha*1.2})`); g.addColorStop(0.4,`rgba(200,210,225,${this.alpha*0.5})`); g.addColorStop(1,'rgba(255,255,255,0)') }
+        else { g.addColorStop(0,`rgba(${this.r},${this.g},${this.b},${this.alpha*1.3})`); g.addColorStop(0.5,`rgba(5,5,8,${this.alpha*0.6})`); g.addColorStop(1,'rgba(0,0,0,0)') }
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,this.size,0,Math.PI*2); ctx.fill(); ctx.restore()
       }
     }
-    const particles = Array.from({ length: 40 }, () => new Smoke(true))
-    let id: number
-    const animate = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); particles.forEach(p => { p.update(); p.draw() }); id = requestAnimationFrame(animate) }
+    const particles=Array.from({length:40},()=>new Smoke(true)); let id:number
+    const animate=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); particles.forEach(p=>{p.update();p.draw()}); id=requestAnimationFrame(animate) }
     animate()
-    const onResize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight }
-    window.addEventListener('resize', onResize)
-    return () => { cancelAnimationFrame(id); window.removeEventListener('resize', onResize) }
+    const onResize=()=>{ canvas.width=window.innerWidth; canvas.height=window.innerHeight }
+    window.addEventListener('resize',onResize)
+    return ()=>{ cancelAnimationFrame(id); window.removeEventListener('resize',onResize) }
   }, [])
-
-  // ── MAP DRAWING ───────────────────────────────────────────────
-  function drawZoneMap(canvas: HTMLCanvasElement, zoneId: string, px: number, py: number, cellSize: number, showLabels: boolean) {
-    const ctx = canvas.getContext('2d')!
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
-    ctx.scale(dpr, dpr)
-    const w = canvas.offsetWidth; const h = canvas.offsetHeight
-    ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#03080c'; ctx.fillRect(0, 0, w, h)
-    const stamp = getStamp(zoneId); const size = stamp.size
-    const ox = Math.floor(w / 2 - px * cellSize - cellSize / 2)
-    const oy = Math.floor(h / 2 - py * cellSize - cellSize / 2)
-    ctx.save(); ctx.translate(ox, oy)
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) {
-        const tile = stamp.grid[row]?.[col] ?? '.'
-        const cx = col * cellSize; const cy = row * cellSize
-        const isPlayer = col === px && row === py
-        ctx.fillStyle = TILE_COLORS[tile] || '#0d1f2d'
-        ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2)
-        if (isPlayer) { ctx.fillStyle = 'rgba(62,224,255,0.25)'; ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2) }
-        ctx.strokeStyle = isPlayer ? 'rgba(62,224,255,0.9)' : 'rgba(255,255,255,0.08)'
-        ctx.lineWidth = isPlayer ? 1.5 : 0.5
-        ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1)
-        if (showLabels && tile !== '.') {
-          const svc = STAMPS._services?.[tile]
-          ctx.fillStyle = svc ? svc.color : '#94a3b8'
-          ctx.font = `bold ${Math.floor(cellSize * 0.35)}px monospace`
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-          ctx.fillText(TILE_TEXT[tile] || tile, cx + cellSize / 2, cy + cellSize / 2)
-        }
-        if (isPlayer) {
-          ctx.fillStyle = '#3EE0FF'; ctx.beginPath()
-          ctx.arc(cx + cellSize / 2, cy + cellSize / 2, cellSize * 0.18, 0, Math.PI * 2); ctx.fill()
-        }
-      }
-    }
-    ctx.restore()
-  }
-
-  useEffect(() => {
-    if (!miniMapRef.current || !player) return
-    drawZoneMap(miniMapRef.current, player.pos?.zoneId || 'Z01', player.pos?.x ?? 0, player.pos?.y ?? 0, 18, false)
-  }, [player, activeTab])
-
-  useEffect(() => {
-    if (!zoneCanvasRef.current || !player || !mapOverlay) return
-    drawZoneMap(zoneCanvasRef.current, player.pos?.zoneId || 'Z01', player.pos?.x ?? 0, player.pos?.y ?? 0, 42, true)
-  }, [player, mapOverlay])
-
-  useEffect(() => {
-    if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
-  }, [chatMessages, chatChannel, chatSub])
-
-  // ── LOADING / ERROR ───────────────────────────────────────────
-  if (!player) return (
-    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '24px', background: 'radial-gradient(circle at 50% 8%, #143044 0%, #0a1a26 38%, #03080c 100%)', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif' }}>
-      <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#3EE0FF', letterSpacing: '0.14em', margin: 0, textShadow: '0 0 30px rgba(62,224,255,0.5)' }}>GEMINUS</h1>
-      {loadError ? (
-        <><p style={{ color: '#f87171', fontSize: '13px', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5, margin: 0 }}>{loadError}</p>
-          <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', borderRadius: '10px', background: 'rgba(62,224,255,0.1)', border: '1px solid rgba(62,224,255,0.4)', color: '#3EE0FF', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>Retry</button></>
-      ) : <p style={{ color: '#64748b', fontSize: '12px', letterSpacing: '0.08em', margin: 0 }}>Loading your character...</p>}
-      <button onClick={async () => { try { await supabase.auth.signOut() } catch {} try { localStorage.clear() } catch {} window.location.replace(window.location.origin) }}
-        style={{ marginTop: '8px', background: 'rgba(255,55,95,0.1)', border: '1px solid rgba(255,55,95,0.3)', borderRadius: '8px', color: '#f87171', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: '10px 28px' }}>Sign Out</button>
-    </div>
-  )
 
   // ── HANDLERS ──────────────────────────────────────────────────
   const handleLogout = async () => {
     if (!window.confirm('Log out of Geminus?')) return
-    await savePlayerNow(playerRef.current, 'logout')
-    await supabase.auth.signOut()
-    window.location.reload()
+    await savePlayerNow(playerRef.current,'logout')
+    await supabase.auth.signOut(); window.location.reload()
   }
 
-  const canAllocate = (player.attributePoints || 0) >= GDD.AP_PER_LEVEL && player.level > 1
-  const handleColorChange = (color: string) => { setChatNameColor(color); localStorage.setItem('g_name', color) }
-
   const spendPoint = (attr: string) => {
-    if (!canAllocate) return
-    const current = playerRef.current || player
-    const p = { ...current, baseStats: { ...current.baseStats } }
+    if ((player.attributePoints||0) < GDD.AP_PER_LEVEL || player.level<=1) return
+    const current = playerRef.current||player
+    const p = { ...current, baseStats:{...current.baseStats} }
     p.baseStats = spendAttributeBank(p.baseStats, p.race, attr)
-    p.attributePoints = (p.attributePoints || 0) - GDD.AP_PER_LEVEL
-    calcDerived(p); playerRef.current = p; setPlayer(p)
-    savePlayerNow(p, 'stat-spend'); showToast(attr + ' upgraded!')
+    p.attributePoints = (p.attributePoints||0) - GDD.AP_PER_LEVEL
+    calcDerived(p); playerRef.current=p; setPlayer(p)
+    savePlayerNow(p,'stat-spend'); showToast(attr+' upgraded!')
   }
 
   const move = (dx: number, dy: number) => {
-    const zoneId = player.pos?.zoneId || 'Z01'
-    const stamp = getStamp(zoneId); const size = stamp.size
-    const newX = Math.max(0, Math.min(size - 1, (player.pos?.x ?? 0) + dx))
-    const newY = Math.max(0, Math.min(size - 1, (player.pos?.y ?? 0) + dy))
-    const tile = stamp.grid[newY]?.[newX] ?? '.'
+    const zoneId = player.pos?.zoneId||'Z01'
+    const stamp = getStamp(zoneId); const size=stamp.size
+    const newX = Math.max(0,Math.min(size-1,(player.pos?.x??0)+dx))
+    const newY = Math.max(0,Math.min(size-1,(player.pos?.y??0)+dy))
+    const tile = stamp.grid[newY]?.[newX]??'.'
     const svc = getTileService(tile)
-    const p = { ...player, pos: { ...player.pos, zoneId, x: newX, y: newY } }
-    playerRef.current = p; setPlayer(p)
-    setActiveTile(svc ? { tile, service: svc, x: newX, y: newY } : null)
-    savePlayerNow(p, 'move')
+    const p = { ...player, pos:{...player.pos,zoneId,x:newX,y:newY} }
+    playerRef.current=p; setPlayer(p)
+    setActiveTile(svc ? {tile,service:svc,x:newX,y:newY} : null)
+    savePlayerNow(p,'move')
   }
-
-  const getTargets = () => BESTIARY_DATA.starter
 
   const toggleEngage = () => {
     if (!engaged) {
-      const t = getTargets().find((x: any) => x.id === selectedTargetId) || getTargets()[0]
+      const targets = BESTIARY_DATA.starter
+      const t = targets.find((x:any) => x.id===selectedTargetId)||targets[0]
       if (!t) { showToast('Select target first.'); return }
-      setCombatMonster({ ...t, currentHP: t.hp }); setEnemyCurrentHP(t.hp); setCombatLog([]); setEngaged(true)
+      setCombatMonster({...t,currentHP:t.hp}); setEnemyCurrentHP(t.hp); setCombatLog([]); setEngaged(true)
     } else { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) }
   }
 
   const performTurn = (isMagic: boolean) => {
-    if (!engaged || !combatMonster) return
-    const current = playerRef.current || player
+    if (!engaged||!combatMonster) return
+    const current = playerRef.current||player
     const action = isMagic ? 'cast' : getDefaultAction(current.race)
-    const result = runTurn(current, combatMonster, action, { id: current.pos?.zoneId })
-    setCombatMonster((prev: any) => ({ ...prev, currentHP: result.monsterHp }))
-    setEnemyCurrentHP(result.monsterHp > 0 ? Math.round(result.monsterHp) : null)
-    let newPlayer = applyTurnResult({ ...current, inventory: [...(current.inventory || [])], equipment: { ...(current.equipment || {}) }, gems: [...(current.gems || [])] }, result)
+    const result = runTurn(current, combatMonster, action, {id:current.pos?.zoneId})
+    setCombatMonster((prev:any) => ({...prev,currentHP:result.monsterHp}))
+    setEnemyCurrentHP(result.monsterHp>0 ? Math.round(result.monsterHp) : null)
+    let newPlayer = applyTurnResult({...current,inventory:[...(current.inventory||[])],equipment:{...(current.equipment||{})},gems:[...(current.gems||[])]},result)
     if (result.itemDrop) {
       const dropped = rollItemDrop(newPlayer.race)
-      if (dropped && newPlayer.inventory.length < 200) {
-        newPlayer = { ...newPlayer, inventory: [...newPlayer.inventory, dropped] }
-        const droppedBase = BASE_ITEMS.find(b => b.id === dropped.baseItemId)
-        setLastItem(droppedBase?.name || 'Item'); setLastItemColor(RARITY_COLORS['Uncommon'])
+      if (dropped&&newPlayer.inventory.length<200) {
+        newPlayer = {...newPlayer,inventory:[...newPlayer.inventory,dropped]}
+        const droppedBase = BASE_ITEMS.find(b=>b.id===dropped.baseItemId)
+        setLastItem(droppedBase?.name||'Item'); setLastItemColor(RARITY_COLORS['Uncommon'])
       }
     }
-    if (result.specialDrop?.kind === 'gem') {
-      const gemKeys = Object.keys(GEMS)
-      const gId = gemKeys[Math.floor(Math.random() * gemKeys.length)]
-      if (newPlayer.gems.length < 200) {
-        newPlayer = { ...newPlayer, gems: [...newPlayer.gems, { id: gId, grade: result.specialDrop.grade || 1 }] }
-        setLastGem(`${GEMS[gId]?.name} G${result.specialDrop.grade || 1}`); setLastGemColor(RARITY_COLORS['Rare'])
+    if (result.specialDrop?.kind==='gem') {
+      const gemKeys=Object.keys(GEMS); const gId=gemKeys[Math.floor(Math.random()*gemKeys.length)]
+      if (newPlayer.gems.length<200) {
+        newPlayer={...newPlayer,gems:[...newPlayer.gems,{id:gId,grade:result.specialDrop.grade||1}]}
+        setLastGem(`${GEMS[gId]?.name} G${result.specialDrop.grade||1}`); setLastGemColor(RARITY_COLORS['Rare'])
       }
     }
-    if (result.status === 'VICTORY') {
-      setCombatLog([
-        { text: `You hit ${combatMonster.name} for ${Math.round(result.playerDmg)}!`, color: result.crit ? '#FFD60A' : '#fff' },
-        { text: 'Enemy is DEAD!', color: '#30D158' },
-        { text: `+${result.xpGained} XP  +${result.goldGained} Gold`, color: '#FFD60A' },
-      ])
+    if (result.status==='VICTORY') {
+      setCombatLog([{text:`You hit ${combatMonster.name} for ${Math.round(result.playerDmg)}!`,color:result.crit?'#FFD60A':'#fff'},{text:'Enemy is DEAD!',color:'#30D158'},{text:`+${result.xpGained} XP  +${result.goldGained} Gold`,color:'#FFD60A'}])
       setEngaged(false); setEnemyCurrentHP(null)
-      if (result.leveledUp) { showToast(`⬆ Level Up! Level ${result.newLevel}`); setBattleStats(prev => ({ ...prev, levels: prev.levels + 1 })) }
-      setBattleStats(prev => ({ ...prev, kills: prev.kills + 1 }))
-    } else if (result.status === 'DEFEAT') {
-      setCombatLog([
-        { text: `${combatMonster.name} hit you for ${Math.round(result.monsterDmg)}!`, color: '#FF375F' },
-        { text: 'Chassis Integrity Depleted!', color: '#fbbf24' },
-        { text: '💀 Defeated! Press BATTLE to retry', color: '#94a3b8' },
-      ])
-      setEngaged(false); setEnemyCurrentHP(null)
-      setBattleStats(prev => ({ ...prev, deaths: prev.deaths + 1 }))
+      if (result.leveledUp) { showToast(`⬆ Level Up! Level ${result.newLevel}`); setBattleStats(prev=>({...prev,levels:prev.levels+1})) }
+      setBattleStats(prev=>({...prev,kills:prev.kills+1}))
+    } else if (result.status==='DEFEAT') {
+      setCombatLog([{text:`${combatMonster.name} hit you for ${Math.round(result.monsterDmg)}!`,color:'#FF375F'},{text:'Chassis Integrity Depleted!',color:'#fbbf24'},{text:'💀 Defeated! Press BATTLE to retry',color:'#94a3b8'}])
+      setEngaged(false); setEnemyCurrentHP(null); setBattleStats(prev=>({...prev,deaths:prev.deaths+1}))
     } else {
-      setCombatLog([
-        { text: `You hit ${combatMonster.name} for ${Math.round(result.playerDmg)}!`, color: '#fff' },
-        { text: `${combatMonster.name} hits you for ${Math.round(result.monsterDmg)}!`, color: '#FF375F' },
-      ])
-      setBattleStats(prev => ({ ...prev, rounds: prev.rounds + 1 }))
+      setCombatLog([{text:`You hit ${combatMonster.name} for ${Math.round(result.playerDmg)}!`,color:'#fff'},{text:`${combatMonster.name} hits you for ${Math.round(result.monsterDmg)}!`,color:'#FF375F'}])
+      setBattleStats(prev=>({...prev,rounds:prev.rounds+1}))
     }
-    calcDerived(newPlayer); playerRef.current = newPlayer; setPlayer(newPlayer)
-    savePlayerNow(newPlayer, result.status === 'VICTORY' ? (result.leveledUp ? 'level-up' : 'kill') : result.status === 'DEFEAT' ? 'death' : 'combat')
-  }
-
-  const sendMessage = (e: React.FormEvent) => {
-    e.preventDefault(); if (!chatInput.trim()) return
-    const key = chatChannel === 'groups' ? chatSub[chatChannel] : chatChannel
-    setChatMessages(prev => ({ ...prev, [key]: [...(prev[key] || []).slice(-149), { sender: player.name || 'Pilot', text: chatInput.trim(), color: chatNameColor }] }))
-    setChatInput('')
-  }
-
-  const switchChannel = (ch: string) => { setChatChannel(ch); if (inboxOpen) setInboxOpen(false) }
-  const toggleInbox = () => setInboxOpen(prev => !prev)
-
-  const renderChatContent = () => {
-    const sub = chatSub[chatChannel]
-    if (chatChannel === 'main' && sub === 'settings') return <NameColorPicker nameColor={chatNameColor} onColorChange={handleColorChange} />
-    const key = chatChannel === 'groups' ? sub : chatChannel
-    const msgs = chatMessages[key] || []
-    return msgs.length === 0
-      ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#475569', fontSize: '12px' }}></div>
-      : <>{msgs.map((m: any, i: number) => <div key={i} style={{ margin: '4px 0', fontSize: '12px' }}><span style={{ color: m.color || chatNameColor, fontWeight: 800 }}>{m.sender}:</span>{' '}<span style={{ color: '#fff' }}>{m.text}</span></div>)}</>
-  }
-
-  const renderInventoryBags = () => {
-    const equipped = Object.values(player.equipment).filter(Boolean)
-    const unequipped = player.inventory.filter((i: any) => !equipped.includes(i.instanceId))
-    const { category, subType, tier, quality, sortBy, order } = filterState
-    const filtered = unequipped.filter((item: any) => {
-      const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return false
-      if (category !== 'All' && !INVENTORY_BAGS[category]?.includes(base.type)) return false
-      if (subType !== 'All' && base.subType !== subType) return false
-      if (tier !== 'All' && item.tier.toString() !== tier) return false
-      if (quality !== 'All' && (item.type || 'Dropper') !== quality) return false
-      return true
-    }).sort((a: any, b: any) => {
-      const ba = BASE_ITEMS.find(x => x.id === a.baseItemId); const bb = BASE_ITEMS.find(x => x.id === b.baseItemId)
-      let ca: any = sortBy === 'name' ? (ba?.name || '') : sortBy === 'type' ? (ba?.type || '') : a.tier
-      let cb: any = sortBy === 'name' ? (bb?.name || '') : sortBy === 'type' ? (bb?.type || '') : b.tier
-      if (typeof ca === 'string') return order === 'asc' ? ca.localeCompare(cb) : cb.localeCompare(ca)
-      return order === 'asc' ? ca - cb : cb - ca
-    })
-    return (
-      <>
-        {Object.entries(INVENTORY_BAGS).map(([bagName, types]) => {
-          const bagItems = filtered.filter((item: any) => { const base = BASE_ITEMS.find(b => b.id === item.baseItemId); return base && types.includes(base.type) })
-          return (
-            <AccordionItem key={bagName} title={<span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#fff' }}>📦 {bagName} <span style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'monospace' }}>({bagItems.length})</span></span>}>
-              <div className="inventory-grid">
-                {bagItems.length === 0
-                  ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '16px', color: '#71717a', fontSize: '11px' }}>No items found</div>
-                  : bagItems.map((item: any) => {
-                    const base = BASE_ITEMS.find(b => b.id === item.baseItemId); const gems = item.socketedGems || []
-                    return (
-                      <div key={item.instanceId}>
-                        <div className="inventory-slot" onClick={() => setEquipPopup(prev => prev === item.instanceId ? null : item.instanceId)}>
-                          {gems.length > 0 && <div className="gem-overlays-container">{gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}{gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}</div>}
-                          <div className="item-icon-wrapper"><ItemIcon subType={base?.subType || ''} /></div>
-                          <span className="item-tier-label">T{item.tier}</span>
-                        </div>
-                      </div>
-                    )
-                  })}
-              </div>
-            </AccordionItem>
-          )
-        })}
-        <AccordionItem title={<span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#fff' }}>💎 Gem Pouch <span style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'monospace' }}>({player.gems.length}/200)</span></span>}>
-          <div className="gem-pouch-grid">
-            {player.gems.length === 0
-              ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '16px', color: '#71717a', fontSize: '11px' }}>No gems stored</div>
-              : player.gems.map((g: any, i: number) => { const gd = GEMS[g.id] || { name: 'Gem', color: 'Green' }; return <div key={i} className="gem-item"><span style={{ fontSize: '12px' }}>{gd.color === 'Red' ? '🔴' : gd.color === 'Blue' ? '🔵' : gd.color === 'Yellow' ? '🟡' : '🟢'}</span><span className="item-label">{gd.name.slice(0, 3)}{g.grade}</span></div> })}
-          </div>
-        </AccordionItem>
-      </>
-    )
-  }
-
-  const unequipItem = (instanceId: string) => {
-    if (!instanceId) return
-    const item = player.inventory.find((i: any) => i.instanceId === instanceId); if (!item) return
-    const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
-    const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
-    for (const slot in p.equipment) if (p.equipment[slot] === instanceId) p.equipment[slot] = null
-    calcDerived(p); playerRef.current = p; setPlayer(p); savePlayerNow(p, 'unequip'); showToast(`${base.name} unequipped.`)
+    calcDerived(newPlayer); playerRef.current=newPlayer; setPlayer(newPlayer)
+    savePlayerNow(newPlayer,result.status==='VICTORY'?(result.leveledUp?'level-up':'kill'):result.status==='DEFEAT'?'death':'combat')
   }
 
   const equipItem = (instanceId: string) => {
     if (!instanceId) return
-    const item = player.inventory.find((i: any) => i.instanceId === instanceId); if (!item) return
-    const base = BASE_ITEMS.find(b => b.id === item.baseItemId); if (!base) return
-    const p = { ...player, equipment: { ...player.equipment }, inventory: [...player.inventory] }
-    const subType = base.subType
-    let slot = ''
-    if (['Sword','Mace','Claw','Axe','Staff','Dagger','Bow'].includes(subType)) slot = !p.equipment['Weapon 1'] ? 'Weapon 1' : 'Weapon 2'
-    else if (['Fire','Cold','Earth','Air','Drain','Arcane','Death','OffHand','BuffSpell'].includes(subType)) slot = !p.equipment['Spell 1'] ? 'Spell 1' : 'Spell 2'
-    else if (subType === 'Arrow') slot = 'Weapon 2'
-    else slot = ({ Armor: 'Armor', Helmet: 'Helmet', Gauntlets: 'Gloves', Leggings: 'Leggings', Boots: 'Boots', Amulet: 'Amulet', Ring: 'Ring', Rune: 'Accessory' } as Record<string, string>)[subType] || ''
-    if (slot) { p.equipment[slot] = instanceId; calcDerived(p); playerRef.current = p; setPlayer(p); savePlayerNow(p, 'equip'); showToast(`${base.name} → ${slot}`) }
+    const item=player.inventory.find((i:any)=>i.instanceId===instanceId); if (!item) return
+    const base=BASE_ITEMS.find(b=>b.id===item.baseItemId); if (!base) return
+    const p={...player,equipment:{...player.equipment},inventory:[...player.inventory]}
+    const subType=base.subType; let slot=''
+    if (['Sword','Mace','Claw','Axe','Staff','Dagger','Bow'].includes(subType)) slot=!p.equipment['Weapon 1']?'Weapon 1':'Weapon 2'
+    else if (['Fire','Cold','Earth','Air','Drain','Arcane','Death','OffHand','BuffSpell'].includes(subType)) slot=!p.equipment['Spell 1']?'Spell 1':'Spell 2'
+    else if (subType==='Arrow') slot='Weapon 2'
+    else slot=({Armor:'Armor',Helmet:'Helmet',Gauntlets:'Gloves',Leggings:'Leggings',Boots:'Boots',Amulet:'Amulet',Ring:'Ring',Rune:'Accessory'} as any)[subType]||''
+    if (slot) { p.equipment[slot]=instanceId; calcDerived(p); playerRef.current=p; setPlayer(p); savePlayerNow(p,'equip'); showToast(`${base.name} → ${slot}`) }
     else showToast('No slot found for this item type.')
     setEquipPopup(null)
+  }
+
+  const unequipItem = (instanceId: string) => {
+    if (!instanceId) return
+    const item=player.inventory.find((i:any)=>i.instanceId===instanceId); if (!item) return
+    const base=BASE_ITEMS.find(b=>b.id===item.baseItemId); if (!base) return
+    const p={...player,equipment:{...player.equipment},inventory:[...player.inventory]}
+    for (const slot in p.equipment) if (p.equipment[slot]===instanceId) p.equipment[slot]=null
+    calcDerived(p); playerRef.current=p; setPlayer(p); savePlayerNow(p,'unequip'); showToast(`${base.name} unequipped.`)
   }
 
   const resetSave = () => {
     if (!confirm('Reset all progress? This cannot be undone.')) return
     localStorage.removeItem('geminus_battle_stats')
-    setBattleStats({ levels: 0, kills: 0, rounds: 0, deaths: 0, oneHitKills: 0 })
+    setBattleStats({levels:0,kills:0,rounds:0,deaths:0,oneHitKills:0})
     showToast('Battle stats reset.'); setActiveTab(null)
   }
 
-  const hpPct = Math.max(0, Math.min(100, (player.hp / player.derivedStats.maxHp) * 100))
-  const freeLevels = getBankedLevelsLocal(player.attributePoints || 0)
-  const targets = getTargets()
-  const zoneId = player.pos?.zoneId || 'Z01'
-  const zone = getZone(zoneId)
-  const typeColors: Record<string, string> = { starter: '#3EE0FF', xp: '#30D158', gold: '#FFD60A', shadow: '#BF5AF2', gem: '#5AC8FA', prestige: '#FF9500' }
+  const updateName = (name: string) => {
+    const p={...player,name}; playerRef.current=p; setPlayer(p)
+    savePlayerNow(p,'name-update'); showToast('Profile callsign updated.')
+  }
 
+  const sendMessage = (e: React.FormEvent) => {
+    e.preventDefault(); if (!chatInput.trim()) return
+    const key=chatChannel==='groups'?chatSub[chatChannel]:chatChannel
+    setChatMessages(prev=>({...prev,[key]:[...(prev[key]||[]).slice(-149),{sender:player.name||'Pilot',text:chatInput.trim(),color:chatNameColor}]}))
+    setChatInput('')
+  }
+
+  // ── LOADING SCREEN ────────────────────────────────────────────
+  if (!player) return (
+    <div style={{ minHeight:'100dvh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'16px', padding:'24px', background:'radial-gradient(circle at 50% 8%, #143044 0%, #0a1a26 38%, #03080c 100%)', fontFamily:'-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif' }}>
+      <h1 style={{ fontSize:'28px', fontWeight:900, color:'#3EE0FF', letterSpacing:'0.14em', margin:0, textShadow:'0 0 30px rgba(62,224,255,0.5)' }}>GEMINUS</h1>
+      {loadError
+        ? (<><p style={{ color:'#f87171', fontSize:'13px', textAlign:'center', maxWidth:'320px', lineHeight:1.5, margin:0 }}>{loadError}</p><button onClick={()=>window.location.reload()} style={{ padding:'10px 24px', borderRadius:'10px', background:'rgba(62,224,255,0.1)', border:'1px solid rgba(62,224,255,0.4)', color:'#3EE0FF', fontSize:'13px', fontWeight:700, cursor:'pointer' }}>Retry</button></>)
+        : <p style={{ color:'#64748b', fontSize:'12px', letterSpacing:'0.08em', margin:0 }}>Loading your character...</p>}
+      <button onClick={async()=>{ try{await supabase.auth.signOut()}catch{} try{localStorage.clear()}catch{} window.location.replace(window.location.origin) }}
+        style={{ marginTop:'8px', background:'rgba(255,55,95,0.1)', border:'1px solid rgba(255,55,95,0.3)', borderRadius:'8px', color:'#f87171', fontSize:'13px', fontWeight:700, cursor:'pointer', padding:'10px 28px' }}>Sign Out</button>
+    </div>
+  )
+
+  const canAllocate = (player.attributePoints||0) >= GDD.AP_PER_LEVEL && player.level > 1
+  const freeLevels = getBankedLevelsLocal(player.attributePoints||0)
+  const zoneId = player.pos?.zoneId||'Z01'
+  const zone = getZone(zoneId)
+  const stamp = getStamp(zoneId)
+
+  // ── RENDER ────────────────────────────────────────────────────
   return (
     <>
-      <canvas ref={smokeRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, pointerEvents: 'none', opacity: 0.9 }} />
-      <div style={{ width: '100%', minHeight: '100dvh', maxWidth: '512px', margin: '0 auto', display: 'flex', flexDirection: 'column', background: 'transparent' }}
-        onClick={(e) => { if (equipPopup && !(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null); if (menuOpen && !(e.target as HTMLElement).closest('.menu-container')) setMenuOpen(false) }}>
-        <div style={{ position: 'relative', zIndex: 10, width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', padding: '10px', paddingTop: 'max(10px, env(safe-area-inset-top, 10px))', gap: '10px', paddingBottom: '112px' }}>
+      <canvas ref={smokeRef} style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', zIndex:-1, pointerEvents:'none', opacity:0.9 }} />
+      <div style={{ width:'100%', minHeight:'100dvh', maxWidth:'512px', margin:'0 auto', display:'flex', flexDirection:'column', background:'transparent' }}
+        onClick={(e)=>{ if (equipPopup&&!(e.target as HTMLElement).closest('.inventory-slot')) setEquipPopup(null); if (menuOpen&&!(e.target as HTMLElement).closest('.menu-container')) setMenuOpen(false) }}>
+        <div style={{ position:'relative', zIndex:10, width:'100%', flex:1, display:'flex', flexDirection:'column' }}>
+          <div style={{ width:'100%', flex:1, display:'flex', flexDirection:'column', padding:'10px', paddingTop:'max(10px, env(safe-area-inset-top, 10px))', gap:'10px', paddingBottom:'112px' }}>
 
-            {/* ── HUD ─────────────────────────────────────── */}
+            {/* 1 -- PlayerHUD */}
             {activeTab === null && (
-              <header className="glass-panel" style={{ flexShrink: 0, position: 'relative', zIndex: 30, padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '8px' }}>
-                  <section style={{ flex: 1, minWidth: 0, paddingRight: '4px', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>{player.name}:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>Level {player.level}</span></p>
-                      <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Race:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.raceName || player.race}</span></p>
-                      <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>A-Spec:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.archetype} · {races[player.race]?.primaryStat || player.cci}</span></p>
-                      <div style={{ paddingTop: '4px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px' }}>
-                        {(['DEX', 'STR', 'WIS', 'NTL', 'VIT'] as const).map(stat => (
-                          <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-                            <span style={{ color: '#fff', fontWeight: 700 }}>{stat.charAt(0) + stat.slice(1).toLowerCase()}:</span>
-                            <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{fmt(player.baseStats[stat])}</span>
-                          </div>
-                        ))}
-                        <div style={{ display: 'flex', alignItems: 'center', fontSize: '12px' }}>
-                          <span style={{ color: '#fff', fontWeight: 700, marginRight: '4px' }}>Lvls:</span>
-                          <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{freeLevels} ({player.attributePoints || 0} AP)</span>
-                        </div>
-                      </div>
-                      <div style={{ paddingTop: '4px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Gold:</span><span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.gold)}</span></div>
-                        <div className="info-cell" style={{ padding: '4px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ color: '#FFD60A', fontWeight: 700, fontSize: '11px' }}>Bank:</span><span style={{ color: '#FFD60A', fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>{fmt(player.bank)}</span></div>
-                      </div>
-                      <div className="menu-container" style={{ paddingTop: '4px', position: 'relative' }}>
-                        <button className="battle-mode-btn" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }} onClick={() => setMenuOpen(prev => !prev)}>
-                          <span style={{ fontSize: '13px' }}>≡</span> Menu
-                        </button>
-                        {menuOpen && (
-                          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 100, background: 'rgba(3,12,20,0.97)', border: '1px solid rgba(62,224,255,0.42)', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 28px rgba(0,0,0,0.9)' }}>
-                            {([['stats', 'Player Info'], ['training', 'Training Log'], ['settings', 'Settings'], ['equipment', 'Equipment'], ['inventory', 'Inventory']] as const).map(([tab, label]) => (
-                              <button key={tab} onClick={() => { setActiveTab(tab); setMenuOpen(false) }}
-                                style={{ width: '100%', padding: '10px 14px', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#e8fbff', fontSize: '12px', fontWeight: 600, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(62,224,255,0.1)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                {tab === 'stats' ? '👤' : tab === 'training' ? '📊' : tab === 'settings' ? '⚙️' : tab === 'equipment' ? '🛡️' : '🎒'} {label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                          <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>{zoneId}:</span> <span style={{ color: '#cbd5e1' }}>{zone.name}</span></p>
-                          <button onClick={handleLogout} style={{ flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase' }}>Logout</button>
-                        </div>
-                        <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos?.x ?? 0}, {player.pos?.y ?? 0}] · Tier {zone.gear} · Lv {zone.level?.toLocaleString()}</p>
-                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}>
-                          <span style={{ color: '#fff', fontWeight: 700 }}>Type: </span><span style={{ color: typeColors[zone.type] || '#fff', fontWeight: 700, textTransform: 'capitalize' }}>{zone.type}</span>
-                          <span style={{ color: '#64748b' }}> · </span>
-                          <span style={{ color: '#fff', fontWeight: 700 }}>Gem: </span><span style={{ color: '#30D158' }}>G{zone.gemMin}{zone.gemMin !== zone.gemMax ? `–${zone.gemMax}` : ''} · {zone.gemRate}</span>
-                        </p>
-                        <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}>
-                          <span style={{ color: '#fff', fontWeight: 700 }}>Shadow: </span>
-                          <span style={{ color: zone.shadow === 'off' ? '#52525b' : '#BF5AF2', fontWeight: 700 }}>{zone.shadow === 'off' ? 'Off' : zone.shadow}</span>
-                        </p>
-                        {activeTile && (
-                          <div style={{ marginTop: '4px', padding: '6px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.6)', border: `1px solid ${activeTile.service.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                            <span style={{ fontSize: '11px', color: activeTile.service.color, fontWeight: 700 }}>📍 {activeTile.service.label}</span>
-                            <button onClick={() => showToast(`${activeTile.service.label} -- coming soon!`)} style={{ fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: `${activeTile.service.color}20`, border: `1px solid ${activeTile.service.color}60`, color: activeTile.service.color, cursor: 'pointer' }}>Enter</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </section>
-                  {!battleMode && (
-                    <section style={{ width: '162px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px', paddingRight: '4px' }}>
-                      <div onClick={() => setMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
-                        <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
-                        <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} />
-                      </div>
-                    </section>
-                  )}
-                </div>
-              </header>
+              <PlayerHUD
+                player={player} zone={zone} zoneId={zoneId} stamp={stamp}
+                activeTile={activeTile} menuOpen={menuOpen} mapOverlay={mapOverlay}
+                freeLevels={freeLevels} races={races}
+                onMove={move} onEnter={()=>showToast('Interacting with sector waypoint.')}
+                onLogout={handleLogout} onSetMenuOpen={setMenuOpen} onSetActiveTab={setActiveTab}
+                onSetMapOverlay={setMapOverlay} onTileEnter={()=>showToast(`${activeTile?.service.label} -- coming soon!`)}
+              />
             )}
 
-            {/* ── STATS PANEL ──────────────────────────────── */}
-            {activeTab === null && (
-              <section className="glass-panel" style={{ flexShrink: 0, padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span style={{ color: '#fff', fontWeight: 700 }}>Health:</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '13px', color: '#30D158' }}>{fmt(player.hp)} / {fmt(player.derivedStats.maxHp)}</span>
-                  </div>
-                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '7px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ height: '100%', borderRadius: '9999px', width: `${hpPct}%`, background: '#30D158', boxShadow: '0 0 10px rgba(48,209,88,0.6)', transition: 'width 0.3s' }} />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
-                    <span style={{ color: '#fff', fontWeight: 700 }}>Experience: <span style={{ color: '#cbd5e1', fontFamily: 'monospace', fontWeight: 400 }}>{fmt(player.xp)}</span></span>
-                    <span style={{ color: '#94a3b8', fontWeight: 600 }}>Next Level: <span style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>{fmt(player.xpToNextLevel)}</span></span>
-                  </div>
-                  <div style={{ width: '100%', background: 'rgba(0,0,0,0.8)', borderRadius: '9999px', height: '7px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ height: '100%', borderRadius: '9999px', width: `${Math.max(0, Math.min(100, (player.xp / player.xpToNextLevel) * 100))}%`, background: 'linear-gradient(90deg, #FF6B00, #FF9500)', boxShadow: '0 0 10px rgba(255,149,0,0.6)', transition: 'width 0.3s' }} />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>Last Item: <span style={{ color: lastItemColor, fontWeight: 700 }}>{lastItem}</span> <span style={{ color: '#30D158', fontFamily: 'monospace', fontSize: '11px' }}>{player.inventory.length}/200</span></span>
-                    <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '12px' }}>Level: <span style={{ color: '#fff', fontWeight: 800, fontFamily: 'monospace' }}>{player.level}</span></span>
-                  </div>
-                  <div><span style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>Last Gem: <span style={{ color: lastGemColor, fontWeight: 700 }}>{lastGem}</span> <span style={{ color: '#30D158', fontFamily: 'monospace', fontSize: '11px' }}>{player.gems.length}/200</span></span></div>
-                </div>
-              </section>
-            )}
-
-            {/* ── INLINE PANEL (MENU TABS) ─────────────────── */}
+            {/* 2 -- InlinePanel */}
             {activeTab !== null && (
-              <div className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {(['stats', 'training', 'settings'] as const).map(t => (
-                        <button key={t} className={`hud-nav-pill${activeTab === t ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => setActiveTab(t)}>
-                          {t === 'stats' ? 'Player Info' : t === 'training' ? 'Training Log' : 'Settings'}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {(['equipment', 'inventory'] as const).map(t => (
-                        <button key={t} className={`hud-nav-pill${activeTab === t ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => setActiveTab(t)}>
-                          {t === 'equipment' ? 'Equipment' : 'Inventory'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px', flexShrink: 0 }}>
-                    <button className="pin-btn">📌</button>
-                    <button onClick={() => setActiveTab(null)} style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'black', border: '1px solid rgba(255,255,255,0.2)', color: '#d4d4d8', fontSize: '18px', cursor: 'pointer' }}>×</button>
-                  </div>
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '480px' }}>
-                  {activeTab === 'equipment' && (
-                    <div className="equipment-grid">
-                      {EQUIP_SLOTS.map(slot => {
-                        const instId = player.equipment[slot.name]
-                        const item = player.inventory.find((i: any) => i.instanceId === instId)
-                        const base = item ? BASE_ITEMS.find(b => b.id === item.baseItemId) : null
-                        const gems = item?.socketedGems || []
-                        return (
-                          <div key={slot.name} className="equipment-slot-wrapper">
-                            <div className="equipment-slot-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <span>{slot.name}</span>
-                              {instId && <button onClick={() => unequipItem(instId)} style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', flexShrink: 0 }}>Unequip</button>}
-                            </div>
-                            <div className="equipment-slot-content" style={{ cursor: 'default' }}>
-                              {gems.length > 0 && <div className="gem-overlays-container">{gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}{gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}</div>}
-                              {base ? <><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ItemIcon subType={base.subType} /></div><span className="item-tier-label">T{item.tier}</span></> : <span style={{ fontSize: '11px', color: '#71717a' }}>Empty</span>}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {activeTab === 'inventory' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ paddingBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}><span style={{ fontSize: '11px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Inventory Ledger</span></div>
-                      <AccordionItem title={<div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9M3 12h9m-9 4h6" /></svg><span style={{ fontSize: '12px', fontWeight: 700, color: '#fff' }}>Sort & Filter</span></div>}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                          {[['Category', 'category', ['All', ...Object.keys(INVENTORY_BAGS)]], ['Tier', 'tier', ['All', ...Array.from({ length: 20 }, (_, i) => String(i + 1))]], ['Quality', 'quality', ['All', 'Dropper', 'Shadow', 'Echo']], ['Sort By', 'sortBy', [['tier', 'Tier'], ['name', 'Name'], ['type', 'Type']]]].map(([label, key, opts]: any) => (
-                            <div key={String(key)}>
-                              <label style={{ fontSize: '10.5px', fontWeight: 700, color: '#d4d4d8', display: 'block', marginBottom: '2px' }}>{label}</label>
-                              <select className="editor-input" style={{ width: '100%', fontSize: '12px', padding: '4px 8px' }} value={(filterState as any)[key]} onChange={e => setFilterState(prev => ({ ...prev, [key]: e.target.value }))}>
-                                {opts.map((o: any) => Array.isArray(o) ? <option key={o[0]} value={o[0]}>{o[1]}</option> : <option key={o} value={o}>{o}</option>)}
-                              </select>
-                            </div>
-                          ))}
-                        </div>
-                      </AccordionItem>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>{renderInventoryBags()}</div>
-                    </div>
-                  )}
-                  {activeTab === 'stats' && (
-                    <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                      <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>Combat Attributes</span>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '12px' }}>
-                        {[['Armor Class (AC)', player.derivedStats.AC?.toFixed(1)], ['Weapon Class (WC)', player.derivedStats.WC?.toFixed(1)], ['Spell Class (SC)', player.derivedStats.SC?.toFixed(1)], ['Hit Probability', `${player.derivedStats.hitChance?.toFixed(1)}%`], ['Critical Chance', `${player.derivedStats.critChance?.toFixed(1)}%`], ['Max Health', Math.round(player.derivedStats.maxHp)]].map(([k, v]) => (
-                          <div key={String(k)} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                            <span style={{ color: '#9ca3af' }}>{k}</span><span style={{ color: '#fff', fontWeight: 700, fontFamily: 'monospace' }}>{v}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {activeTab === 'training' && (
-                    <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)', fontSize: '12px' }}>
-                      <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', textDecoration: 'underline', textUnderlineOffset: '4px', marginBottom: '12px' }}>Battle Statistics</h3>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontFamily: 'monospace', fontSize: '12.5px' }}>
-                        <div><span style={{ fontWeight: 700, color: '#fff', fontFamily: 'sans-serif' }}>Levels: </span><span style={{ background: 'black', padding: '1px 4px', borderRadius: '4px', border: '1px solid #262626', color: '#fff', fontWeight: 700 }}>{fmt(battleStats.levels)}</span></div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                          {[['Kills', battleStats.kills], ['Rounds', battleStats.rounds], ['Deaths', battleStats.deaths], ['1 Hit Kill %', battleStats.kills > 0 ? `${Math.round(battleStats.oneHitKills / battleStats.kills * 100)}%` : '0%']].map(([k, v]) => (
-                            <div key={String(k)}><span style={{ fontWeight: 700, color: '#fff', fontFamily: 'sans-serif' }}>{k}: </span><span style={{ background: 'black', padding: '1px 4px', borderRadius: '4px', border: '1px solid #262626', color: '#fff', fontWeight: 700 }}>{typeof v === 'number' ? fmt(v) : v}</span></div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {activeTab === 'settings' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
-                      <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                        <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '8px' }}>Pilot Profile</span>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                            <span style={{ color: '#d4d4d8' }}>Pilot Callsign</span>
-                            <input className="editor-input" id="settings-name-input" defaultValue={player.name} style={{ width: '144px', padding: '4px 8px', fontSize: '12px' }} />
-                          </div>
-                          <button className="glass-button" style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px' }} onClick={() => {
-                            const val = (document.getElementById('settings-name-input') as HTMLInputElement)?.value?.trim()
-                            if (val) { const p = { ...player, name: val }; playerRef.current = p; setPlayer(p); savePlayerNow(p, 'name-update'); showToast('Profile callsign updated.') }
-                          }}>Update Profile</button>
-                          <button onClick={resetSave} style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', background: 'transparent', cursor: 'pointer' }}>Reset Progress & Restore Chassis</button>
-                        </div>
-                      </div>
-                      <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                        <span style={{ fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '8px' }}>Display</span>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                          <div><div style={{ color: '#e4e4e7' }}>Dark Mode</div><div style={{ fontSize: '10px', color: '#71717a' }}>Onyx black HUD -- no cyan glass</div></div>
-                          <button className="footer-tab-button" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => { const next = theme === 'onyx' ? 'aether' : 'onyx'; setTheme(next); showToast(next === 'onyx' ? 'Dark Mode on -- Onyx HUD' : 'Aether glass restored') }}>{theme === 'onyx' ? 'On' : 'Off'}</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <InlinePanel
+                activeTab={activeTab} player={player} battleStats={battleStats}
+                filterState={filterState} equipPopup={equipPopup} theme={theme}
+                BASE_ITEMS={BASE_ITEMS} DROPPER_TIERS={DROPPER_TIERS} SLOT_MODS={SLOT_MODS}
+                onSetActiveTab={setActiveTab} onSetFilterState={setFilterState}
+                onSetEquipPopup={setEquipPopup} onEquipItem={equipItem} onUnequipItem={unequipItem}
+                onResetSave={resetSave} onUpdateName={updateName}
+                onToggleTheme={()=>{ const next=theme==='onyx'?'aether':'onyx'; setTheme(next); showToast(next==='onyx'?'Dark Mode on -- Onyx HUD':'Aether glass restored') }}
+              />
             )}
 
-            {/* ── COMBAT CONSOLE ───────────────────────────── */}
-            <section className="glass-panel" style={{ flexShrink: 0, padding: '10px', display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative', zIndex: 20 }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <div style={{ flexShrink: 0, padding: '6px 12px', borderRadius: '12px', background: 'rgba(0,0,0,0.9)', border: '1px solid rgba(255,255,255,0.2)', fontSize: '12px', fontWeight: 600, color: '#fff' }}>Monsters</div>
-                <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                  <select className="editor-input" value={selectedTargetId} onChange={e => { setSelectedTargetId(e.target.value); if (engaged) { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) } }}
-                    style={{ width: '100%', paddingTop: '6px', paddingBottom: '6px', paddingRight: '28px', fontSize: '12px', background: 'rgba(0,0,0,0.9)', borderColor: 'rgba(255,255,255,0.2)', appearance: 'none' }}>
-                    {targets.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                  <div style={{ pointerEvents: 'none', position: 'absolute', top: 0, right: '8px', bottom: 0, display: 'flex', alignItems: 'center' }}>
-                    <svg style={{ width: 14, height: 14 }} fill="none" stroke="#9ca3af" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                  </div>
-                </div>
-                <button className={`combat-engage-btn${engaged ? ' active' : ''}`} onClick={toggleEngage}>{engaged ? 'DISENGAGE' : 'BATTLE'}</button>
-              </div>
-              {engaged && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', paddingTop: '3px', borderTop: '1px solid rgba(255,255,255,0.12)', height: '40px' }}>
-                  <button className="combat-tactile-btn combat-cast-slab" onClick={() => performTurn(true)}>Cast</button>
-                  <button className="combat-tactile-btn" onClick={() => performTurn(false)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, borderRadius: '0.65rem', border: '1.5px solid rgba(191,90,242,0.8)', background: 'linear-gradient(180deg, #7B2FBE 0%, #4A1280 100%)', color: '#f3e8ff', boxShadow: '0 0 16px rgba(191,90,242,0.5), inset 0 1px 1px rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.02em' }}>Spellstrike</button>
-                  <button className="combat-tactile-btn combat-fight-slab" onClick={() => performTurn(false)}>Fight</button>
-                </div>
-              )}
-              {engaged && enemyCurrentHP !== null && (
-                <div style={{ textAlign: 'center', paddingTop: '2px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#FF375F' }}>Enemies Health: {enemyCurrentHP}/{combatMonster?.hp ?? 0}</span>
-                </div>
-              )}
-              {combatLog.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '2px', paddingTop: '2px' }}>
-                  {combatLog.map((line, i) => <div key={i} style={{ fontSize: '11px', lineHeight: 1.4, fontWeight: i === combatLog.length - 1 ? 700 : 500, color: line.color }}>{line.text}</div>)}
-                </div>
-              )}
-              {!engaged && combatLog.length === 0 && <div style={{ textAlign: 'center', fontSize: '10px', color: '#475569', paddingTop: '2px' }}>Select target &amp; press BATTLE to fight</div>}
-              {canAllocate && (
-                <div style={{ flexShrink: 0, paddingTop: '6px', borderTop: '1px solid rgba(255,149,0,0.25)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ fontSize: '10px', color: '#FF9500', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>⬆ Level Up -- Choose Focus</span>
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'center', gap: '2px' }}>
-                    {getAttributeFocusOrder(player.race).map((stat, idx, arr) => (
-                      <span key={stat} style={{ display: 'flex', alignItems: 'center' }}>
-                        <button onClick={() => spendPoint(stat)} style={{ background: 'rgba(255,149,0,0.15)', border: '1.5px solid rgba(255,149,0,0.7)', borderRadius: '8px', cursor: 'pointer', padding: '6px 8px', color: '#FF9500', fontSize: '11.5px', fontWeight: 800, fontFamily: 'monospace', WebkitTapHighlightColor: 'rgba(255,149,0,0.3)', touchAction: 'manipulation', minWidth: '44px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none' }}>
-                          {stat}({freeLevels})
-                        </button>
-                        {idx < arr.length - 1 && <span style={{ color: '#FF9500', fontSize: '10px', opacity: 0.4, marginLeft: '2px', marginRight: '2px' }}>|</span>}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
+            {/* 3 -- CombatPanel */}
+            {activeTab === null && (
+              <CombatPanel
+                hp={player.hp} maxHp={player.derivedStats.maxHp}
+                xp={player.xp} xpToNextLevel={player.xpToNextLevel} level={player.level}
+                lastItem={lastItem} lastItemColor={lastItemColor}
+                lastGem={lastGem} lastGemColor={lastGemColor}
+                inventoryCount={player.inventory.length} gemCount={player.gems.length}
+              />
+            )}
 
-            {/* ── CHAT CONSOLE ─────────────────────────────── */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '240px' }}>
-              <div className="glass-panel" style={{ width: '100%', padding: '10px', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                    <button className={`chat-expand-btn inbox-btn${inboxOpen ? ' active' : ''}`} onClick={toggleInbox}>💬</button>
-                    {['main', 'sales', 'clan', 'groups'].map(ch => (
-                      <button key={ch} className={`footer-tab-button${chatChannel === ch ? ' active' : ''}`} style={{ flex: 1 }} onClick={() => switchChannel(ch)}>{ch.charAt(0).toUpperCase() + ch.slice(1)}</button>
-                    ))}
-                  </div>
-                  <button className="chat-expand-btn" style={{ marginLeft: '4px' }} onClick={() => setChatOverlay(true)}>
-                    <svg style={{ width: 16, height: 16 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
-                  </button>
-                </div>
-                {!inboxOpen && (
-                  <div className="sub-bar" style={{ flexShrink: 0, marginBottom: '8px' }}>
-                    {(CHAT_SUBS[chatChannel] || []).map(([id, label]) => {
-                      const name = chatChannel === 'groups' ? groupNames[id] || id : label
-                      return <button key={id} className={`sub-btn${chatSub[chatChannel] === id ? ' active' : ''}`} onClick={() => setChatSub(prev => ({ ...prev, [chatChannel]: id }))}><span>{name}</span></button>
-                    })}
-                  </div>
-                )}
-                {inboxOpen ? (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid rgba(62,224,255,0.3)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(0,0,0,0.3)' }}>
-                      <div style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 600, borderBottom: '1px solid rgba(62,224,255,0.25)' }}>💬 Private Messages:</div>
-                      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px', fontSize: '12px', color: '#94a3b8' }}>No private messages</div>
-                    </div>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid rgba(62,224,255,0.3)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(0,0,0,0.3)' }}>
-                      <div style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 600, borderBottom: '1px solid rgba(62,224,255,0.25)' }}>🤖 Discord Messages:</div>
-                      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px', fontSize: '12px', color: '#94a3b8' }}>Link a Discord account to message players from in-game</div>
-                    </div>
-                  </div>
-                ) : (
-                  <div ref={chatScrollRef} style={{ fontSize: '12px', flex: 1, overflowY: 'auto', minHeight: '140px', padding: '4px' }}>{renderChatContent()}</div>
-                )}
-                {!inboxOpen && (
-                  <form onSubmit={sendMessage} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                    <button type="button" className="icon-btn" onClick={() => setEmojiOpen(prev => !prev)}>😀</button>
-                    <input type="text" className="editor-input" value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Type To Chat…" style={{ flex: 1, padding: '8px', fontSize: '12px' }} />
-                    <button type="submit" className="footer-tab-button" style={{ padding: '8px 16px', fontWeight: 600 }}>Send</button>
-                  </form>
-                )}
-              </div>
-            </div>
+            {/* 4 -- CombatConsole */}
+            <CombatConsole
+              targets={BESTIARY_DATA.starter} selectedTargetId={selectedTargetId}
+              engaged={engaged} combatMonster={combatMonster} combatLog={combatLog}
+              enemyCurrentHP={enemyCurrentHP} canAllocate={canAllocate}
+              freeLevels={freeLevels} raceKey={player.race}
+              onSelectTarget={id=>{ setSelectedTargetId(id); if (engaged){setEngaged(false);setEnemyCurrentHP(null);setCombatLog([])} }}
+              onToggleEngage={toggleEngage} onPerformTurn={performTurn}
+              onSpendPoint={spendPoint} getAttributeFocusOrder={getAttributeFocusOrder}
+            />
+
+            {/* 5 -- ChatConsole */}
+            <ChatConsole
+              chatChannel={chatChannel} chatSub={chatSub} chatMessages={chatMessages}
+              chatInput={chatInput} chatNameColor={chatNameColor} emojiOpen={emojiOpen}
+              inboxOpen={inboxOpen} chatOverlay={chatOverlay} groupNames={groupNames}
+              playerName={player.name}
+              onSwitchChannel={ch=>{ setChatChannel(ch); if (inboxOpen) setInboxOpen(false) }}
+              onSetChatSub={setChatSub} onChatInput={setChatInput} onSendMessage={sendMessage}
+              onToggleEmoji={()=>setEmojiOpen(prev=>!prev)}
+              onToggleInbox={()=>setInboxOpen(prev=>!prev)}
+              onSetChatOverlay={setChatOverlay}
+              onColorChange={color=>{ setChatNameColor(color); localStorage.setItem('g_name',color) }}
+              onAddEmoji={em=>{ setChatInput(prev=>prev+em); setEmojiOpen(false) }}
+            />
+
           </div>
         </div>
       </div>
 
-      {/* ── EMOJI PANEL ───────────────────────────────────── */}
-      {emojiOpen && (
-        <div style={{ position: 'fixed', bottom: '80px', left: '16px', right: '16px', zIndex: 300, background: '#061018', border: '1px solid rgba(62,224,255,0.4)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.75)' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 8px', background: '#061018' }}>
-            <button className="chat-expand-btn" style={{ width: 28, height: 28 }} onClick={() => setEmojiOpen(false)}>✕</button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '4px', padding: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-            {['😀','😂','😍','🥰','😎','🤩','😏','😤','😡','💀','👻','👾','⚔️','🛡️','💎','🔥','⚡','❄️','🌟','💫','🏆','💰','🎯','🎮','👑','🐉','⚗️','🗡️','🏹','🪄','💥','🌀'].map(em => (
-              <button key={em} onClick={() => { setChatInput(prev => prev + em); setEmojiOpen(false) }}
-                style={{ fontSize: '20px', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')} onMouseLeave={e => (e.currentTarget.style.background = 'none')}>{em}</button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── MAP OVERLAY ───────────────────────────────────── */}
-      {mapOverlay && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(12px)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}>
-          <div style={{ textAlign: 'center', marginTop: '8px' }}>
-            <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '18px', color: '#3EE0FF', margin: 0 }}>{player.pos?.zoneId || 'Z01'}</h3>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0' }}>{getZone(player.pos?.zoneId || 'Z01').name}</p>
-          </div>
-          <div style={{ width: '100%', maxWidth: '420px', maxHeight: '400px', aspectRatio: '1/1', position: 'relative' }}>
-            <div className="glass-panel" style={{ width: '100%', height: '100%', borderRadius: '16px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.25)' }}>
-              <canvas ref={zoneCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
-            </div>
-          </div>
-          <DPad onMove={move} onEnter={() => showToast('Interacting with sector waypoint.')} style={{ marginBottom: '8px' }} />
-          <button onClick={() => setMapOverlay(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '24px', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
-        </div>
-      )}
-
-      {/* ── CHAT OVERLAY ──────────────────────────────────── */}
-      {chatOverlay && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(12px)', zIndex: 150, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '14px' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '512px', margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column', padding: '12px', border: '1px solid rgba(255,255,255,0.2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', flexShrink: 0 }}>
-              <button className={`chat-expand-btn inbox-btn${inboxOpen ? ' active' : ''}`} onClick={toggleInbox}>💬</button>
-              {['main', 'sales', 'clan', 'groups'].map(ch => <button key={ch} className={`footer-tab-button${chatChannel === ch ? ' active' : ''}`} style={{ flex: 1 }} onClick={() => switchChannel(ch)}>{ch.charAt(0).toUpperCase() + ch.slice(1)}</button>)}
-              <button className="chat-expand-btn" onClick={() => setChatOverlay(false)}>✕</button>
-            </div>
-            {!inboxOpen && (
-              <div className="sub-bar" style={{ flexShrink: 0, marginBottom: '8px' }}>
-                {(CHAT_SUBS[chatChannel] || []).map(([id, label]) => { const name = chatChannel === 'groups' ? groupNames[id] || id : label; return <button key={id} className={`sub-btn${chatSub[chatChannel] === id ? ' active' : ''}`} onClick={() => setChatSub(prev => ({ ...prev, [chatChannel]: id }))}><span>{name}</span></button> })}
-              </div>
-            )}
-            <div ref={chatScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '8px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>{renderChatContent()}</div>
-            <form onSubmit={sendMessage} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-              <button type="button" className="icon-btn" onClick={() => setEmojiOpen(prev => !prev)}>😀</button>
-              <input type="text" className="editor-input" value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Type To Chat…" style={{ flex: 1, padding: '10px', fontSize: '12px' }} />
-              <button type="submit" className="footer-tab-button" style={{ padding: '10px 20px', fontWeight: 600 }}>Send</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── ITEM MODAL ────────────────────────────────────── */}
-      {equipPopup && (() => {
-        const modalItem = player.inventory.find((i: any) => i.instanceId === equipPopup)
-        const modalBase = modalItem ? BASE_ITEMS.find(b => b.id === modalItem.baseItemId) : null
-        if (!modalItem || !modalBase) return null
-        const modalGems = modalItem.socketedGems || []
-        const isEquipped = Object.values(player.equipment).includes(equipPopup)
-        const tierData = DROPPER_TIERS.find(t => t.tier === modalItem.tier) || DROPPER_TIERS[0]
-        const slotMod = SLOT_MODS[modalBase.subType] || {}
-        const statVal = (tierData.cv * (slotMod.prop || 0.8)).toFixed(2)
-        const statLabel = slotMod.stat || 'AC'
-        return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} onClick={() => setEquipPopup(null)}>
-            <div className="glass-panel" style={{ width: '100%', maxWidth: '340px', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }} onClick={e => e.stopPropagation()}>
-              <button onClick={() => setEquipPopup(null)} style={{ position: 'absolute', top: '14px', right: '14px', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-              <div><h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#fff' }}>{modalBase.name}</h3><p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3EE0FF', fontWeight: 700 }}>Tier {modalItem.tier} · {modalBase.subType}</p></div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
-                <ItemIcon subType={modalBase.subType} />
-                <span style={{ position: 'absolute', bottom: '8px', right: '10px', background: 'rgba(255,214,10,0.95)', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '5px', color: '#09090b' }}>T{modalItem.tier}</span>
-              </div>
-              <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}><span style={{ fontSize: '13px', color: '#94a3b8' }}>Type</span><span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{modalBase.subType}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: modalGems.length > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}><span style={{ fontSize: '13px', color: '#94a3b8' }}>{statLabel}</span><span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{statVal}</span></div>
-                {modalGems.map((g: any, i: number) => { const gd = GEMS[g.id]; if (!gd) return null; const gemColor = gd.category === 'Fighter' ? '#FF375F' : gd.category === 'Caster' ? '#0A84FF' : '#30D158'; return <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ fontSize: '11px', padding: '1px 5px', borderRadius: '4px', background: gemColor, color: '#fff', fontWeight: 800 }}>{gd.name.slice(0, 3)}</span><span style={{ fontSize: '13px', color: '#94a3b8' }}>{gd.name} G{g.grade}</span></div><span style={{ fontSize: '11px', color: gemColor, fontWeight: 700, maxWidth: '120px', textAlign: 'right' }}>{gd.effect}</span></div> })}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <button onClick={() => equipItem(equipPopup)} style={{ padding: '14px 0', borderRadius: '12px', background: isEquipped ? 'rgba(48,209,88,0.15)' : 'rgba(62,224,255,0.15)', border: `1.5px solid ${isEquipped ? '#30D158' : '#3EE0FF'}`, color: isEquipped ? '#30D158' : '#3EE0FF', fontSize: '14px', fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>{isEquipped ? '✓ EQUIPPED' : 'EQUIP'}</button>
-                <button onClick={() => setEquipPopup(null)} style={{ padding: '14px 0', borderRadius: '12px', background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>CANCEL</button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* ── TOAST ─────────────────────────────────────────── */}
-      {toast && <div className="glass-panel" style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: '72px', zIndex: 210, padding: '8px 20px', borderRadius: '9999px', fontWeight: 500, fontSize: '12px', background: 'black', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,0.8)', whiteSpace: 'nowrap' }}>{toast}</div>}
+      {/* Toast */}
+      {toast && <div className="glass-panel" style={{ position:'fixed', left:'50%', transform:'translateX(-50%)', bottom:'72px', zIndex:210, padding:'8px 20px', borderRadius:'9999px', fontWeight:500, fontSize:'12px', background:'black', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', boxShadow:'0 4px 24px rgba(0,0,0,0.8)', whiteSpace:'nowrap' }}>{toast}</div>}
     </>
   )
 }
