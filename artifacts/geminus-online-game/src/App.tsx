@@ -35,7 +35,7 @@ function getTileService(tile: string): any {
   return STAMPS._services[tile] || null
 }
 
-// ─── RACES (24) — FIX: Vampire primaryStat = VIT ─────────────
+// ─── RACES (24) -- FIX: Vampire primaryStat = VIT ─────────────
 const races: Record<string, any> = {
   human:      { raceName: 'Human',      archetype: 'True Fighter',   primaryStat: 'DEX' },
   dragonborn: { raceName: 'Dragonborn', archetype: 'True Fighter',   primaryStat: 'DEX' },
@@ -471,7 +471,7 @@ export default function App({ uid }: { uid: string }) {
 
         const p: any = {
           uid,
-          // Identity columns (new — from Supabase)
+          // Identity columns (new -- from Supabase)
           name:         supa.name || 'Pilot',
           race:         supa.race || 'human',
           raceName:     supa.race_name || 'Human',
@@ -672,13 +672,13 @@ export default function App({ uid }: { uid: string }) {
         <><p style={{ color: '#f87171', fontSize: '13px', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5, margin: 0 }}>{loadError}</p>
         <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', borderRadius: '10px', background: 'rgba(62,224,255,0.1)', border: '1px solid rgba(62,224,255,0.4)', color: '#3EE0FF', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>Retry</button></>
       ) : <p style={{ color: '#64748b', fontSize: '12px', letterSpacing: '0.08em', margin: 0 }}>Loading your character...</p>}
-      {/* CHANGED: was signOut(auth) — now supabase.auth.signOut() */}
+      {/* CHANGED: was signOut(auth) -- now supabase.auth.signOut() */}
       <button onClick={async () => { try { await supabase.auth.signOut() } catch {} try { localStorage.clear() } catch {} window.location.replace(window.location.origin) }}
         style={{ marginTop: '8px', background: 'rgba(255,55,95,0.1)', border: '1px solid rgba(255,55,95,0.3)', borderRadius: '8px', color: '#f87171', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: '10px 28px' }}>Sign Out</button>
     </div>
   )
 
-  // CHANGED: was signOut(auth) — now supabase.auth.signOut()
+  // CHANGED: was signOut(auth) -- now supabase.auth.signOut()
   const handleLogout = async () => {
     if (!window.confirm('Log out of Geminus?')) return
     await savePlayer(playerRef.current, 'logout')
@@ -731,6 +731,14 @@ export default function App({ uid }: { uid: string }) {
       if (!t) { showToast('Select target first.'); return }
       setCombatMonster({ ...t, currentHP: t.hp }); setTurnCount(0); setEnemyCurrentHP(t.hp); setCombatLog([]); setEngaged(true)
     } else { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) }
+  }
+
+
+  const sendMessage = (e: React.FormEvent) => {
+    e.preventDefault(); if (!chatInput.trim()) return
+    const key = chatChannel === 'groups' ? chatSub[chatChannel] : chatChannel
+    setChatMessages(prev => ({ ...prev, [key]: [...(prev[key] || []).slice(-149), { sender: player.name || 'Jeff', text: chatInput.trim(), color: chatNameColor }] }))
+    setChatInput('')
   }
 
   const switchChannel = (ch: string) => { setChatChannel(ch); if (inboxOpen) setInboxOpen(false) }
@@ -929,7 +937,7 @@ export default function App({ uid }: { uid: string }) {
                               {activeTile && (
                                 <div style={{ marginTop: '4px', padding: '6px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.6)', border: `1px solid ${activeTile.service.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                                   <span style={{ fontSize: '11px', color: activeTile.service.color, fontWeight: 700 }}>📍 {activeTile.service.label}</span>
-                                  <button onClick={() => showToast(`${activeTile.service.label} — coming soon!`)} style={{ fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: `${activeTile.service.color}20`, border: `1px solid ${activeTile.service.color}60`, color: activeTile.service.color, cursor: 'pointer' }}>Enter</button>
+                                  <button onClick={() => showToast(`${activeTile.service.label} -- coming soon!`)} style={{ fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: `${activeTile.service.color}20`, border: `1px solid ${activeTile.service.color}60`, color: activeTile.service.color, cursor: 'pointer' }}>Enter</button>
                                 </div>
                               )}
                             </>
