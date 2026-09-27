@@ -9,6 +9,7 @@ import {
 import ZONES_DATA from './data/zones.json'
 import STAMPS_DATA from './data/stamps.json'
 import BESTIARY_DATA from './data/bestiary.json'
+import { runTurn, applyTurnResult, getDefaultAction } from './managers/CombatManager'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
 const ZONES: Record<string, any> = ZONES_DATA
@@ -730,101 +731,6 @@ export default function App({ uid }: { uid: string }) {
       if (!t) { showToast('Select target first.'); return }
       setCombatMonster({ ...t, currentHP: t.hp }); setTurnCount(0); setEnemyCurrentHP(t.hp); setCombatLog([]); setEngaged(true)
     } else { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) }
-  }
-
-  const performTurn = (isMagic: boolean) => {
-    if (!engaged || !combatMonster) return
-    const current = playerRef.current || player
-    const p = { ...current, baseStats: { ...current.baseStats }, derivedStats: { ...current.derivedStats } }
-    const m = { ...combatMonster }
-
-    const classVal = isMagic ? (p.derivedStats.SC || 10) : (p.derivedStats.WC || 12)
-    const playerDmg = (GDD.DAMAGE_CONST * classVal) / Math.max(5, m.def)
-    m.currentHP -= playerDmg
-    const newTurn = turnCount + 1; setTurnCount(newTurn)
-
-    if (m.currentHP <= 0) {
-      m.currentHP = 0
-      const newStats = { ...battleStats, kills: battleStats.kills + 1, rounds: battleStats.rounds + 1, oneHitKills: battleStats.oneHitKills + (newTurn === 1 ? 1 : 0) }
-      setBattleStats(newStats)
-      try { localStorage.setItem('geminus_battle_stats', JSON.stringify(newStats)) } catch {}
-
-      p.gold += m.gold; p.xp += m.xp
-      p.kills = (p.kills || 0) + 1
-
-      const droppedItem = rollItemDrop(p.race)
-      if (droppedItem) {
-        if (p.inventory.length < 200) p.inventory = [...p.inventory, droppedItem]
-        const droppedBase = BASE_ITEMS.find(b => b.id === droppedItem.baseItemId)
-        setLastItem(droppedBase?.name || 'Item')
-        setLastItemColor(RARITY_COLORS['Uncommon'])
-      } else {
-        setLastItem('None')
-        setLastItemColor('#8FA8C7')
-      }
-      if (Math.random() < 0.35) {
-        const allGems = Object.entries(GEMS)
-        const [gId, gData] = allGems[Math.floor(Math.random() * allGems.length)]
-        if (p.gems.length < 200) { p.gems = [...p.gems, { id: gId, grade: 1 }]; setLastGem(`${(gData as any).name} G1`); setLastGemColor(RARITY_COLORS['Rare']) }
-      }
-
-      let didLevelUp = false
-      if (p.xp >= p.xpToNextLevel) {
-        p.level++; p.xp -= p.xpToNextLevel
-        p.attributePoints = (p.attributePoints || 0) + GDD.AP_PER_LEVEL
-        p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
-        const ls = { ...newStats, levels: newStats.levels + 1 }
-        setBattleStats(ls); try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ls)) } catch {}
-        showToast(`⬆ Level Up! Level ${p.level}`); didLevelUp = true
-      }
-
-      setCombatLog([
-        { text: `You hit ${m.name} for ${Math.round(playerDmg)} dmg!`, color: '#fff' },
-        { text: 'Enemy is DEAD!', color: '#30D158' },
-        { text: `+${m.xp} XP  +${m.gold} Gold`, color: '#FFD60A' },
-      ])
-      setEnemyCurrentHP(null); setEngaged(false)
-      calcDerived(p)
-      playerRef.current = p
-      setPlayer(p)
-      savePlayer(p, didLevelUp ? 'level-up' : 'kill')
-    } else {
-      const monsterDmg = (GDD.DAMAGE_CONST * m.atk) / Math.max(1, p.derivedStats.AC * GDD.AC_REDUCTION)
-      p.hp -= monsterDmg
-
-      if (p.hp <= 0) {
-        p.hp = p.derivedStats.maxHp
-        const ns = { ...battleStats, deaths: battleStats.deaths + 1, rounds: battleStats.rounds + 1 }
-        setBattleStats(ns); try { localStorage.setItem('geminus_battle_stats', JSON.stringify(ns)) } catch {}
-        setCombatLog([
-          { text: `${m.name} hit you for ${Math.round(monsterDmg)} dmg!`, color: '#FF375F' },
-          { text: 'Chassis Integrity Depleted!', color: '#fbbf24' },
-          { text: '💀 Defeated! Press BATTLE to retry', color: '#94a3b8' },
-        ])
-        setEnemyCurrentHP(null); setEngaged(false)
-        calcDerived(p)
-        playerRef.current = p
-        setPlayer(p)
-        savePlayer(p, 'death')
-      } else {
-        setBattleStats(prev => ({ ...prev, rounds: prev.rounds + 1 }))
-        setCombatLog([
-          { text: `You attack ${m.name} for ${Math.round(playerDmg)}!`, color: '#fff' },
-          { text: `${m.name} hits you for ${Math.round(monsterDmg)}!`, color: '#FF375F' },
-        ])
-        setEnemyCurrentHP(Math.max(0, Math.round(m.currentHP))); setCombatMonster(m)
-        calcDerived(p)
-        playerRef.current = p
-        setPlayer(p)
-      }
-    }
-  }
-
-  const sendMessage = (e: React.FormEvent) => {
-    e.preventDefault(); if (!chatInput.trim()) return
-    const key = chatChannel === 'groups' ? chatSub[chatChannel] : chatChannel
-    setChatMessages(prev => ({ ...prev, [key]: [...(prev[key] || []).slice(-149), { sender: player.name || 'Jeff', text: chatInput.trim(), color: chatNameColor }] }))
-    setChatInput('')
   }
 
   const switchChannel = (ch: string) => { setChatChannel(ch); if (inboxOpen) setInboxOpen(false) }
