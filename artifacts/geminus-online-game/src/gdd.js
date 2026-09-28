@@ -310,7 +310,7 @@ export function sumGear(p, BASE_ITEMS = []) {
  * 5. Leggings +10% hit, Gauntlets +15% WC/SC fully wired
  */
 
-import GEMS_DATA from './data/gems.json'
+
 
 // ─── Gem lookup helper ────────────────────────────────────────
 // Finds a gem definition by id key (e.g. 'warstone', 'warheart')
