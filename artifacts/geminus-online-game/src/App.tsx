@@ -16,7 +16,7 @@ import ServicePanel from './game/components/ServicePanel'
 import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, GEM_POUCH_CAP, INVENTORY_CAP } from './systems/services'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 const ZONES: Record<string, any> = ZONES_DATA
 const STAMPS: Record<string, any> = STAMPS_DATA
 function getZone(zoneId: string) { return ZONES[zoneId] || ZONES['Z01'] }
