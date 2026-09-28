@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from './supabase'
-import { spendAttributeBank, getBankedLevels } from './gdd'
+import { spendAttributeBank, calcDerived as gddCalcDerived } from './gdd'
 import ZONES_DATA from './data/zones.json'
 import STAMPS_DATA from './data/stamps.json'
 import BESTIARY_DATA from './data/bestiary.json'
@@ -12,6 +12,8 @@ import CombatPanel from './game/components/CombatPanel'
 import CombatConsole from './game/components/CombatConsole'
 import ChatConsole from './game/components/ChatConsole'
 import InlinePanel from './game/components/InlinePanel'
+import ServicePanel from './game/components/ServicePanel'
+import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, GEM_POUCH_CAP, INVENTORY_CAP } from './systems/services'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
 const MAINTENANCE_MODE = true;
@@ -115,16 +117,8 @@ const RACE_WEAPONS: Record<string, { w1: string; w2: string }> = {
   dwarf: { w1: 'base_axe_1', w2: 'base_fire_1' }, demon: { w1: 'base_staff_1', w2: 'base_fire_1' },
   draugr: { w1: 'base_staff_1', w2: 'base_death_1' }, unicorn: { w1: 'base_sword_1', w2: 'base_death_1' },
 }
-const GEMS: Record<string, any> = {
-  warStone: { name: 'WarStone', category: 'Fighter', color: 'Red' },
-  loreStone: { name: 'LoreStone', category: 'Caster', color: 'Blue' },
-  obsidianHeart: { name: 'Obsidian Heart', category: 'Misc', color: 'Green' },
-  spikeCore: { name: 'Spike-Core', category: 'Misc', color: 'Yellow' },
-  trueCore: { name: 'True-Core', category: 'Misc', color: 'Green' },
-  vitalCore: { name: 'Vital-Core', category: 'Misc', color: 'Green' },
-}
 const RARITY_COLORS: Record<string, string> = {
-  Common: '#D1D5DB', Uncommon: '#30D158', Rare: '#0A84FF', Epic: '#BF5AF2', None: '#8FA8C7',
+  Common: '#D1D5DB', Uncommon: '#30D158', Rare: '#0A84FF', Epic: '#BF5AF2', Shadow: '#BF5AF2', Echo: '#94a3b8', None: '#8FA8C7',
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────
@@ -151,33 +145,8 @@ function rollItemDrop(raceKey: string): any | null {
   else pool.push(weapons.w1,weapons.w2,'base_offhand_1')
   return makeItem(pool[Math.floor(Math.random()*pool.length)])
 }
-function calcDerived(p: any) {
-  if (!p.baseStats) p.baseStats = { STR:15, DEX:20, VIT:10, NTL:5, WIS:5 }
-  if (!Array.isArray(p.inventory)) p.inventory = []
-  if (!Array.isArray(p.gems)) p.gems = []
-  if (!p.equipment || typeof p.equipment !== 'object') p.equipment = {}
-  if (!p.pos || typeof p.pos !== 'object') p.pos = { zoneId:'Z01', x:7, y:7 }
-  const rd = races[p.race] || races.human
-  let ac=0, wc=0, sc=0
-  for (const slotName in p.equipment) {
-    const iid = p.equipment[slotName]; if (!iid) continue
-    const item = p.inventory.find((i:any) => i.instanceId===iid); if (!item) continue
-    const base = BASE_ITEMS.find(b => b.id===item.baseItemId); if (!base) continue
-    const mod = SLOT_MODS[base.subType] || {}
-    const tier = DROPPER_TIERS.find(t => t.tier===item.tier) || DROPPER_TIERS[0]
-    const val = tier.cv * (mod.prop || 0.8)
-    if (mod.stat==='AC') ac+=val; if (mod.stat==='WC') wc+=val; if (mod.stat==='SC') sc+=val
-  }
-  const vit=p.baseStats.VIT||10; const dex=p.baseStats.DEX||10; const wis=p.baseStats.WIS||10
-  let WC=0, SC=0
-  if (rd.archetype==='True Fighter') { WC=Math.max(12,wc*(1+(rd.primaryStat==='VIT'?vit:dex)*0.0055)); SC=0 }
-  else if (rd.archetype==='True Caster') { SC=Math.max(10,sc*(1+(rd.primaryStat==='VIT'?vit:wis)*0.0055)); WC=0 }
-  else { const f=rd.archetype==='Mystic Hybrid'?wis:dex; WC=Math.max(12,wc*(1+f*0.0055)); SC=Math.max(10,sc*(1+f*0.0055)) }
-  const focus = rd.primaryStat==='VIT'?vit:(rd.archetype==='True Caster'||rd.archetype==='Mystic Hybrid')?wis:dex
-  p.derivedStats = { maxHp:100+vit*10, AC:Math.max(10,ac*(1+vit*0.0075)), WC, SC, hitChance:Math.min(99,90+focus*0.05), critChance:Math.min(60,5+focus*0.01) }
-  if (p.hp===undefined||p.hp===null||p.hp>p.derivedStats.maxHp) p.hp=p.derivedStats.maxHp
-  return p
-}
+// Derived stats come from gdd.js (source of truth): gear, socketed gems, shadow enchantments.
+function calcDerived(p: any) { return gddCalcDerived(p, BASE_ITEMS) }
 
 // ─── MAIN APP ─────────────────────────────────────────────────
 export default function App({ uid }: { uid: 
@@ -230,6 +199,7 @@ if (MAINTENANCE_MODE) {
   const [filterState, setFilterState] = useState({ category:'All', subType:'All', tier:'All', quality:'All', sortBy:'tier', order:'desc' })
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeTile, setActiveTile] = useState<{ tile:string; service:any; x:number; y:number } | null>(null)
+  const [activeService, setActiveService] = useState<any>(null)
   const smokeRef = useRef<HTMLCanvasElement>(null)
   const playerRef = useRef<any>(null)
 
@@ -353,7 +323,7 @@ if (MAINTENANCE_MODE) {
 
   const toggleEngage = () => {
     if (!engaged) {
-      const targets = BESTIARY_DATA.starter
+      const targets = zoneTargets(player.pos?.zoneId||'Z01', BESTIARY_DATA.starter)
       const t = targets.find((x:any) => x.id===selectedTargetId)||targets[0]
       if (!t) { showToast('Select target first.'); return }
       setCombatMonster({...t,currentHP:t.hp}); setEnemyCurrentHP(t.hp); setCombatLog([]); setEngaged(true)
@@ -364,23 +334,33 @@ if (MAINTENANCE_MODE) {
     if (!engaged||!combatMonster) return
     const current = playerRef.current||player
     const action = isMagic ? 'cast' : getDefaultAction(current.race)
-    const result = runTurn(current, combatMonster, action, {id:current.pos?.zoneId})
+    const zoneId = current.pos?.zoneId||'Z01'; const zd = getZone(zoneId)
+    const result = runTurn(current, combatMonster, action, {id:zoneId,type:zd.type,gemMin:zd.gemMin,gemMax:zd.gemMax})
     setCombatMonster((prev:any) => ({...prev,currentHP:result.monsterHp}))
     setEnemyCurrentHP(result.monsterHp>0 ? Math.round(result.monsterHp) : null)
     let newPlayer = applyTurnResult({...current,inventory:[...(current.inventory||[])],equipment:{...(current.equipment||{})},gems:[...(current.gems||[])]},result)
     if (result.itemDrop) {
       const dropped = rollItemDrop(newPlayer.race)
-      if (dropped&&newPlayer.inventory.length<200) {
+      if (dropped&&newPlayer.inventory.length<INVENTORY_CAP) {
         newPlayer = {...newPlayer,inventory:[...newPlayer.inventory,dropped]}
         const droppedBase = BASE_ITEMS.find(b=>b.id===dropped.baseItemId)
         setLastItem(droppedBase?.name||'Item'); setLastItemColor(RARITY_COLORS['Uncommon'])
       }
     }
     if (result.specialDrop?.kind==='gem') {
-      const gemKeys=Object.keys(GEMS); const gId=gemKeys[Math.floor(Math.random()*gemKeys.length)]
-      if (newPlayer.gems.length<200) {
+      const gId=rollGemId()
+      if (newPlayer.gems.length<GEM_POUCH_CAP) {
         newPlayer={...newPlayer,gems:[...newPlayer.gems,{id:gId,grade:result.specialDrop.grade||1}]}
-        setLastGem(`${GEMS[gId]?.name} G${result.specialDrop.grade||1}`); setLastGemColor(RARITY_COLORS['Rare'])
+        setLastGem(`${gemInfo(gId).name} G${result.specialDrop.grade||1}`); setLastGemColor(RARITY_COLORS['Rare'])
+      }
+    }
+    if (result.specialDrop?.kind==='shadow') {
+      const shadow=generateShadowItem(newPlayer,BASE_ITEMS)
+      if (shadow&&newPlayer.inventory.length<INVENTORY_CAP) {
+        newPlayer={...newPlayer,inventory:[...newPlayer.inventory,shadow]}
+        const sb=BASE_ITEMS.find(b=>b.id===shadow.baseItemId)
+        setLastItem(`${itemDisplayName(shadow,sb)} T${shadow.tier}`); setLastItemColor(RARITY_COLORS[shadow.type])
+        showToast(`✦ ${itemDisplayName(shadow,sb)} dropped!`)
       }
     }
     if (result.status==='VICTORY') {
@@ -435,6 +415,13 @@ if (MAINTENANCE_MODE) {
     savePlayerNow(p,'name-update'); showToast('Profile callsign updated.')
   }
 
+  const applyService = (result: ServiceResult, reason: string) => {
+    if (!result.ok) { showToast(result.msg); return }
+    const p = result.player
+    calcDerived(p); playerRef.current=p; setPlayer(p)
+    savePlayerNow(p, `service-${reason}`); showToast(result.msg)
+  }
+
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault(); if (!chatInput.trim()) return
     const key=chatChannel==='groups'?chatSub[chatChannel]:chatChannel
@@ -470,14 +457,14 @@ if (MAINTENANCE_MODE) {
           <div style={{ width:'100%', flex:1, display:'flex', flexDirection:'column', padding:'10px', paddingTop:'max(10px, env(safe-area-inset-top, 10px))', gap:'10px', paddingBottom:'112px' }}>
 
             {/* 1 -- PlayerHUD */}
-            {activeTab === null && (
+            {activeTab === null && activeService === null && (
               <PlayerHUD
                 player={player} zone={zone} zoneId={zoneId} stamp={stamp}
                 activeTile={activeTile} menuOpen={menuOpen} mapOverlay={mapOverlay}
                 freeLevels={freeLevels} races={races}
                 onMove={move} onEnter={()=>showToast('Interacting with sector waypoint.')}
                 onLogout={handleLogout} onSetMenuOpen={setMenuOpen} onSetActiveTab={setActiveTab}
-                onSetMapOverlay={setMapOverlay} onTileEnter={()=>showToast(`${activeTile?.service.label} -- coming soon!`)}
+                onSetMapOverlay={setMapOverlay} onTileEnter={()=>{ if (activeTile) setActiveService(activeTile.service) }}
               />
             )}
 
@@ -494,6 +481,14 @@ if (MAINTENANCE_MODE) {
               />
             )}
 
+            {/* 2b -- ServicePanel (town buildings) */}
+            {activeTab === null && activeService !== null && (
+              <ServicePanel
+                service={activeService} player={player} BASE_ITEMS={BASE_ITEMS}
+                onResult={applyService} onClose={()=>setActiveService(null)}
+              />
+            )}
+
             {/* 3 -- CombatPanel */}
             {activeTab === null && (
               <CombatPanel
@@ -507,7 +502,7 @@ if (MAINTENANCE_MODE) {
 
             {/* 4 -- CombatConsole */}
             <CombatConsole
-              targets={BESTIARY_DATA.starter} selectedTargetId={selectedTargetId}
+              targets={zoneTargets(zoneId, BESTIARY_DATA.starter)} selectedTargetId={selectedTargetId}
               engaged={engaged} combatMonster={combatMonster} combatLog={combatLog}
               enemyCurrentHP={enemyCurrentHP} canAllocate={canAllocate}
               freeLevels={freeLevels} raceKey={player.race}

@@ -2,6 +2,7 @@
 // Menu popup: Player Info, Training Log, Settings, Equipment, Inventory tabs
 import ItemIcon from './ItemIcon'
 import AccordionItem from './AccordionItem'
+import { gemInfo, gemEffectText, itemDisplayName, enchantmentLines } from '../../systems/services'
 
 function fmt(n: number): string {
   if (!n || isNaN(n)) return '0'
@@ -19,19 +20,6 @@ const INVENTORY_BAGS: Record<string, string[]> = {
   'Spell Satchel':['Spells'],
 }
 
-const GEMS: Record<string, any> = {
-  warStone:      { name: 'WarStone',      category: 'Fighter', color: 'Red' },
-  mightrite:     { name: 'Mightrite',     category: 'Fighter', color: 'Red' },
-  mightStone:    { name: 'MightStone',    category: 'Fighter', color: 'Red' },
-  loreStone:     { name: 'LoreStone',     category: 'Caster',  color: 'Blue' },
-  mindrite:      { name: 'Mindrite',      category: 'Caster',  color: 'Blue' },
-  mindStone:     { name: 'MindStone',     category: 'Caster',  color: 'Blue' },
-  obsidianHeart: { name: 'Obsidian Heart',category: 'Misc',    color: 'Green' },
-  spikeCore:     { name: 'Spike-Core',    category: 'Misc',    color: 'Yellow' },
-  trueCore:      { name: 'True-Core',     category: 'Misc',    color: 'Green' },
-  vitalCore:     { name: 'Vital-Core',    category: 'Misc',    color: 'Green' },
-  treasureCore:  { name: 'Treasure-Core', category: 'Misc',    color: 'Yellow' },
-}
 
 const EQUIP_SLOTS = [
   { name: 'Helmet' }, { name: 'Weapon 1' }, { name: 'Gloves' }, { name: 'Weapon 2' },
@@ -104,8 +92,8 @@ export default function InlinePanel({
                       <div key={item.instanceId}>
                         <div className="inventory-slot" onClick={() => onSetEquipPopup(equipPopup === item.instanceId ? null : item.instanceId)}>
                           {gems.length > 0 && <div className="gem-overlays-container">
-                            {gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}
-                            {gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}
+                            {gems[0] && <div className={`gem-overlay ${(gemInfo(gems[0].id).category || 'misc').toLowerCase()}`}>{(gemInfo(gems[0].id).name || 'Gem').slice(0, 3)}</div>}
+                            {gems[1] && <div className={`gem-overlay ${(gemInfo(gems[1].id).category || 'misc').toLowerCase()}`}>{(gemInfo(gems[1].id).name || 'Gem').slice(0, 3)}</div>}
                           </div>}
                           <div className="item-icon-wrapper"><ItemIcon subType={base?.subType || ''} /></div>
                           <span className="item-tier-label">T{item.tier}</span>
@@ -122,8 +110,8 @@ export default function InlinePanel({
             {player.gems.length === 0
               ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '16px', color: '#71717a', fontSize: '11px' }}>No gems stored</div>
               : player.gems.map((g: any, i: number) => {
-                const gd = GEMS[g.id] || { name: 'Gem', color: 'Green' }
-                return <div key={i} className="gem-item"><span style={{ fontSize: '12px' }}>{gd.color === 'Red' ? '🔴' : gd.color === 'Blue' ? '🔵' : gd.color === 'Yellow' ? '🟡' : '🟢'}</span><span className="item-label">{gd.name.slice(0, 3)}{g.grade}</span></div>
+                const gd = gemInfo(g.id)
+                return <div key={i} className="gem-item" title={`${gd.name} G${g.grade}: ${gemEffectText(g.id, g.grade)}`}><span style={{ fontSize: '12px' }}>{gd.color === 'Red' ? '🔴' : gd.color === 'Blue' ? '🔵' : gd.color === 'Yellow' ? '🟡' : '🟢'}</span><span className="item-label">{gd.name.slice(0, 3)}{g.grade}</span></div>
               })}
           </div>
         </AccordionItem>
@@ -176,8 +164,8 @@ export default function InlinePanel({
                   </div>
                   <div className="equipment-slot-content" style={{ cursor: 'default' }}>
                     {gems.length > 0 && <div className="gem-overlays-container">
-                      {gems[0] && <div className={`gem-overlay ${(GEMS[gems[0].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[0].id]?.name || 'Gem').slice(0, 3)}</div>}
-                      {gems[1] && <div className={`gem-overlay ${(GEMS[gems[1].id]?.category || 'misc').toLowerCase()}`}>{(GEMS[gems[1].id]?.name || 'Gem').slice(0, 3)}</div>}
+                      {gems[0] && <div className={`gem-overlay ${(gemInfo(gems[0].id).category || 'misc').toLowerCase()}`}>{(gemInfo(gems[0].id).name || 'Gem').slice(0, 3)}</div>}
+                      {gems[1] && <div className={`gem-overlay ${(gemInfo(gems[1].id).category || 'misc').toLowerCase()}`}>{(gemInfo(gems[1].id).name || 'Gem').slice(0, 3)}</div>}
                     </div>}
                     {base
                       ? <><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ItemIcon subType={base.subType} /></div><span className="item-tier-label">T{item.tier}</span></>
@@ -274,14 +262,14 @@ export default function InlinePanel({
           const isEquipped = Object.values(player.equipment).includes(equipPopup)
           const tierData = DROPPER_TIERS.find((t: any) => t.tier === modalItem.tier) || DROPPER_TIERS[0]
           const slotMod = SLOT_MODS[modalBase.subType] || {}
-          const statVal = (tierData.cv * (slotMod.prop || 0.8)).toFixed(2)
+          const statVal = (tierData.cv * (modalItem.qualityMultiplier ?? 1) * (slotMod.prop || 0.8)).toFixed(2)
           const statLabel = slotMod.stat || 'AC'
           const RARITY_COLORS: Record<string, string> = { Common: '#D1D5DB', Uncommon: '#30D158', Rare: '#0A84FF', Epic: '#BF5AF2', Legendary: '#FF9F0A', Mythic: '#FF375F' }
           return (
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} onClick={() => onSetEquipPopup(null)}>
               <div className="glass-panel" style={{ width: '100%', maxWidth: '340px', padding: '20px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }} onClick={e => e.stopPropagation()}>
                 <button onClick={() => onSetEquipPopup(null)} style={{ position: 'absolute', top: '14px', right: '14px', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-                <div><h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#fff' }}>{modalBase.name}</h3><p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3EE0FF', fontWeight: 700 }}>Tier {modalItem.tier} · {modalBase.subType}</p></div>
+                <div><h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: modalItem.type === 'Shadow' ? '#BF5AF2' : modalItem.type === 'Echo' ? '#94a3b8' : '#fff' }}>{itemDisplayName(modalItem, modalBase)}</h3><p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3EE0FF', fontWeight: 700 }}>Tier {modalItem.tier} · {modalBase.subType}{modalItem.qualityMultiplier != null ? ` · ${Math.round(modalItem.qualityMultiplier * 100)}% quality` : ''}</p></div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
                   <ItemIcon subType={modalBase.subType} />
                   <span style={{ position: 'absolute', bottom: '8px', right: '10px', background: 'rgba(255,214,10,0.95)', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '5px', color: '#09090b' }}>T{modalItem.tier}</span>
@@ -289,10 +277,13 @@ export default function InlinePanel({
                 <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}><span style={{ fontSize: '13px', color: '#94a3b8' }}>Type</span><span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{modalBase.subType}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderBottom: modalGems.length > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}><span style={{ fontSize: '13px', color: '#94a3b8' }}>{statLabel}</span><span style={{ fontSize: '13px', color: '#3EE0FF', fontWeight: 700 }}>{statVal}</span></div>
+                  {enchantmentLines(modalItem).map((l, i) => (
+                    <div key={`e${i}`} style={{ padding: '8px 14px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '12px', color: '#BF5AF2' }}>✦ {l}</div>
+                  ))}
                   {modalGems.map((g: any, i: number) => {
-                    const gd = GEMS[g.id]; if (!gd) return null
+                    const gd = gemInfo(g.id)
                     const gemColor = gd.category === 'Fighter' ? '#FF375F' : gd.category === 'Caster' ? '#0A84FF' : '#30D158'
-                    return <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ fontSize: '11px', padding: '1px 5px', borderRadius: '4px', background: gemColor, color: '#fff', fontWeight: 800 }}>{gd.name.slice(0, 3)}</span><span style={{ fontSize: '13px', color: '#94a3b8' }}>{gd.name} G{g.grade}</span></div></div>
+                    return <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ fontSize: '11px', padding: '1px 5px', borderRadius: '4px', background: gemColor, color: '#fff', fontWeight: 800 }}>{gd.name.slice(0, 3)}</span><span style={{ fontSize: '13px', color: '#94a3b8' }}>{gd.name} G{g.grade}</span></div><span style={{ fontSize: '11px', color: '#3EE0FF' }}>{gemEffectText(g.id, g.grade)}</span></div>
                   })}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>

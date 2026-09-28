@@ -1,0 +1,149 @@
+{
+  "_meta": {
+    "source": "Geminus.1 src/data/enchantmentData.js",
+    "note": "Values per magic tier 1-9 (magic tier = ceil(item tier / 2.25)). Percent keys are fractions (0.05 = +5%). Hit/Crit/LifeSteal are flat points."
+  },
+  "enchantments": [
+    {
+      "id": "ENCH-LORE-STN",
+      "name": "LoreStone",
+      "family": "caster",
+      "description": "Increase Spell Class",
+      "stats": {
+        "SCPercent": [0.0025, 0.005, 0.005, 0.01, 0.0125, 0.02, 0.0325, 0.04, 0.05]
+      }
+    },
+    {
+      "id": "ENCH-LORE-HRT",
+      "name": "LoreHeart",
+      "family": "caster",
+      "description": "Increase Base SC and Base AC",
+      "stats": {
+        "SCPercent": [0.0025, 0.0069, 0.0112, 0.0156, 0.02, 0.0244, 0.0288, 0.0331, 0.0375],
+        "ACPercent": [0.0025, 0.0084, 0.0144, 0.0203, 0.0262, 0.0322, 0.0381, 0.0441, 0.05]
+      }
+    },
+    {
+      "id": "ENCH-TRUE-RTE",
+      "name": "True-Rite",
+      "family": "caster",
+      "description": "Increase Hit Chance and Decrease Enemy WIS",
+      "stats": {
+        "Hit": [0.75, 1.5938, 2.4375, 3.2813, 4.125, 4.9688, 5.8125, 6.6563, 7.5],
+        "-EnemyWIS": [2, 2.6875, 3.375, 4.0625, 4.75, 5.4375, 6.125, 6.8125, 7.5]
+      }
+    },
+    {
+      "id": "ENCH-MIND-RTE",
+      "name": "Mindrite",
+      "family": "caster",
+      "description": "Increase INT",
+      "stats": {
+        "NTLPercent": [0.0125, 0.0187, 0.025, 0.0313, 0.0375, 0.05, 0.075, 0.1, 0.125]
+      }
+    },
+    {
+      "id": "ENCH-SANG-HRT",
+      "name": "Sanguine-Heart",
+      "family": "caster",
+      "description": "Increase VIT and Base SC",
+      "stats": {
+        "VITPercent": [0.006, 0.0131, 0.0201, 0.0272, 0.0343, 0.0413, 0.0484, 0.0554, 0.0625],
+        "SCPercent": [0.001, 0.004, 0.007, 0.01, 0.013, 0.016, 0.019, 0.022, 0.025]
+      }
+    },
+    {
+      "id": "ENCH-WAR-STN",
+      "name": "WarStone",
+      "family": "fighter",
+      "description": "Increase Weapon Class",
+      "stats": {
+        "WCPercent": [0.0025, 0.005, 0.0075, 0.0125, 0.0175, 0.025, 0.0325, 0.04, 0.05]
+      }
+    },
+    {
+      "id": "ENCH-WAR-HRT",
+      "name": "WarHeart",
+      "family": "fighter",
+      "description": "Increase Base WC and Base AC",
+      "stats": {
+        "WCPercent": [0.0025, 0.0069, 0.0112, 0.0156, 0.02, 0.0244, 0.0288, 0.0331, 0.0375],
+        "ACPercent": [0.0025, 0.0084, 0.0144, 0.0203, 0.0262, 0.0322, 0.0381, 0.0441, 0.05]
+      }
+    },
+    {
+      "id": "ENCH-TRUE-LTE",
+      "name": "True-Lite",
+      "family": "fighter",
+      "description": "Increase Hit Chance and Decrease Enemy DEX",
+      "stats": {
+        "Hit": [0.75, 1.5938, 2.4375, 3.2813, 4.125, 4.9688, 5.8125, 6.6563, 7.5],
+        "-EnemyDEX": [2, 2.6875, 3.375, 4.0625, 4.75, 5.4375, 6.125, 6.8125, 7.5]
+      }
+    },
+    {
+      "id": "ENCH-IGHT-RTE",
+      "name": "Mightrite",
+      "family": "fighter",
+      "description": "Increase DEX",
+      "stats": {
+        "DEXPercent": [0.0125, 0.0187, 0.025, 0.0313, 0.0375, 0.05, 0.075, 0.1, 0.125]
+      }
+    },
+    {
+      "id": "ENCH-JUGG-EYE",
+      "name": "Juggernaut's Eye",
+      "family": "fighter",
+      "description": "Increase VIT and Base WC",
+      "stats": {
+        "VITPercent": [0.006, 0.0131, 0.0201, 0.0272, 0.0343, 0.0413, 0.0484, 0.0554, 0.0625],
+        "WCPercent": [0.001, 0.004, 0.007, 0.01, 0.013, 0.016, 0.019, 0.022, 0.025]
+      }
+    },
+    {
+      "id": "ENCH-OBSD-ENT",
+      "name": "Obsidian",
+      "family": "support",
+      "description": "Increase Armor Class",
+      "stats": {
+        "ACPercent": [0.0025, 0.005, 0.0075, 0.0125, 0.0175, 0.025, 0.0325, 0.04, 0.05]
+      }
+    },
+    {
+      "id": "ENCH-SPKE-ENT",
+      "name": "Spike-Core's",
+      "family": "support",
+      "description": "Increase Crit",
+      "stats": {
+        "Crit": [0.25, 0.625, 1.25, 1.875, 2.5, 3.125, 3.75, 4.375, 5]
+      }
+    },
+    {
+      "id": "ENCH-TRUE-ENT",
+      "name": "True-Core's",
+      "family": "support",
+      "description": "Increase Hit",
+      "stats": {
+        "Hit": [0.75, 1.5, 2.25, 3, 3.75, 4.5, 5.25, 6.25, 7.5]
+      }
+    },
+    {
+      "id": "ENCH-VITL-ENT",
+      "name": "Vital-Core's",
+      "family": "support",
+      "description": "Increase Vitality",
+      "stats": {
+        "VITPercent": [0.0125, 0.0187, 0.025, 0.0313, 0.0375, 0.05, 0.075, 0.1, 0.125]
+      }
+    },
+    {
+      "id": "ENCH-BLOD-ENT",
+      "name": "Blood-Core's",
+      "family": "support",
+      "description": "Steal Enemy Health",
+      "stats": {
+        "LifeSteal": [1, 1.5, 2.25, 3.75, 6.25, 10, 12.5, 15, 18.75]
+      }
+    }
+  ]
+}

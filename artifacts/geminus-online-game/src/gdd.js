@@ -368,6 +368,15 @@ function applyEffect(effectKey, val, totals) {
     case 'Mastery':    totals.gemMastery += val; break
     case 'LifeSteal':  totals.gemLifeSteal += val; break
     case 'ResourceDrop': totals.gemResourceDrop += val; break
+    // Percent bonuses (fractions: 0.05 = +5%) -- shadow enchantments
+    case 'ACPercent':  totals.ACPercent  += val; break
+    case 'WCPercent':  totals.WCPercent  += val; break
+    case 'SCPercent':  totals.SCPercent  += val; break
+    case 'DEXPercent': totals.DEXPercent += val; break
+    case 'STRPercent': totals.STRPercent += val; break
+    case 'WISPercent': totals.WISPercent += val; break
+    case 'NTLPercent': totals.NTLPercent += val; break
+    case 'VITPercent': totals.VITPercent += val; break
     // Enemy debuffs -- stored for combat resolution, not calcDerived
     case '-EnemyWIS': case '-EnemyNTL': case '-EnemyDEX':
     case '-EnemySTR': case '-EnemyHit':
@@ -382,6 +391,11 @@ function applyEffect(effectKey, val, totals) {
 function applyEnchantments(enchantments, totals) {
   if (!Array.isArray(enchantments)) return
   for (const ench of enchantments) {
+    // Multi-stat enchantments (Soulforge/Shadow loot) carry an effects array
+    if (Array.isArray(ench?.effects)) {
+      for (const e of ench.effects) applyEffect(e.stat, e.value, totals)
+      continue
+    }
     if (!ench?.effect) continue
     const { stat, value } = ench.effect
     // Map enchant stat names → our effect keys
@@ -430,6 +444,7 @@ export function calcDerived(p, BASE_ITEMS = []) {
     enemyDebuffs: {},
     // Enchant percent bonuses
     ACPercent: 0, WCPercent: 0, SCPercent: 0,
+    DEXPercent: 0, STRPercent: 0, WISPercent: 0, NTLPercent: 0, VITPercent: 0,
   }
 
   // ── Loop equipped items ────────────────────────────────────
@@ -505,11 +520,11 @@ export function calcDerived(p, BASE_ITEMS = []) {
 
   // ── Apply gem stat bonuses to base stats ───────────────────
   const bs = p.baseStats
-  const effDEX = (bs.DEX || 0) + gemTotals.gemDEX
-  const effSTR = (bs.STR || 0) + gemTotals.gemSTR
-  const effWIS = (bs.WIS || 0) + gemTotals.gemWIS
-  const effNTL = (bs.NTL || 0) + gemTotals.gemNTL
-  const effVIT = (bs.VIT || 0) + gemTotals.gemVIT
+  const effDEX = ((bs.DEX || 0) + gemTotals.gemDEX) * (1 + gemTotals.DEXPercent)
+  const effSTR = ((bs.STR || 0) + gemTotals.gemSTR) * (1 + gemTotals.STRPercent)
+  const effWIS = ((bs.WIS || 0) + gemTotals.gemWIS) * (1 + gemTotals.WISPercent)
+  const effNTL = ((bs.NTL || 0) + gemTotals.gemNTL) * (1 + gemTotals.NTLPercent)
+  const effVIT = ((bs.VIT || 0) + gemTotals.gemVIT) * (1 + gemTotals.VITPercent)
 
   // ── Apply flat gem class bonuses ───────────────────────────
   ac += gemTotals.gemAC
@@ -727,6 +742,7 @@ export function savePayload(p) {
     uid: p.uid,
     xp: p.xp ?? 0,
     gold: p.gold ?? 0,
+    bank: p.bank ?? 0,
     level: p.level ?? 1,
     hp: p.hp ?? 100,
     max_hp: p.derivedStats?.maxHp ?? 100,
@@ -748,6 +764,7 @@ export function applyLiveRow(p, row) {
   if (!row || row.error) return p
   if (row.xp != null) p.xp = row.xp
   if (row.gold != null) p.gold = row.gold
+  if (row.bank != null) p.bank = row.bank
   if (row.level != null) p.level = row.level
   if (row.hp != null) p.hp = row.hp
   if (row.attribute_points != null) p.attributePoints = row.attribute_points

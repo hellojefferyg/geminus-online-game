@@ -41,6 +41,7 @@ export function savePlayerNow(player: any, reason = '') {
       .update({
         xp:               snapshot.xp,
         gold:             snapshot.gold,
+        bank:             snapshot.bank,
         level:            snapshot.level,
         hp:               snapshot.hp,
         max_hp:           snapshot.max_hp,
