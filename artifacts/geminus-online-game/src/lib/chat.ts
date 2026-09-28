@@ -11,11 +11,11 @@ export const LIVE_CHANNELS = ['main', 'sales'] as const
 export const CHAT_HISTORY = 50
 export const CHAT_MAX_LENGTH = 300
 
-export interface ChatLine { id?: number; sender: string; text: string; color: string; role?: string | null; system?: boolean }
+export interface ChatLine { id?: number; sender: string; text: string; color: string; role?: string | null; system?: boolean; at?: string }
 
 /** The role comes from the server (set by the database trigger), so it can't be faked. */
 function toLine(row: any): ChatLine {
-  return { id: row.id, sender: row.sender_name || 'Pilot', role: row.sender_role || null, text: row.body, color: row.color || '#3EE0FF' }
+  return { id: row.id, sender: row.sender_name || 'Pilot', role: row.sender_role || null, text: row.body, color: row.color || '#3EE0FF', at: row.created_at }
 }
 
 export function isLiveChannel(channel: string): boolean {
@@ -34,14 +34,26 @@ export async function loadRecent(channel: string): Promise<ChatLine[]> {
   return (data || []).reverse().map(toLine)
 }
 
-/** Calls onMessage(channel, line) for every new message. Returns an unsubscribe function. */
-export function subscribeChat(onMessage: (channel: string, line: ChatLine) => void): () => void {
+/**
+ * Calls onMessage(channel, line) for every new message and onDelete(id) when staff remove one.
+ * Returns an unsubscribe function.
+ */
+export function subscribeChat(onMessage: (channel: string, line: ChatLine) => void, onDelete: (id: number) => void = () => {}): () => void {
   const sub = supabase
     .channel('chat-messages')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' },
       payload => onMessage((payload.new as any).channel, toLine(payload.new)))
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages' },
+      payload => { const id = (payload.old as any)?.id; if (id != null) onDelete(id) })
     .subscribe()
   return () => { supabase.removeChannel(sub) }
+}
+
+/** Staff only (Dev/Admin/Arch/Mod); the database refuses anyone else. */
+export async function deleteChat(id: number): Promise<string | null> {
+  const { error, count } = await supabase.from('chat_messages').delete({ count: 'exact' }).eq('id', id)
+  if (error) return error.message
+  return count === 0 ? 'Not allowed.' : null
 }
 
 export async function sendChat(channel: string, text: string): Promise<string | null> {

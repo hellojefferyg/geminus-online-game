@@ -1,5 +1,5 @@
 // src/game/components/ChatConsole.tsx
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /** Staff names: locked colour + tag, bold. Players: plain white. Staff messages: bold platinum. */
 export const ROLE_STYLE: Record<string, { color: string; tag: string }> = {
@@ -10,12 +10,24 @@ export const ROLE_STYLE: Record<string, { color: string; tag: string }> = {
 }
 const PLATINUM = '#D4DAE3'
 
-function ChatName({ m }: { m: any }) {
+function ChatName({ m, onMention }: { m: any; onMention?: (name: string) => void }) {
   if (m.system) return <span style={{ color: '#3EE0FF', fontWeight: 800 }}>{m.sender}:</span>
   const st = ROLE_STYLE[m.role]
-  if (st) return <span style={{ color: st.color, fontWeight: 800 }}>{m.sender}({st.tag}):</span>
-  return <span style={{ color: '#fff', fontWeight: 400 }}>{m.sender}:</span>
+  const style: React.CSSProperties = st ? { color: st.color, fontWeight: 800 } : { color: '#fff', fontWeight: 400 }
+  return (
+    <span role="button" title="Tap to mention" onClick={() => onMention?.(m.sender)} style={{ ...style, cursor: 'pointer' }}>
+      {m.sender}{st ? `(${st.tag})` : ''}:
+    </span>
+  )
 }
+
+function timeOf(at?: string): string {
+  if (!at) return ''
+  const d = new Date(at)
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const CHAT_SUBS: Record<string, [string, string][]> = {
   main:   [['feed', 'Main Chat']],
@@ -42,6 +54,10 @@ interface ChatConsoleProps {
   onToggleInbox: () => void
   onSetChatOverlay: (val: boolean) => void
   onAddEmoji: (em: string) => void
+  unread: Record<string, number>
+  canModerate: boolean
+  onDeleteMessage: (id: number) => void
+  onMention: (name: string) => void
 }
 
 export default function ChatConsole({
@@ -49,21 +65,47 @@ export default function ChatConsole({
   emojiOpen, inboxOpen, chatOverlay, groupNames, playerName,
   onSwitchChannel, onSetChatSub, onChatInput, onSendMessage,
   onToggleEmoji, onToggleInbox, onSetChatOverlay, onAddEmoji,
+  unread, canModerate, onDeleteMessage, onMention,
 }: ChatConsoleProps) {
   const chatScrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll: follow new messages when you're at the bottom; otherwise offer a jump button
+  const activeKey = chatChannel === 'groups' ? chatSub[chatChannel] : chatChannel
+  const activeCount = (chatMessages[activeKey] || []).length
+  const [showJump, setShowJump] = useState(false)
+  const atBottom = useRef(true)
+  const scrollToEnd = () => { const el = chatScrollRef.current; if (el) el.scrollTop = el.scrollHeight; setShowJump(false) }
+  useEffect(() => { if (atBottom.current) scrollToEnd(); else setShowJump(true) }, [activeCount])
+  useEffect(() => { atBottom.current = true; scrollToEnd() }, [activeKey, chatOverlay])
 
   const renderChatContent = () => {
     const sub = chatSub[chatChannel]
     const key = chatChannel === 'groups' ? sub : chatChannel
     const msgs = chatMessages[key] || []
+    const mentionRe = playerName ? new RegExp(`@${escapeRe(playerName)}\\b`, 'i') : null
     return msgs.length === 0
-      ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#475569', fontSize: '12px' }}></div>
-      : <>{msgs.map((m: any, i: number) => (
-          <div key={m.id ?? i} style={{ margin: '4px 0', fontSize: '12px', lineHeight: 1.4, wordBreak: 'break-word' }}>
-            <ChatName m={m} />{' '}
-            <span style={{ color: m.role ? PLATINUM : '#fff', fontWeight: m.role ? 700 : 400 }}>{m.text}</span>
-          </div>
-        ))}</>
+      ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '120px', color: '#64748b', fontSize: '12px' }}>No messages yet. Say hi!</div>
+      : <>{msgs.map((m: any, i: number) => {
+          const mentioned = !m.system && mentionRe?.test(m.text || '')
+          return (
+            <div key={m.id ?? i} className="chat-line" style={{
+              display: 'flex', alignItems: 'flex-start', gap: '6px', padding: '4px 6px', margin: '1px 0', borderRadius: '8px',
+              fontSize: '13px', lineHeight: 1.4, wordBreak: 'break-word',
+              background: mentioned ? 'rgba(255,214,10,0.10)' : undefined,
+              borderLeft: mentioned ? '2px solid #FFD60A' : '2px solid transparent',
+            }}>
+              <span style={{ flexShrink: 0, color: '#64748b', fontSize: '10px', fontFamily: 'monospace', paddingTop: '3px', minWidth: '44px' }}>{timeOf(m.at)}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <ChatName m={m} onMention={onMention} />{' '}
+                <span style={{ color: m.role ? PLATINUM : '#fff', fontWeight: m.role ? 700 : 400 }}>{m.text}</span>
+              </span>
+              {canModerate && m.id != null && (
+                <button onClick={() => onDeleteMessage(m.id)} title="Delete message"
+                  style={{ flexShrink: 0, background: 'none', border: 'none', color: '#64748b', fontSize: '14px', lineHeight: 1, cursor: 'pointer', padding: '2px 2px 0' }}>×</button>
+              )}
+            </div>
+          )
+        })}</>
   }
 
   // Called as a function (not <ChatBody/>): a component defined in here would be re-created on
@@ -74,8 +116,11 @@ export default function ChatConsole({
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
           <button className={`chat-expand-btn inbox-btn${inboxOpen ? ' active' : ''}`} onClick={onToggleInbox}>💬</button>
           {['main', 'sales', 'clan', 'groups'].map(ch => (
-            <button key={ch} className={`footer-tab-button${chatChannel === ch ? ' active' : ''}`} style={{ flex: 1 }} onClick={() => onSwitchChannel(ch)}>
+            <button key={ch} className={`footer-tab-button${chatChannel === ch ? ' active' : ''}`} style={{ flex: 1, position: 'relative' }} onClick={() => onSwitchChannel(ch)}>
               {ch.charAt(0).toUpperCase() + ch.slice(1)}
+              {chatChannel !== ch && (unread[ch] || 0) > 0 && (
+                <span style={{ position: 'absolute', top: '-5px', right: '-4px', minWidth: '16px', height: '16px', padding: '0 4px', borderRadius: '9999px', background: '#FF375F', color: '#fff', fontSize: '9px', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 8px rgba(255,55,95,0.7)' }}>{unread[ch]}</span>
+              )}
             </button>
           ))}
         </div>
@@ -113,15 +158,29 @@ export default function ChatConsole({
           </div>
         </div>
       ) : (
-        <div ref={chatScrollRef} style={{ fontSize: '12px', flex: 1, overflowY: 'auto', minHeight: '320px', maxHeight: inOverlay ? undefined : '320px', padding: '4px', position: 'relative', zIndex: 1 }}>
-          {renderChatContent()}
+        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', zIndex: 1 }}>
+          <div ref={chatScrollRef}
+            onScroll={e => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40; if (atBottom.current) setShowJump(false) }}
+            style={{ flex: 1, overflowY: 'auto', minHeight: '320px', maxHeight: inOverlay ? undefined : '320px', padding: '2px', WebkitOverflowScrolling: 'touch' }}>
+            {renderChatContent()}
+          </div>
+          {showJump && (
+            <button onClick={scrollToEnd} style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: '9999px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', background: 'rgba(62,224,255,0.9)', color: '#021018', border: 'none', boxShadow: '0 4px 14px rgba(0,0,0,0.6)' }}>
+              New messages ↓
+            </button>
+          )}
         </div>
       )}
 
       {!inboxOpen && (
         <form onSubmit={onSendMessage} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
           <button type="button" className="icon-btn" onClick={onToggleEmoji}>😀</button>
-          <input type="text" className="editor-input" value={chatInput} onChange={e => onChatInput(e.target.value)} placeholder="Type To Chat…" style={{ flex: 1, padding: inOverlay ? '10px' : '8px', fontSize: '12px' }} />
+          <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+            <input type="text" className="editor-input" value={chatInput} maxLength={300} enterKeyHint="send" onChange={e => onChatInput(e.target.value)}
+              placeholder={chatChannel === 'main' || chatChannel === 'sales' ? `Message ${chatChannel === 'main' ? 'Main' : 'Sales'}…` : 'Type To Chat…'}
+              style={{ width: '100%', padding: inOverlay ? '10px' : '8px', paddingRight: chatInput.length > 240 ? '44px' : undefined, fontSize: '16px' }} />
+            {chatInput.length > 240 && <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', fontFamily: 'monospace', color: chatInput.length >= 300 ? '#FF375F' : '#94a3b8' }}>{300 - chatInput.length}</span>}
+          </div>
           <button type="submit" className="footer-tab-button" style={{ padding: inOverlay ? '10px 20px' : '8px 16px', fontWeight: 600 }}>Send</button>
         </form>
       )}
