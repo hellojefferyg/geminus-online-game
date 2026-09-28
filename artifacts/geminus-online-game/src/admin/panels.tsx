@@ -5,8 +5,9 @@ import { supabase } from '../supabase'
 import { fetchBalanceHistory, ROLE_LABELS, type Balance, type Role } from '../systems/balance'
 import { C, card, label, btn, Search } from './fields'
 
-const ROLE_ORDER: Role[] = ['dev', 'arch', 'mod', 'player']
-const ROLE_COLORS: Record<Role, string> = { dev: C.red, arch: C.purple, mod: C.green, player: C.muted }
+const ROLE_ORDER: Role[] = ['dev', 'admin', 'arch', 'mod', 'player']
+// Same colours as chat names (ChatConsole ROLE_STYLE)
+const ROLE_COLORS: Record<Role, string> = { dev: '#FF2D2D', admin: '#B84DFF', arch: '#2E8BFF', mod: '#2BFF5F', player: C.muted }
 
 export function RolesPanel({ myUid, notify }: { myUid: string; notify: (msg: string) => void }) {
   const [players, setPlayers] = useState<any[]>([])
@@ -39,7 +40,7 @@ export function RolesPanel({ myUid, notify }: { myUid: string; notify: (msg: str
 
   return <div style={card}>
     <p style={{ fontSize: '11px', color: C.muted, margin: '0 0 10px' }}>
-      Dev = full access (God Editor, dev tools, roles). Arch and Mod show a tag in chat. Only devs can change roles; the last dev can't remove themselves.
+      Dev = full access (God Editor, dev tools, roles). Admin, Arch and Mod get a coloured name and tag in chat. Only devs can change roles; the last dev can't remove themselves.
     </p>
     <Search value={q} onChange={setQ} placeholder="Search players by name or email…" />
     {shown.map(p => {

@@ -163,7 +163,6 @@ if (MAINTENANCE_MODE) {
   const [chatInput, setChatInput] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [equipPopup, setEquipPopup] = useState<string | null>(null)
-  const [chatNameColor, setChatNameColor] = useState('#3EE0FF')
   const [inboxOpen, setInboxOpen] = useState(false)
   const [groupNames] = useState<Record<string,string>>({ g1:'Group-1', g2:'Group-2', g3:'Group-3', g4:'Group-4' })
   const [filterState, setFilterState] = useState({ category:'All', subType:'All', tier:'All', quality:'All', sortBy:'tier', order:'desc' })
@@ -225,8 +224,7 @@ if (MAINTENANCE_MODE) {
     loadPlayer()
     const savedTheme = localStorage.getItem('g_theme')||'aether'
     setTheme(savedTheme); document.documentElement.classList.toggle('theme-onyx',savedTheme==='onyx')
-    setChatMessages(prev => ({ ...prev, main:[{ sender:'System', text:'Welcome to Geminus. Transmission systems online.', color:'#3EE0FF' }] }))
-    const savedColor = localStorage.getItem('g_name'); if (savedColor) setChatNameColor(savedColor)
+    setChatMessages(prev => ({ ...prev, main:[{ sender:'System', system:true, text:'Welcome to Geminus. Transmission systems online.', color:'#3EE0FF' }] }))
   }, [uid])
 
   // Graphic map: load the current zone's map and place the player on it
@@ -467,11 +465,11 @@ if (MAINTENANCE_MODE) {
     e.preventDefault(); if (!chatInput.trim()) return
     if (isLiveChannel(chatChannel)) {
       const text = chatInput; setChatInput('')
-      sendChat(chatChannel, text, chatNameColor).then(err => { if (err) { showToast('Message failed to send.'); setChatInput(text) } })
+      sendChat(chatChannel, text).then(err => { if (err) { showToast('Message failed to send.'); setChatInput(text) } })
       return
     }
     const key=chatChannel==='groups'?chatSub[chatChannel]:chatChannel
-    setChatMessages(prev=>({...prev,[key]:[...(prev[key]||[]).slice(-149),{sender:player.name||'Pilot',text:chatInput.trim(),color:chatNameColor}]}))
+    setChatMessages(prev=>({...prev,[key]:[...(prev[key]||[]).slice(-149),{sender:player.name||'Pilot',role:role==='player'?null:role,text:chatInput.trim(),color:'#fff'}]}))
     setChatInput('')
   }
 
@@ -568,7 +566,7 @@ if (MAINTENANCE_MODE) {
             {/* 5 -- ChatConsole */}
             <ChatConsole
               chatChannel={chatChannel} chatSub={chatSub} chatMessages={chatMessages}
-              chatInput={chatInput} chatNameColor={chatNameColor} emojiOpen={emojiOpen}
+              chatInput={chatInput} emojiOpen={emojiOpen}
               inboxOpen={inboxOpen} chatOverlay={chatOverlay} groupNames={groupNames}
               playerName={player.name}
               onSwitchChannel={ch=>{ setChatChannel(ch); if (inboxOpen) setInboxOpen(false) }}
@@ -576,7 +574,6 @@ if (MAINTENANCE_MODE) {
               onToggleEmoji={()=>setEmojiOpen(prev=>!prev)}
               onToggleInbox={()=>setInboxOpen(prev=>!prev)}
               onSetChatOverlay={setChatOverlay}
-              onColorChange={color=>{ setChatNameColor(color); localStorage.setItem('g_name',color) }}
               onAddEmoji={em=>{ setChatInput(prev=>prev+em); setEmojiOpen(false) }}
             />
 
@@ -586,7 +583,7 @@ if (MAINTENANCE_MODE) {
 
       {role === 'dev' && !devOpen && (
         <button onClick={() => { setDevOpen(true); setActiveTab(null); setActiveService(null) }}
-          style={{ position: 'fixed', top: 'max(1px, env(safe-area-inset-top, 1px))', left: '50%', transform: 'translateX(-50%)', zIndex: 60, fontSize: '10px', fontWeight: 900, letterSpacing: '0.08em', padding: '4px 9px', borderRadius: '9999px', background: 'rgba(255,55,95,0.18)', border: '1px solid rgba(255,55,95,0.7)', color: '#FF375F', cursor: 'pointer' }}>
+          style={{ position: 'absolute', top: 'max(1px, env(safe-area-inset-top, 1px))', left: '50%', transform: 'translateX(-50%)', zIndex: 60, fontSize: '10px', fontWeight: 900, letterSpacing: '0.08em', padding: '4px 9px', borderRadius: '9999px', background: 'rgba(255,55,95,0.18)', border: '1px solid rgba(255,55,95,0.7)', color: '#FF375F', cursor: 'pointer' }}>
           DEV{balanceInfo.draft ? ' · DRAFT' : ''}
         </button>
       )}

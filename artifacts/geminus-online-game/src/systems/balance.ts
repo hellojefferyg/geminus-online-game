@@ -202,11 +202,11 @@ export async function fetchBalanceHistory(limit = 15) {
 
 // ─── Roles ────────────────────────────────────────────────────────
 
-export type Role = 'dev' | 'arch' | 'mod' | 'player'
-export const ROLE_LABELS: Record<Role, string> = { dev: 'Dev', arch: 'Arch', mod: 'Mod', player: 'Player' }
+export type Role = 'dev' | 'admin' | 'arch' | 'mod' | 'player'
+export const ROLE_LABELS: Record<Role, string> = { dev: 'Dev', admin: 'Admin', arch: 'Arch', mod: 'Mod', player: 'Player' }
 
 export async function fetchMyRole(): Promise<Role> {
   const { data, error } = await supabase.rpc('my_role')
   if (error) return 'player'
-  return (['dev', 'arch', 'mod'].includes(data) ? data : 'player') as Role
+  return (['dev', 'admin', 'arch', 'mod'].includes(data) ? data : 'player') as Role
 }
