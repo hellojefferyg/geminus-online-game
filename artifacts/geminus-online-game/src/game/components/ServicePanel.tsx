@@ -12,6 +12,7 @@ import {
   groupPouch, countGems, gemInfo, gemEffectText, gemMinLevel,
   FUSION_RECIPES, MAX_GEM_GRADE, UNSOCKET_COST, fuseCost,
   itemDisplayName, enchantmentLines,
+  zoneIds, zoneInfo, exitDestinations, canEnterZone, travelTo, TELEPORT_COST, homeZone,
 } from '../../systems/services'
 
 function fmt(n: number): string {
@@ -61,7 +62,8 @@ export default function ServicePanel({ service, player, BASE_ITEMS, onResult, on
         {act === 'vault' && <Vault player={player} run={run} />}
         {(act === 'armory' || act === 'arcanium') && <Merchant shop={act} player={player} BASE_ITEMS={BASE_ITEMS} run={run} />}
         {act === 'gemcutter' && <Gemcutter player={player} BASE_ITEMS={BASE_ITEMS} run={run} />}
-        {!['sanctuary', 'vault', 'armory', 'arcanium', 'gemcutter'].includes(act) && <div style={muted}>{service.label} -- coming soon!</div>}
+        {(act === 'portal' || act === 'teleport') && <Travel mode={act} player={player} run={run} />}
+        {!['sanctuary', 'vault', 'armory', 'arcanium', 'gemcutter', 'portal', 'teleport'].includes(act) && <div style={muted}>{service.label} -- coming soon!</div>}
       </div>
     </div>
   )
@@ -159,6 +161,54 @@ function Merchant({ shop, player, BASE_ITEMS, run }: { shop: string; player: any
         </div>
       )}
     </>
+  )
+}
+
+// ─── Exits + Teleporter ───────────────────────────────────────────
+const TYPE_COLORS: Record<string, string> = {
+  starter: '#3EE0FF', xp: '#30D158', gold: '#FFD60A', shadow: '#BF5AF2', gem: '#5AC8FA', prestige: '#FF9500',
+}
+
+function Travel({ mode, player, run }: { mode: string; player: any; run: Run }) {
+  const [filter, setFilter] = useState<'open' | 'all'>('open')
+  const here = player.pos?.zoneId || 'Z01'
+  const home = homeZone(player.race)
+  const isTeleport = mode === 'teleport'
+  const ids = isTeleport
+    ? zoneIds().filter(id => id !== here && (filter === 'all' || canEnterZone(player, id)))
+    : exitDestinations(here, player.race)
+
+  return (
+    <div style={card}>
+      <span style={label}>{isTeleport ? 'Teleportation Hub · warp anywhere you have unlocked' : 'Exit · walk to a neighbouring zone (free)'}</span>
+      {isTeleport && (
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+          {(['open', 'all'] as const).map(k => (
+            <button key={k} className={`hud-nav-pill${filter === k ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => setFilter(k)}>{k === 'open' ? 'Unlocked' : 'All Zones'}</button>
+          ))}
+        </div>
+      )}
+      {ids.length === 0 && <div style={muted}>No destinations</div>}
+      {ids.map(id => {
+        const z = zoneInfo(id)
+        const open = canEnterZone(player, id)
+        const cost = isTeleport ? TELEPORT_COST(id) : 0
+        const disabled = !open || (player.gold || 0) < cost
+        return (
+          <div key={id} style={row}>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ color: '#e4e4e7', fontWeight: 700 }}>{id}: {z.name}{id === home ? ' 🏠' : ''}</span>
+              <span style={{ display: 'block', fontSize: '10px', color: '#94a3b8' }}>
+                Lv {z.level.toLocaleString()} · Tier {z.gear} · <span style={{ color: TYPE_COLORS[z.type] || '#fff', textTransform: 'capitalize' }}>{z.type}</span>
+              </span>
+            </span>
+            <button style={actBtn(isTeleport ? '#FF375F' : '#94a3b8', disabled)} onClick={() => run(travelTo(player, id, cost))}>
+              {!open ? `Lv ${fmt(z.level)}` : isTeleport ? fmt(cost) : 'Go'}
+            </button>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

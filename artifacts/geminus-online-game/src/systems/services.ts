@@ -11,7 +11,9 @@
 import GEMS_DATA from '../data/gems.json'
 import ENCHANT_DATA from '../data/enchantments.json'
 import ZONE_MONSTERS from '../data/zoneMonsters.json'
-import { DROPPER_TIERS, GEM_GATES } from '../gdd.js'
+import ZONES_DATA from '../data/zones.json'
+import STAMPS_DATA from '../data/stamps.json'
+import { DROPPER_TIERS, GEM_GATES, GDD, ZONE_TYPES, STARTER_RACE } from '../gdd.js'
 
 export type ServiceResult = { ok: true; player: any; msg: string } | { ok: false; msg: string }
 type Rng = () => number
@@ -349,11 +351,131 @@ export function enchantmentLines(item: any): string[] {
     `${e.name}: ${(e.effects || []).map((x: any) => effectText(x.stat, x.value)).join(', ')}`)
 }
 
-// ─── Zone monsters ────────────────────────────────────────────────
+// ─── Zone monsters (Geminus.1 Monster Forge) ──────────────────────
 
-/** Starter-zone monster list with Geminus.1's per-zone names; stats unchanged. */
+const ZONES: Record<string, any> = ZONES_DATA as any
+const STAMPS: Record<string, any> = STAMPS_DATA as any
+const ROMAN: Record<string, number> = { I: 1, V: 5, X: 10 }
+
+export function romanToInt(r: string): number {
+  let n = 0
+  const s = String(r || 'I').toUpperCase()
+  for (let i = 0; i < s.length; i++) {
+    const v = ROMAN[s[i]] || 0, next = ROMAN[s[i + 1]] || 0
+    n += v < next ? -v : v
+  }
+  return Math.max(1, n)
+}
+
+export function isStarterZone(zoneId: string): boolean {
+  return ZONES[zoneId]?.type === 'starter'
+}
+
+/**
+ * Monster stats for non-starter zones, ported from Geminus.1 DevManager.forgeEntireBestiary().
+ * Uses the live GDD damage formula (DAMAGE_CONST, AC_REDUCTION), the zone's entry level and gear
+ * tier from zones.json, and the zone type's hpDef / xp / gold multipliers.
+ * Minions: two floor-geared hits to kill, deal 1/10 of a level-appropriate player's HP.
+ * Bosses/Elites: five ceiling-geared hits, deal 1/4 of that HP.
+ */
+export function forgeZoneMonsters(zoneId: string): any[] {
+  const zone = ZONES[zoneId]
+  const slots: any[] = (ZONE_MONSTERS as any)[zoneId] || []
+  if (!zone) return []
+  const K = GDD.DAMAGE_CONST, ACR = GDD.AC_REDUCTION
+  const level = Math.max(1, zone.level || 1)
+  const gear = romanToInt(zone.gear)
+  const prevTier = Math.max(0, gear - 1)
+  const prevMult = prevTier === 0 ? 0.5 : Math.pow(GDD.CLASSVALUE_GROWTH, prevTier - 1)
+  const currMult = Math.pow(GDD.CLASSVALUE_GROWTH, gear - 1)
+
+  const floorWC = 26 * prevMult, floorAC = 27 * prevMult
+  const ceilWC = 52 * currMult, ceilAC = 55 * currMult
+  const minionDef = Math.max(5, Math.floor(40 * prevMult))
+  const bossDef = Math.max(10, Math.floor(100 * currMult))
+  const minionHP = Math.max(20, Math.max(1, Math.floor((K * floorWC) / minionDef)) * 2)
+  const bossHP = Math.max(100, Math.max(1, Math.floor((K * ceilWC) / bossDef)) * 5)
+  const playerMaxHP = GDD.MAX_HP_BASE + 12 * level * GDD.MAX_HP_PER_VIT
+  const minionAtk = Math.max(2, Math.floor(((playerMaxHP / 10) * Math.max(1, floorAC * ACR)) / K))
+  const bossAtk = Math.max(5, Math.floor(((playerMaxHP / 4) * Math.max(1, ceilAC * ACR)) / K))
+
+  const rules = ZONE_TYPES[zone.type] || ZONE_TYPES.xp
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+  const present = slots.map((m, i) => (m ? { ...m, slot: i + 1 } : null)).filter(Boolean) as any[]
+  return present.map((m, idx) => {
+    const isBoss = m.rank === 'Boss'
+    const t = isBoss || m.rank === 'Elite' ? 1 : present.length > 1 ? idx / (present.length - 1) : 1
+    return {
+      id: `${zoneId}:${String(m.slot).padStart(2, '0')}`,
+      name: m.name,
+      rank: m.rank,
+      isBoss,
+      hp: Math.max(1, Math.floor(lerp(minionHP, bossHP, t) * rules.hpDef)),
+      atk: Math.floor(lerp(minionAtk, bossAtk, t)),
+      def: Math.max(1, Math.floor(lerp(minionDef, bossDef, t) * rules.hpDef)),
+      xp: Math.floor(Math.max(1, level * 10 * (0.5 + 0.5 * t)) * rules.xp),
+      gold: Math.floor(Math.max(1, level * 5 * (0.5 + 0.5 * t)) * rules.gold),
+    }
+  })
+}
+
+/**
+ * Monsters for a zone. Starter zones (Z01-Z24) keep the balanced starter list from
+ * bestiary.json with Geminus.1's per-zone names; other zones are forged.
+ */
 export function zoneTargets(zoneId: string, starter: any[]): any[] {
-  const names = (ZONE_MONSTERS as any)[zoneId]
-  if (!names) return starter
-  return starter.map(m => (names[m.id] ? { ...m, name: names[m.id] } : m))
+  if (!ZONES[zoneId] || isStarterZone(zoneId)) {
+    const slots: any[] = (ZONE_MONSTERS as any)[zoneId] || []
+    return starter.map(m => {
+      const slot = m.id === 'E10*' ? 10 : parseInt(String(m.id).replace(/\D/g, ''), 10) - 1
+      return slots[slot] ? { ...m, name: slots[slot].name } : m
+    })
+  }
+  const forged = forgeZoneMonsters(zoneId)
+  return forged.length ? forged : starter
+}
+
+// ─── Zone travel (Exits + Teleporter) ─────────────────────────────
+
+export const TELEPORT_COST = (zoneId: string) => 10000 + (ZONES[zoneId]?.level || 1) * 50 // Geminus.1 portal.html
+
+export function zoneIds(): string[] {
+  return Object.keys(ZONES).sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10))
+}
+
+export function zoneInfo(zoneId: string): any {
+  return ZONES[zoneId] || null
+}
+
+export function homeZone(raceKey: string): string {
+  const hit = Object.entries(STARTER_RACE).find(([, r]) => r === raceKey)
+  return hit ? hit[0] : 'Z01'
+}
+
+/** Exits walk to the neighbouring zones (and home), for free. */
+export function exitDestinations(zoneId: string, raceKey: string): string[] {
+  const n = parseInt(zoneId.slice(1), 10)
+  const ids = [n - 1, n + 1].map(k => 'Z' + String(k).padStart(2, '0')).filter(id => ZONES[id])
+  const home = homeZone(raceKey)
+  if (home !== zoneId && !ids.includes(home)) ids.push(home)
+  return ids
+}
+
+export function canEnterZone(p: any, zoneId: string): boolean {
+  return (p.level || 1) >= (ZONES[zoneId]?.level || 1)
+}
+
+export function travelTo(p: any, zoneId: string, cost = 0): ServiceResult {
+  const zone = ZONES[zoneId]
+  if (!zone) return fail('Unknown zone.')
+  if (zoneId === p.pos?.zoneId) return fail('You are already here.')
+  if (!canEnterZone(p, zoneId)) return fail(`${zone.name} requires level ${zone.level.toLocaleString()}.`)
+  if ((p.gold || 0) < cost) return fail(`Travel costs ${cost.toLocaleString()} gold.`)
+  const stamp = STAMPS[zone.stamp] || STAMPS.starter_7x7
+  const [x, y] = stamp.spawn || [0, stamp.size - 1]
+  return {
+    ok: true,
+    player: { ...p, gold: (p.gold || 0) - cost, pos: { zoneId, x, y } },
+    msg: `Arrived at ${zoneId}: ${zone.name}${cost ? ` (-${cost.toLocaleString()} gold)` : ''}.`,
+  }
 }
