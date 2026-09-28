@@ -7,13 +7,14 @@ import STAMPS_DATA from './data/stamps.json'
 import BESTIARY_DATA from './data/bestiary.json'
 import { runTurn, applyTurnResult, getDefaultAction } from './managers/CombatManager'
 import { savePlayerNow } from './lib/saveQueue'
+import { LIVE_CHANNELS, isLiveChannel, loadRecent, subscribeChat, sendChat, type ChatLine } from './lib/chat'
 import PlayerHUD from './game/components/PlayerHUD'
 import CombatPanel from './game/components/CombatPanel'
 import CombatConsole from './game/components/CombatConsole'
 import ChatConsole from './game/components/ChatConsole'
 import InlinePanel from './game/components/InlinePanel'
 import ServicePanel from './game/components/ServicePanel'
-import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, GEM_POUCH_CAP, INVENTORY_CAP } from './systems/services'
+import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, romanToInt, GEM_POUCH_CAP, INVENTORY_CAP } from './systems/services'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
 const MAINTENANCE_MODE = false;
@@ -136,14 +137,14 @@ function buildStartingKit(raceKey: string): { inventory: any[]; equipment: Recor
   else { add(weapons.w1,'Weapon 1'); add(weapons.w1,'Weapon 2'); add(weapons.w2,'Spell 1'); add(weapons.w2,'Spell 2') }
   return { inventory: inv, equipment: eq }
 }
-function rollItemDrop(raceKey: string): any | null {
+function rollItemDrop(raceKey: string, tier = 1): any | null {
   if (Math.random() > 0.40) return null
   const rd = races[raceKey] || races.human; const weapons = RACE_WEAPONS[raceKey] || RACE_WEAPONS.human
   let pool = ['base_helm_1','base_armor_1','base_gauntlets_1','base_leggings_1','base_boots_1']
   if (rd.archetype==='True Fighter') pool.push(weapons.w1,weapons.w2,'base_buffspell_1')
   else if (rd.archetype==='True Caster') pool.push(weapons.w1,'base_offhand_1')
   else pool.push(weapons.w1,weapons.w2,'base_offhand_1')
-  return makeItem(pool[Math.floor(Math.random()*pool.length)])
+  return makeItem(pool[Math.floor(Math.random()*pool.length)], tier)
 }
 // Derived stats come from gdd.js (source of truth): gear, socketed gems, shadow enchantments.
 function calcDerived(p: any) { return gddCalcDerived(p, BASE_ITEMS) }
@@ -221,6 +222,7 @@ if (MAINTENANCE_MODE) {
         const p: any = {
           uid, name:supa.name||'Pilot', race:supa.race||'human', raceName:supa.race_name||'Human',
           archetype:supa.archetype||'True Fighter', cci:supa.cci||'DEX', bank:supa.bank||0,
+          gemDust:Number(supa.gem_dust)||0, essence:Number(supa.essence)||0,
           xp:supa.xp??0, gold:supa.gold??0, level:supa.level??1, hp:supa.hp??null,
           attributePoints:supa.attribute_points??0, kills:supa.kills??0,
           baseStats:(supa.base_stats&&Object.keys(supa.base_stats).length>0)?supa.base_stats:{STR:15,DEX:20,VIT:10,NTL:5,WIS:5},
@@ -244,6 +246,20 @@ if (MAINTENANCE_MODE) {
     const savedTheme = localStorage.getItem('g_theme')||'aether'
     setTheme(savedTheme); document.documentElement.classList.toggle('theme-onyx',savedTheme==='onyx')
     setChatMessages(prev => ({ ...prev, main:[{ sender:'System', text:'Welcome to Geminus. Transmission systems online.', color:'#3EE0FF' }] }))
+    const savedColor = localStorage.getItem('g_name'); if (savedColor) setChatNameColor(savedColor)
+  }, [uid])
+
+  // Live chat: load recent Main/Sales history, then append new messages as they arrive
+  useEffect(() => {
+    let cancelled = false
+    const addLines = (channel: string, lines: ChatLine[]) => setChatMessages(prev => {
+      const cur = prev[channel] || []
+      const seen = new Set(cur.map((m: any) => m.id).filter(Boolean))
+      return { ...prev, [channel]: [...cur, ...lines.filter(l => !l.id || !seen.has(l.id))].slice(-150) }
+    })
+    for (const ch of LIVE_CHANNELS) loadRecent(ch).then(lines => { if (!cancelled) addLines(ch, lines) })
+    const unsubscribe = subscribeChat((channel, line) => addLines(channel, [line]))
+    return () => { cancelled = true; unsubscribe() }
   }, [uid])
 
   useEffect(() => {
@@ -340,11 +356,11 @@ if (MAINTENANCE_MODE) {
     setEnemyCurrentHP(result.monsterHp>0 ? Math.round(result.monsterHp) : null)
     let newPlayer = applyTurnResult({...current,inventory:[...(current.inventory||[])],equipment:{...(current.equipment||{})},gems:[...(current.gems||[])]},result)
     if (result.itemDrop) {
-      const dropped = rollItemDrop(newPlayer.race)
+      const dropped = rollItemDrop(newPlayer.race, romanToInt(zd.gear))
       if (dropped&&newPlayer.inventory.length<INVENTORY_CAP) {
         newPlayer = {...newPlayer,inventory:[...newPlayer.inventory,dropped]}
         const droppedBase = BASE_ITEMS.find(b=>b.id===dropped.baseItemId)
-        setLastItem(droppedBase?.name||'Item'); setLastItemColor(RARITY_COLORS['Uncommon'])
+        setLastItem(`${droppedBase?.name||'Item'} T${dropped.tier}`); setLastItemColor(RARITY_COLORS['Uncommon'])
       }
     }
     if (result.specialDrop?.kind==='gem') {
@@ -418,12 +434,24 @@ if (MAINTENANCE_MODE) {
   const applyService = (result: ServiceResult, reason: string) => {
     if (!result.ok) { showToast(result.msg); return }
     const p = result.player
+    const prevZone = (playerRef.current||player)?.pos?.zoneId
     calcDerived(p); playerRef.current=p; setPlayer(p)
     savePlayerNow(p, `service-${reason}`); showToast(result.msg)
+    if (p.pos?.zoneId !== prevZone) {
+      // Arrived in a new zone: close the building, drop combat, pick the zone's first monster
+      const targets = zoneTargets(p.pos.zoneId, BESTIARY_DATA.starter)
+      setSelectedTargetId(targets[0]?.id||'E01'); setEngaged(false); setEnemyCurrentHP(null); setCombatLog([])
+      setActiveService(null); setActiveTile(null)
+    }
   }
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault(); if (!chatInput.trim()) return
+    if (isLiveChannel(chatChannel)) {
+      const text = chatInput; setChatInput('')
+      sendChat(chatChannel, text, chatNameColor).then(err => { if (err) { showToast('Message failed to send.'); setChatInput(text) } })
+      return
+    }
     const key=chatChannel==='groups'?chatSub[chatChannel]:chatChannel
     setChatMessages(prev=>({...prev,[key]:[...(prev[key]||[]).slice(-149),{sender:player.name||'Pilot',text:chatInput.trim(),color:chatNameColor}]}))
     setChatInput('')

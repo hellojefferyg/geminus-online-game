@@ -457,7 +457,8 @@ export function calcDerived(p, BASE_ITEMS = []) {
     if (!base) continue
 
     const subType = base.subType || base.type || ''
-    const qm = item.qualityMultiplier ?? 1.0
+    // Quality x Soulforge infusion (+10% per infusion, +20% on a critical)
+    const qm = (item.qualityMultiplier ?? 1.0) * (item.infusionMult ?? 1.0)
     const isHybrid = item.isHybrid ?? false
 
     // Get CV -- hybrid items store both WC and SC explicitly
@@ -743,6 +744,8 @@ export function savePayload(p) {
     xp: p.xp ?? 0,
     gold: p.gold ?? 0,
     bank: p.bank ?? 0,
+    gem_dust: p.gemDust ?? 0,
+    essence: p.essence ?? 0,
     level: p.level ?? 1,
     hp: p.hp ?? 100,
     max_hp: p.derivedStats?.maxHp ?? 100,
@@ -765,6 +768,8 @@ export function applyLiveRow(p, row) {
   if (row.xp != null) p.xp = row.xp
   if (row.gold != null) p.gold = row.gold
   if (row.bank != null) p.bank = row.bank
+  if (row.gem_dust != null) p.gemDust = row.gem_dust
+  if (row.essence != null) p.essence = row.essence
   if (row.level != null) p.level = row.level
   if (row.hp != null) p.hp = row.hp
   if (row.attribute_points != null) p.attributePoints = row.attribute_points

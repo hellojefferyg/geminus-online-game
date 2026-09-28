@@ -11,7 +11,9 @@
 import GEMS_DATA from '../data/gems.json'
 import ENCHANT_DATA from '../data/enchantments.json'
 import ZONE_MONSTERS from '../data/zoneMonsters.json'
-import { DROPPER_TIERS, GEM_GATES } from '../gdd.js'
+import ZONES_DATA from '../data/zones.json'
+import STAMPS_DATA from '../data/stamps.json'
+import { DROPPER_TIERS, GEM_GATES, GDD, ZONE_TYPES, STARTER_RACE } from '../gdd.js'
 
 export type ServiceResult = { ok: true; player: any; msg: string } | { ok: false; msg: string }
 type Rng = () => number
@@ -327,13 +329,157 @@ export function generateShadowItem(p: any, BASE_ITEMS: any[], rng: Rng = Math.ra
   return { instanceId: newId(), baseItemId: pick(weighted, rng).id, tier, type: 'Shadow', qualityMultiplier: qm, enchantments: rollEnchantments(tier, qm, rng), socketedGems: [] }
 }
 
+// ─── Soulforge (Geminus.1 soulforgeData.js) ───────────────────────
+
+export const SOULFORGE = {
+  CRIT_CHANCE: 0.05,            // baseCriticalSuccessChance
+  MAX_INFUSION: 10,             // ascensionMinInfusionLevel (Ascension itself not ported yet)
+  INFUSION_GAIN: 0.10,          // +10% base stat per infusion
+  INFUSION_CRIT_GAIN: 0.20,     // "Double stat gain" on a critical
+  INFUSION_GOLD: 100000,        // infusionBaseCosts.goldBase
+  INFUSION_ESSENCE: 50,         // infusionBaseCosts.essenceBase
+  INFUSION_COST_MULT: 1.5,      // cost = base x 1.5^level
+  SHATTER_BASE: 10,             // shatteringYields.tierEssenceBase (x item tier)
+  SHATTER_MULT: { Shadow: 1.0, Echo: 0.5 } as Record<string, number>,
+}
+
+// rerollCosts T1-T20 (gold matches DROPPER_TIERS)
+const REROLL_ESSENCE = [25, 40, 65, 100, 150, 225, 350, 500, 750, 1200, 1800, 2700, 4000, 6000, 9000, 13500, 20000, 30000, 45000, 70000]
+
+export function shatterYield(item: any): number {
+  return Math.floor(SOULFORGE.SHATTER_BASE * (item?.tier || 1) * (SOULFORGE.SHATTER_MULT[item?.type] ?? 0))
+}
+
+export function infusionCost(item: any): { gold: number; essence: number } {
+  const m = Math.pow(SOULFORGE.INFUSION_COST_MULT, item?.infusionLevel || 0)
+  return { gold: Math.floor(SOULFORGE.INFUSION_GOLD * m), essence: Math.floor(SOULFORGE.INFUSION_ESSENCE * m) }
+}
+
+export function rerollCost(item: any): { gold: number; essence: number } {
+  const t = Math.max(1, Math.min(20, item?.tier || 1))
+  return { gold: tierInfo(t).gold, essence: REROLL_ESSENCE[t - 1] }
+}
+
+function findItem(p: any, instanceId: string) {
+  const idx = (p.inventory || []).findIndex((i: any) => i.instanceId === instanceId)
+  if (idx < 0) return { idx, item: null, err: 'Item not found.' }
+  return { idx, item: p.inventory[idx], err: null }
+}
+
+/** Shadow/Echo -> Essence. 5% critical doubles the yield. */
+export function shatterItem(p: any, instanceId: string, rng: Rng = Math.random): ServiceResult {
+  const { item, err } = findItem(p, instanceId)
+  if (err) return fail(err)
+  if (item.type !== 'Shadow' && item.type !== 'Echo') return fail('Only Shadow and Echo items can be shattered.')
+  if (Object.values(p.equipment || {}).includes(instanceId)) return fail('Unequip the item first.')
+  if ((item.socketedGems || []).length) return fail('Remove socketed gems at the Gemcutter first.')
+  const crit = rng() < SOULFORGE.CRIT_CHANCE
+  const gain = shatterYield(item) * (crit ? 2 : 1)
+  const next = clonePlayer(p)
+  next.inventory = next.inventory.filter((i: any) => i.instanceId !== instanceId)
+  next.essence = (p.essence || 0) + gain
+  return { ok: true, player: next, msg: `${crit ? 'CRITICAL! ' : ''}Shattered for ${gain.toLocaleString()} essence.` }
+}
+
+/** Raise a Dropper/Shadow item's base stat by 10% (20% on a critical), up to +10. */
+export function infuseItem(p: any, instanceId: string, rng: Rng = Math.random): ServiceResult {
+  const { idx, item, err } = findItem(p, instanceId)
+  if (err) return fail(err)
+  if (item.type === 'Echo') return fail('Echoes cannot be infused.')
+  const lvl = item.infusionLevel || 0
+  if (lvl >= SOULFORGE.MAX_INFUSION) return fail(`Already at +${SOULFORGE.MAX_INFUSION}.`)
+  const cost = infusionCost(item)
+  if ((p.gold || 0) < cost.gold || (p.essence || 0) < cost.essence) return fail(`Need ${cost.gold.toLocaleString()} gold and ${cost.essence.toLocaleString()} essence.`)
+  const crit = rng() < SOULFORGE.CRIT_CHANCE
+  const gain = crit ? SOULFORGE.INFUSION_CRIT_GAIN : SOULFORGE.INFUSION_GAIN
+  const next = clonePlayer(p)
+  next.gold = (p.gold || 0) - cost.gold
+  next.essence = (p.essence || 0) - cost.essence
+  next.inventory[idx] = { ...item, infusionLevel: lvl + 1, infusionMult: +((item.infusionMult ?? 1) * (1 + gain)).toFixed(4) }
+  return { ok: true, player: next, msg: `${crit ? 'CRITICAL! ' : ''}Infused to +${lvl + 1} (+${gain * 100}% base stat).` }
+}
+
+/** Replace one enchantment on a Shadow item with a different one. 5% critical refunds the cost. */
+export function rerollItemEnchant(p: any, instanceId: string, enchantIdx: number, rng: Rng = Math.random): ServiceResult {
+  const { idx, item, err } = findItem(p, instanceId)
+  if (err) return fail(err)
+  if (item.type !== 'Shadow') return fail('Only Shadow items can be rerolled.')
+  const old = (item.enchantments || [])[enchantIdx]
+  if (!old) return fail('Pick an enchantment to reroll.')
+  const cost = rerollCost(item)
+  if ((p.gold || 0) < cost.gold || (p.essence || 0) < cost.essence) return fail(`Need ${cost.gold.toLocaleString()} gold and ${cost.essence.toLocaleString()} essence.`)
+  const have = (item.enchantments || []).map((e: any) => e.id)
+  const pool = ENCHANTMENTS.filter(e => !have.includes(e.id))
+  const e = (pool.length ? pool : ENCHANTMENTS)[Math.floor(rng() * (pool.length || ENCHANTMENTS.length))]
+  const mt = magicTier(item.tier)
+  const fresh = { id: e.id, name: e.name, tier: mt, effects: Object.entries(e.stats).map(([stat, values]: [string, any]) => ({ stat, value: values[mt - 1] })) }
+  const crit = rng() < SOULFORGE.CRIT_CHANCE
+  const next = clonePlayer(p)
+  if (!crit) { next.gold = (p.gold || 0) - cost.gold; next.essence = (p.essence || 0) - cost.essence }
+  next.inventory[idx] = { ...item, enchantments: item.enchantments.map((x: any, i: number) => (i === enchantIdx ? fresh : x)) }
+  return { ok: true, player: next, msg: `${crit ? 'CRITICAL! Cost refunded. ' : ''}${old.name} → ${e.name}.` }
+}
+
+// ─── Gem salvage + Crucible (Geminus.1 gem_cutter GEM_CRUCIBLE) ───
+
+const SALVAGE_DUST: Record<number, [number, number]> = {
+  1: [1, 4], 2: [2, 8], 3: [3, 12], 4: [4, 16], 5: [5, 20], 6: [6, 24], 7: [7, 28], 8: [9, 36], 9: [10, 40],
+}
+export const MASS_SALVAGE_LEVEL: Record<number, number> = {
+  1: 1, 2: 1, 3: 300, 4: 450, 5: 1500, 6: 5000, 7: 15000, 8: 50000, 9: 200000,
+}
+export const crucibleCost = (grade: number) => 25 * grade
+
+export function salvageRange(grade: number): [number, number] {
+  return SALVAGE_DUST[grade] || SALVAGE_DUST[1]
+}
+
+function rollDust(grade: number, rng: Rng): number {
+  const [lo, hi] = salvageRange(grade)
+  return lo + Math.floor(rng() * (hi - lo + 1))
+}
+
+/** Salvage one gem (by pouch index) or every gem of a grade (all=true, level gated) into Gem Dust. */
+export function salvageGems(p: any, id: string, grade: number, all = false, rng: Rng = Math.random): ServiceResult {
+  if (all && (p.level || 1) < (MASS_SALVAGE_LEVEL[grade] ?? 1)) return fail(`Mass salvage of G${grade} requires level ${MASS_SALVAGE_LEVEL[grade].toLocaleString()}.`)
+  const k = gemKey(id)
+  const hits: number[] = []
+  ;(p.gems || []).forEach((g: any, i: number) => {
+    if ((g.grade || 1) === grade && (all || gemKey(g.id) === k) && (all || hits.length === 0)) hits.push(i)
+  })
+  if (!hits.length) return fail('No matching gems.')
+  let dust = 0
+  for (let n = 0; n < hits.length; n++) dust += rollDust(grade, rng)
+  const next = clonePlayer(p)
+  next.gems = next.gems.filter((_: any, i: number) => !hits.includes(i))
+  next.gemDust = (p.gemDust || 0) + dust
+  return { ok: true, player: next, msg: `Salvaged ${hits.length} gem${hits.length > 1 ? 's' : ''} for ${dust.toLocaleString()} Gem Dust.` }
+}
+
+/** Crucible: two gems of the same grade + dust -> one random standard gem of that grade. */
+export function crucibleFuse(p: any, idxA: number, idxB: number, rng: Rng = Math.random): ServiceResult {
+  const a = p.gems?.[idxA], b = p.gems?.[idxB]
+  if (!a || !b || idxA === idxB) return fail('Pick two different gems.')
+  const grade = a.grade || 1
+  if ((b.grade || 1) !== grade) return fail('Both gems must be the same grade.')
+  const cost = crucibleCost(grade)
+  if ((p.gemDust || 0) < cost) return fail(`Need ${cost} Gem Dust.`)
+  const id = rollGemId(rng)
+  const next = clonePlayer(p)
+  next.gems = next.gems.filter((_: any, i: number) => i !== idxA && i !== idxB)
+  next.gems.push({ id, grade })
+  next.gemDust = (p.gemDust || 0) - cost
+  return { ok: true, player: next, msg: `The Crucible yields ${gemInfo(id).name} G${grade}!` }
+}
+
 // ─── Display helpers ──────────────────────────────────────────────
 
 export function itemDisplayName(item: any, base: any): string {
   const name = base?.name || 'Item'
-  if (item?.type === 'Shadow') return `Shadow of ${name}`
-  if (item?.type === 'Echo') return `Echo of ${name}`
-  return name
+  const plus = item?.infusionLevel ? ` +${item.infusionLevel}` : ''
+  if (item?.type === 'Shadow') return `Shadow of ${name}${plus}`
+  if (item?.type === 'Echo') return `Echo of ${name}${plus}`
+  return name + plus
 }
 
 const PCT_KEYS = ['ACPercent', 'WCPercent', 'SCPercent', 'DEXPercent', 'STRPercent', 'WISPercent', 'NTLPercent', 'VITPercent']
@@ -349,11 +495,131 @@ export function enchantmentLines(item: any): string[] {
     `${e.name}: ${(e.effects || []).map((x: any) => effectText(x.stat, x.value)).join(', ')}`)
 }
 
-// ─── Zone monsters ────────────────────────────────────────────────
+// ─── Zone monsters (Geminus.1 Monster Forge) ──────────────────────
 
-/** Starter-zone monster list with Geminus.1's per-zone names; stats unchanged. */
+const ZONES: Record<string, any> = ZONES_DATA as any
+const STAMPS: Record<string, any> = STAMPS_DATA as any
+const ROMAN: Record<string, number> = { I: 1, V: 5, X: 10 }
+
+export function romanToInt(r: string): number {
+  let n = 0
+  const s = String(r || 'I').toUpperCase()
+  for (let i = 0; i < s.length; i++) {
+    const v = ROMAN[s[i]] || 0, next = ROMAN[s[i + 1]] || 0
+    n += v < next ? -v : v
+  }
+  return Math.max(1, n)
+}
+
+export function isStarterZone(zoneId: string): boolean {
+  return ZONES[zoneId]?.type === 'starter'
+}
+
+/**
+ * Monster stats for non-starter zones, ported from Geminus.1 DevManager.forgeEntireBestiary().
+ * Uses the live GDD damage formula (DAMAGE_CONST, AC_REDUCTION), the zone's entry level and gear
+ * tier from zones.json, and the zone type's hpDef / xp / gold multipliers.
+ * Minions: two floor-geared hits to kill, deal 1/10 of a level-appropriate player's HP.
+ * Bosses/Elites: five ceiling-geared hits, deal 1/4 of that HP.
+ */
+export function forgeZoneMonsters(zoneId: string): any[] {
+  const zone = ZONES[zoneId]
+  const slots: any[] = (ZONE_MONSTERS as any)[zoneId] || []
+  if (!zone) return []
+  const K = GDD.DAMAGE_CONST, ACR = GDD.AC_REDUCTION
+  const level = Math.max(1, zone.level || 1)
+  const gear = romanToInt(zone.gear)
+  const prevTier = Math.max(0, gear - 1)
+  const prevMult = prevTier === 0 ? 0.5 : Math.pow(GDD.CLASSVALUE_GROWTH, prevTier - 1)
+  const currMult = Math.pow(GDD.CLASSVALUE_GROWTH, gear - 1)
+
+  const floorWC = 26 * prevMult, floorAC = 27 * prevMult
+  const ceilWC = 52 * currMult, ceilAC = 55 * currMult
+  const minionDef = Math.max(5, Math.floor(40 * prevMult))
+  const bossDef = Math.max(10, Math.floor(100 * currMult))
+  const minionHP = Math.max(20, Math.max(1, Math.floor((K * floorWC) / minionDef)) * 2)
+  const bossHP = Math.max(100, Math.max(1, Math.floor((K * ceilWC) / bossDef)) * 5)
+  const playerMaxHP = GDD.MAX_HP_BASE + 12 * level * GDD.MAX_HP_PER_VIT
+  const minionAtk = Math.max(2, Math.floor(((playerMaxHP / 10) * Math.max(1, floorAC * ACR)) / K))
+  const bossAtk = Math.max(5, Math.floor(((playerMaxHP / 4) * Math.max(1, ceilAC * ACR)) / K))
+
+  const rules = ZONE_TYPES[zone.type] || ZONE_TYPES.xp
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+  const present = slots.map((m, i) => (m ? { ...m, slot: i + 1 } : null)).filter(Boolean) as any[]
+  return present.map((m, idx) => {
+    const isBoss = m.rank === 'Boss'
+    const t = isBoss || m.rank === 'Elite' ? 1 : present.length > 1 ? idx / (present.length - 1) : 1
+    return {
+      id: `${zoneId}:${String(m.slot).padStart(2, '0')}`,
+      name: m.name,
+      rank: m.rank,
+      isBoss,
+      hp: Math.max(1, Math.floor(lerp(minionHP, bossHP, t) * rules.hpDef)),
+      atk: Math.floor(lerp(minionAtk, bossAtk, t)),
+      def: Math.max(1, Math.floor(lerp(minionDef, bossDef, t) * rules.hpDef)),
+      xp: Math.floor(Math.max(1, level * 10 * (0.5 + 0.5 * t)) * rules.xp),
+      gold: Math.floor(Math.max(1, level * 5 * (0.5 + 0.5 * t)) * rules.gold),
+    }
+  })
+}
+
+/**
+ * Monsters for a zone. Starter zones (Z01-Z24) keep the balanced starter list from
+ * bestiary.json with Geminus.1's per-zone names; other zones are forged.
+ */
 export function zoneTargets(zoneId: string, starter: any[]): any[] {
-  const names = (ZONE_MONSTERS as any)[zoneId]
-  if (!names) return starter
-  return starter.map(m => (names[m.id] ? { ...m, name: names[m.id] } : m))
+  if (!ZONES[zoneId] || isStarterZone(zoneId)) {
+    const slots: any[] = (ZONE_MONSTERS as any)[zoneId] || []
+    return starter.map(m => {
+      const slot = m.id === 'E10*' ? 10 : parseInt(String(m.id).replace(/\D/g, ''), 10) - 1
+      return slots[slot] ? { ...m, name: slots[slot].name } : m
+    })
+  }
+  const forged = forgeZoneMonsters(zoneId)
+  return forged.length ? forged : starter
+}
+
+// ─── Zone travel (Exits + Teleporter) ─────────────────────────────
+
+export const TELEPORT_COST = (zoneId: string) => 10000 + (ZONES[zoneId]?.level || 1) * 50 // Geminus.1 portal.html
+
+export function zoneIds(): string[] {
+  return Object.keys(ZONES).sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10))
+}
+
+export function zoneInfo(zoneId: string): any {
+  return ZONES[zoneId] || null
+}
+
+export function homeZone(raceKey: string): string {
+  const hit = Object.entries(STARTER_RACE).find(([, r]) => r === raceKey)
+  return hit ? hit[0] : 'Z01'
+}
+
+/** Exits walk to the neighbouring zones (and home), for free. */
+export function exitDestinations(zoneId: string, raceKey: string): string[] {
+  const n = parseInt(zoneId.slice(1), 10)
+  const ids = [n - 1, n + 1].map(k => 'Z' + String(k).padStart(2, '0')).filter(id => ZONES[id])
+  const home = homeZone(raceKey)
+  if (home !== zoneId && !ids.includes(home)) ids.push(home)
+  return ids
+}
+
+export function canEnterZone(p: any, zoneId: string): boolean {
+  return (p.level || 1) >= (ZONES[zoneId]?.level || 1)
+}
+
+export function travelTo(p: any, zoneId: string, cost = 0): ServiceResult {
+  const zone = ZONES[zoneId]
+  if (!zone) return fail('Unknown zone.')
+  if (zoneId === p.pos?.zoneId) return fail('You are already here.')
+  if (!canEnterZone(p, zoneId)) return fail(`${zone.name} requires level ${zone.level.toLocaleString()}.`)
+  if ((p.gold || 0) < cost) return fail(`Travel costs ${cost.toLocaleString()} gold.`)
+  const stamp = STAMPS[zone.stamp] || STAMPS.starter_7x7
+  const [x, y] = stamp.spawn || [0, stamp.size - 1]
+  return {
+    ok: true,
+    player: { ...p, gold: (p.gold || 0) - cost, pos: { zoneId, x, y } },
+    msg: `Arrived at ${zoneId}: ${zone.name}${cost ? ` (-${cost.toLocaleString()} gold)` : ''}.`,
+  }
 }

@@ -12,6 +12,9 @@ import {
   groupPouch, countGems, gemInfo, gemEffectText, gemMinLevel,
   FUSION_RECIPES, MAX_GEM_GRADE, UNSOCKET_COST, fuseCost,
   itemDisplayName, enchantmentLines,
+  zoneIds, zoneInfo, exitDestinations, canEnterZone, travelTo, TELEPORT_COST, homeZone,
+  shatterItem, shatterYield, infuseItem, infusionCost, rerollItemEnchant, rerollCost, SOULFORGE,
+  salvageGems, salvageRange, MASS_SALVAGE_LEVEL, crucibleFuse, crucibleCost,
 } from '../../systems/services'
 
 function fmt(n: number): string {
@@ -52,7 +55,10 @@ export default function ServicePanel({ service, player, BASE_ITEMS, onResult, on
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
         <div>
           <div style={{ fontSize: '14px', fontWeight: 800, color: service.color, letterSpacing: '0.04em' }}>{service.label}</div>
-          <div style={{ fontSize: '10.5px', color: '#FFD60A', fontFamily: 'monospace' }}>Gold {fmt(player.gold)} · Bank {fmt(player.bank)}</div>
+          <div style={{ fontSize: '10.5px', color: '#FFD60A', fontFamily: 'monospace' }}>Gold {fmt(player.gold)} · Bank {fmt(player.bank)}
+            {act === 'gemcutter' && <span style={{ color: '#5AC8FA' }}> · Dust {fmt(player.gemDust)}</span>}
+            {act === 'soulforge' && <span style={{ color: '#BF5AF2' }}> · Essence {fmt(player.essence)}</span>}
+          </div>
         </div>
         <button onClick={onClose} style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'black', border: '1px solid rgba(255,255,255,0.2)', color: '#d4d4d8', fontSize: '18px', cursor: 'pointer' }}>×</button>
       </div>
@@ -61,7 +67,9 @@ export default function ServicePanel({ service, player, BASE_ITEMS, onResult, on
         {act === 'vault' && <Vault player={player} run={run} />}
         {(act === 'armory' || act === 'arcanium') && <Merchant shop={act} player={player} BASE_ITEMS={BASE_ITEMS} run={run} />}
         {act === 'gemcutter' && <Gemcutter player={player} BASE_ITEMS={BASE_ITEMS} run={run} />}
-        {!['sanctuary', 'vault', 'armory', 'arcanium', 'gemcutter'].includes(act) && <div style={muted}>{service.label} -- coming soon!</div>}
+        {(act === 'portal' || act === 'teleport') && <Travel mode={act} player={player} run={run} />}
+        {act === 'soulforge' && <Soulforge player={player} BASE_ITEMS={BASE_ITEMS} run={run} />}
+        {!['sanctuary', 'vault', 'armory', 'arcanium', 'gemcutter', 'portal', 'teleport', 'soulforge'].includes(act) && <div style={muted}>{service.label} -- coming soon!</div>}
       </div>
     </div>
   )
@@ -162,9 +170,129 @@ function Merchant({ shop, player, BASE_ITEMS, run }: { shop: string; player: any
   )
 }
 
+// ─── Exits + Teleporter ───────────────────────────────────────────
+const TYPE_COLORS: Record<string, string> = {
+  starter: '#3EE0FF', xp: '#30D158', gold: '#FFD60A', shadow: '#BF5AF2', gem: '#5AC8FA', prestige: '#FF9500',
+}
+
+function Travel({ mode, player, run }: { mode: string; player: any; run: Run }) {
+  const [filter, setFilter] = useState<'open' | 'all'>('open')
+  const here = player.pos?.zoneId || 'Z01'
+  const home = homeZone(player.race)
+  const isTeleport = mode === 'teleport'
+  const ids = isTeleport
+    ? zoneIds().filter(id => id !== here && (filter === 'all' || canEnterZone(player, id)))
+    : exitDestinations(here, player.race)
+
+  return (
+    <div style={card}>
+      <span style={label}>{isTeleport ? 'Teleportation Hub · warp anywhere you have unlocked' : 'Exit · walk to a neighbouring zone (free)'}</span>
+      {isTeleport && (
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+          {(['open', 'all'] as const).map(k => (
+            <button key={k} className={`hud-nav-pill${filter === k ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => setFilter(k)}>{k === 'open' ? 'Unlocked' : 'All Zones'}</button>
+          ))}
+        </div>
+      )}
+      {ids.length === 0 && <div style={muted}>No destinations</div>}
+      {ids.map(id => {
+        const z = zoneInfo(id)
+        const open = canEnterZone(player, id)
+        const cost = isTeleport ? TELEPORT_COST(id) : 0
+        const disabled = !open || (player.gold || 0) < cost
+        return (
+          <div key={id} style={row}>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ color: '#e4e4e7', fontWeight: 700 }}>{id}: {z.name}{id === home ? ' 🏠' : ''}</span>
+              <span style={{ display: 'block', fontSize: '10px', color: '#94a3b8' }}>
+                Lv {z.level.toLocaleString()} · Tier {z.gear} · <span style={{ color: TYPE_COLORS[z.type] || '#fff', textTransform: 'capitalize' }}>{z.type}</span>
+              </span>
+            </span>
+            <button style={actBtn(isTeleport ? '#FF375F' : '#94a3b8', disabled)} onClick={() => run(travelTo(player, id, cost))}>
+              {!open ? `Lv ${fmt(z.level)}` : isTeleport ? fmt(cost) : 'Go'}
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Soulforge ────────────────────────────────────────────────────
+function Soulforge({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]; run: Run }) {
+  const [tab, setTab] = useState<'infuse' | 'reroll' | 'shatter'>('infuse')
+  const [itemId, setItemId] = useState<string | null>(null)
+  const equipped = Object.values(player.equipment || {})
+  const inv: any[] = player.inventory || []
+  const eligible = inv.filter(i =>
+    tab === 'infuse' ? i.type !== 'Echo' : tab === 'reroll' ? i.type === 'Shadow' : (i.type === 'Shadow' || i.type === 'Echo') && !equipped.includes(i.instanceId))
+  const item = eligible.find(i => i.instanceId === itemId) || null
+  const base = item ? BASE_ITEMS.find(b => b.id === item.baseItemId) : null
+  const nameOf = (i: any) => `${equipped.includes(i.instanceId) ? '★ ' : ''}${itemDisplayName(i, BASE_ITEMS.find(b => b.id === i.baseItemId))} T${i.tier}`
+  const afford = (c: { gold: number; essence: number }) => (player.gold || 0) >= c.gold && (player.essence || 0) >= c.essence
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: '4px' }}>
+        {(['infuse', 'reroll', 'shatter'] as const).map(k => (
+          <button key={k} className={`hud-nav-pill${tab === k ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => { setTab(k); setItemId(null) }}>{k.charAt(0).toUpperCase() + k.slice(1)}</button>
+        ))}
+      </div>
+      <div style={card}>
+        <span style={label}>{tab === 'infuse' ? `Raise base stat +${SOULFORGE.INFUSION_GAIN * 100}% (max +${SOULFORGE.MAX_INFUSION})` : tab === 'reroll' ? 'Replace one enchantment on a Shadow item' : 'Destroy Shadow/Echo items for Essence'}</span>
+        {tab !== 'shatter' && (
+          <select className="editor-input" value={itemId || ''} onChange={e => setItemId(e.target.value || null)} style={{ width: '100%', fontSize: '12px', padding: '4px 8px' }}>
+            <option value="">-- Select --</option>
+            {eligible.map(i => <option key={i.instanceId} value={i.instanceId}>{nameOf(i)}</option>)}
+          </select>
+        )}
+        {tab === 'infuse' && item && (() => {
+          const c = infusionCost(item); const maxed = (item.infusionLevel || 0) >= SOULFORGE.MAX_INFUSION
+          return (
+            <div style={{ marginTop: '8px' }}>
+              <div style={row}><span style={{ color: '#9ca3af' }}>{base?.name}</span><span style={{ color: '#fff', fontFamily: 'monospace' }}>+{item.infusionLevel || 0} · ×{(item.infusionMult ?? 1).toFixed(2)}</span></div>
+              <div style={row}><span style={{ color: '#9ca3af' }}>Cost</span><span style={{ color: '#FFD60A', fontFamily: 'monospace' }}>{fmt(c.gold)} gold · <span style={{ color: '#BF5AF2' }}>{fmt(c.essence)} essence</span></span></div>
+              <button className="glass-button" disabled={maxed || !afford(c)} style={{ width: '100%', padding: '8px', fontSize: '12px', borderRadius: '8px', marginTop: '8px', opacity: maxed || !afford(c) ? 0.5 : 1 }} onClick={() => run(infuseItem(player, item.instanceId))}>{maxed ? 'Max infusion' : 'Infuse'}</button>
+              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '6px' }}>{SOULFORGE.CRIT_CHANCE * 100}% critical chance for double gain.</div>
+            </div>
+          )
+        })()}
+        {tab === 'reroll' && item && (() => {
+          const c = rerollCost(item)
+          return (
+            <div style={{ marginTop: '8px' }}>
+              <div style={row}><span style={{ color: '#9ca3af' }}>Cost per reroll</span><span style={{ color: '#FFD60A', fontFamily: 'monospace' }}>{fmt(c.gold)} gold · <span style={{ color: '#BF5AF2' }}>{fmt(c.essence)} essence</span></span></div>
+              {(item.enchantments || []).length === 0 && <div style={muted}>This item has no enchantments.</div>}
+              {enchantmentLines(item).map((l, i) => (
+                <div key={i} style={row}>
+                  <span style={{ color: '#BF5AF2', fontSize: '11px', minWidth: 0 }}>✦ {l}</span>
+                  <button style={actBtn('#BF5AF2', !afford(c))} onClick={() => run(rerollItemEnchant(player, item.instanceId, i))}>Reroll</button>
+                </div>
+              ))}
+              <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '6px' }}>{SOULFORGE.CRIT_CHANCE * 100}% critical chance to refund the cost.</div>
+            </div>
+          )
+        })()}
+        {tab === 'shatter' && (
+          <>
+            {eligible.length === 0 && <div style={muted}>No unequipped Shadow or Echo items</div>}
+            {eligible.map(i => (
+              <div key={i.instanceId} style={row}>
+                <span style={{ color: i.type === 'Shadow' ? '#BF5AF2' : '#94a3b8', minWidth: 0 }}>{nameOf(i)}</span>
+                <button style={actBtn('#FF375F')} onClick={() => window.confirm(`Shatter ${nameOf(i)}? This destroys the item.`) && run(shatterItem(player, i.instanceId))}>+{fmt(shatterYield(i))}</button>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
 // ─── Gemcutter ────────────────────────────────────────────────────
 function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]; run: Run }) {
-  const [tab, setTab] = useState<'socket' | 'upgrade' | 'fuse'>('socket')
+  const [tab, setTab] = useState<'socket' | 'upgrade' | 'fuse' | 'salvage' | 'crucible'>('socket')
+  const [crucible, setCrucible] = useState<number[]>([])
   const [itemId, setItemId] = useState<string | null>(null)
   const gems: any[] = player.gems || []
   const socketable = (player.inventory || []).filter((i: any) => socketCapacity(i, BASE_ITEMS) > 0)
@@ -176,8 +304,8 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
   return (
     <>
       <div style={{ display: 'flex', gap: '4px' }}>
-        {(['socket', 'upgrade', 'fuse'] as const).map(k => (
-          <button key={k} className={`hud-nav-pill${tab === k ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 8px' }} onClick={() => setTab(k)}>{k === 'socket' ? 'Socket' : k === 'upgrade' ? 'Upgrade' : 'Fuse'}</button>
+        {(['socket', 'upgrade', 'fuse', 'salvage', 'crucible'] as const).map(k => (
+          <button key={k} className={`hud-nav-pill${tab === k ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 4px' }} onClick={() => { setTab(k); setCrucible([]) }}>{k.charAt(0).toUpperCase() + k.slice(1)}</button>
         ))}
       </div>
 
@@ -271,6 +399,70 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
               </div>
             )
           })}
+        </div>
+      )}
+
+      {tab === 'salvage' && (
+        <div style={card}>
+          <span style={label}>Break gems down into Gem Dust</span>
+          {grouped.length === 0 && <div style={muted}>No gems stored</div>}
+          {grouped.map(g => {
+            const gi = gemInfo(g.id)
+            const [lo, hi] = salvageRange(g.grade)
+            return (
+              <div key={`${g.id}|${g.grade}`} style={row}>
+                <span style={{ color: '#e4e4e7', minWidth: 0 }}>{gemDot(gi.color)} {gi.name} G{g.grade} <span style={{ color: '#94a3b8', fontFamily: 'monospace' }}>×{g.count}</span>
+                  <span style={{ display: 'block', fontSize: '10px', color: '#94a3b8' }}>{lo}–{hi} dust each</span></span>
+                <button style={actBtn('#5AC8FA')} onClick={() => run(salvageGems(player, g.id, g.grade))}>Salvage 1</button>
+              </div>
+            )
+          })}
+          {grouped.length > 0 && (
+            <div style={{ marginTop: '8px' }}>
+              <span style={{ ...label, marginBottom: '4px' }}>Mass salvage by grade</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {[...new Set(grouped.map(g => g.grade))].sort((a, b) => a - b).map(gr => {
+                  const locked = (player.level || 1) < (MASS_SALVAGE_LEVEL[gr] ?? 1)
+                  return <button key={gr} style={actBtn('#FF375F', locked)} onClick={() => window.confirm(`Salvage ALL grade ${gr} gems?`) && run(salvageGems(player, '', gr, true))}>{locked ? `G${gr} · Lv ${fmt(MASS_SALVAGE_LEVEL[gr])}` : `All G${gr}`}</button>
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'crucible' && (
+        <div style={card}>
+          <span style={label}>Two gems of the same grade + dust → a random gem</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            {[0, 1].map(n => {
+              const g = gems[crucible[n]]
+              const gi = g ? gemInfo(g.id) : null
+              return (
+                <div key={n} className="gem-item" style={{ width: '64px' }} onClick={() => g && setCrucible(crucible.filter((_, i) => i !== n))}>
+                  {g && gi ? <><span style={{ fontSize: '12px' }}>{gemDot(gi.color)}</span><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span></> : <span className="item-label" style={{ color: '#52525b' }}>?</span>}
+                </div>
+              )
+            })}
+            <span style={{ color: '#94a3b8', fontSize: '18px' }}>→</span>
+            <button style={actBtn('#5AC8FA', crucible.length < 2)} onClick={() => { run(crucibleFuse(player, crucible[0], crucible[1])); setCrucible([]) }}>
+              Fuse · {crucible.length ? crucibleCost(gems[crucible[0]]?.grade || 1) : 25} dust
+            </button>
+          </div>
+          <div className="gem-pouch-grid">
+            {gems.length === 0 && <div style={{ ...muted, gridColumn: '1/-1' }}>No gems stored</div>}
+            {gems.map((g: any, i: number) => {
+              const gi = gemInfo(g.id)
+              const picked = crucible.includes(i)
+              const wrongGrade = crucible.length === 1 && gems[crucible[0]]?.grade !== g.grade
+              return (
+                <div key={i} className="gem-item" style={{ opacity: picked || wrongGrade ? 0.35 : 1 }}
+                  onClick={() => !picked && !wrongGrade && crucible.length < 2 && setCrucible([...crucible, i])}>
+                  <span style={{ fontSize: '12px' }}>{gemDot(gi.color)}</span><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </>

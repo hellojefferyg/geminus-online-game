@@ -262,7 +262,7 @@ export default function InlinePanel({
           const isEquipped = Object.values(player.equipment).includes(equipPopup)
           const tierData = DROPPER_TIERS.find((t: any) => t.tier === modalItem.tier) || DROPPER_TIERS[0]
           const slotMod = SLOT_MODS[modalBase.subType] || {}
-          const statVal = (tierData.cv * (modalItem.qualityMultiplier ?? 1) * (slotMod.prop || 0.8)).toFixed(2)
+          const statVal = (tierData.cv * (modalItem.qualityMultiplier ?? 1) * (modalItem.infusionMult ?? 1) * (slotMod.prop || 0.8)).toFixed(2)
           const statLabel = slotMod.stat || 'AC'
           const RARITY_COLORS: Record<string, string> = { Common: '#D1D5DB', Uncommon: '#30D158', Rare: '#0A84FF', Epic: '#BF5AF2', Legendary: '#FF9F0A', Mythic: '#FF375F' }
           return (

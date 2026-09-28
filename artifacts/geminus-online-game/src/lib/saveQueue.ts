@@ -42,6 +42,8 @@ export function savePlayerNow(player: any, reason = '') {
         xp:               snapshot.xp,
         gold:             snapshot.gold,
         bank:             snapshot.bank,
+        gem_dust:         snapshot.gem_dust,
+        essence:          snapshot.essence,
         level:            snapshot.level,
         hp:               snapshot.hp,
         max_hp:           snapshot.max_hp,
