@@ -14,7 +14,7 @@ import ChatConsole from './game/components/ChatConsole'
 import InlinePanel from './game/components/InlinePanel'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 const ZONES: Record<string, any> = ZONES_DATA
 const STAMPS: Record<string, any> = STAMPS_DATA
 function getZone(zoneId: string) { return ZONES[zoneId] || ZONES['Z01'] }
