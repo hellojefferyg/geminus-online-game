@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from './supabase'
 import { spendAttributeBank, getBankedLevels } from './gdd'
@@ -13,6 +14,7 @@ import ChatConsole from './game/components/ChatConsole'
 import InlinePanel from './game/components/InlinePanel'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
+const MAINTENANCE_MODE = true;
 const ZONES: Record<string, any> = ZONES_DATA
 const STAMPS: Record<string, any> = STAMPS_DATA
 function getZone(zoneId: string) { return ZONES[zoneId] || ZONES['Z01'] }
@@ -178,7 +180,27 @@ function calcDerived(p: any) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────
-export default function App({ uid }: { uid: string }) {
+export default function App({ uid }: { uid: 
+string }) {
+if (MAINTENANCE_MODE) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#02040a',
+        color: '#fff',
+        fontFamily: 'sans-serif',
+        padding: 24,
+        textAlign: 'center',
+      }}>
+        <h2>We’ll be back soon</h2>
+        <p style={{ color: '#888' }}>Check back later today.</p>
+      </div>
+    );
+  }
   const [player, setPlayer] = useState<any>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [battleStats, setBattleStats] = useState({ levels:0, kills:0, rounds:0, deaths:0, oneHitKills:0 })
