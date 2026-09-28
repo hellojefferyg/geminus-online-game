@@ -3,6 +3,15 @@
 import { useRef, useEffect, useState } from 'react'
 import DPad from './DPad'
 import { type LoadedMap, drawZoneMap, loadMapAssets } from '../map/zoneMap'
+import { romanToInt } from '../../systems/services'
+import STAMPS from '../../data/stamps.json'
+
+const SERVICES: Record<string, { label: string; color: string }> = (STAMPS as any)._services
+
+const hudBtn = (color: string): React.CSSProperties => ({
+  flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', cursor: 'pointer',
+  background: `${color}22`, border: `1px solid ${color}88`, color, letterSpacing: '0.04em', textTransform: 'uppercase',
+})
 
 function fmt(n: number): string {
   if (!n || isNaN(n)) return '0'
@@ -21,6 +30,13 @@ const TILE_COLORS: Record<string, string> = {
 const TILE_TEXT: Record<string, string> = {
   '.': '', 'r': 'r', 'E': 'E', 'R': 'R', 'B': 'B', 'S': 'S',
   'M': 'M', 'Q': 'Q', 'T': 'T', 'G': 'G', 'F': 'F', 'C': 'C', 'X': 'X',
+}
+const WHITE: React.CSSProperties = { color: '#fff', fontWeight: 800 }
+const PLAT: React.CSSProperties = { color: '#D4DAE3', fontWeight: 400 }
+const PLAT_DIM = '#7C8591'
+const ORANGE = '#FF9F0A'
+const TYPE_LABELS: Record<string, string> = {
+  starter: 'Starter (exp)', xp: 'Exp', gold: 'Gold farm', shadow: 'Shadow farm', gem: 'Gem farm', prestige: 'Prestige (exp)',
 }
 const TYPE_COLORS: Record<string, string> = {
   starter: '#3EE0FF', xp: '#30D158', gold: '#FFD60A',
@@ -46,48 +62,74 @@ interface PlayerHUDProps {
   onSetActiveTab: (tab: string) => void
   onSetMapOverlay: (val: boolean) => void
   onTileEnter: () => void
+  onEstate: () => void
 }
 
 export default function PlayerHUD({
   player, zone, zoneId, stamp, activeTile, menuOpen, mapOverlay,
   freeLevels, races, graphicMap, onMove, onEnter, onLogout, onSetMenuOpen,
-  onSetActiveTab, onSetMapOverlay, onTileEnter,
+  onSetActiveTab, onSetMapOverlay, onTileEnter, onEstate,
 }: PlayerHUDProps) {
   const miniMapRef = useRef<HTMLCanvasElement>(null)
   const zoneCanvasRef = useRef<HTMLCanvasElement>(null)
 
-  function drawStampMap(canvas: HTMLCanvasElement, px: number, py: number, cellSize: number, showLabels: boolean) {
+  /** Text map: rounded platinum tiles, buildings tinted in their colour with their letter. */
+  function drawStampMap(canvas: HTMLCanvasElement, px: number, py: number, cellSize: number, big: boolean) {
     const ctx = canvas.getContext('2d')!
     const dpr = window.devicePixelRatio || 1
     canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
     ctx.scale(dpr, dpr)
     const w = canvas.offsetWidth; const h = canvas.offsetHeight
-    ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#03080c'; ctx.fillRect(0, 0, w, h)
+    const bg = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.75)
+    bg.addColorStop(0, '#0b1118'); bg.addColorStop(1, '#03060a')
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h)
+    // Fit the whole grid in the box (stamps are 5x5 to 11x11)
     const size = stamp.size
-    const ox = Math.floor(w / 2 - px * cellSize - cellSize / 2)
-    const oy = Math.floor(h / 2 - py * cellSize - cellSize / 2)
+    const pad = big ? 14 : 6
+    cellSize = Math.floor((Math.min(w, h) - pad * 2) / size)
+    const gap = big ? 4 : 2
+    const ox = Math.floor((w - cellSize * size) / 2)
+    const oy = Math.floor((h - cellSize * size) / 2)
+    const r = Math.max(2, cellSize * 0.18)
+    const rr = (x: number, y: number, s: number) => {
+      ctx.beginPath()
+      if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, s, s, r); else ctx.rect(x, y, s, s) // older iOS
+    }
     ctx.save(); ctx.translate(ox, oy)
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
         const tile = stamp.grid[row]?.[col] ?? '.'
-        const cx = col * cellSize; const cy = row * cellSize
+        const x = col * cellSize + gap / 2, y = row * cellSize + gap / 2, s = cellSize - gap
+        const svc = SERVICES[tile]
         const isPlayer = col === px && row === py
-        ctx.fillStyle = TILE_COLORS[tile] || '#0d1f2d'
-        ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2)
-        if (isPlayer) { ctx.fillStyle = 'rgba(62,224,255,0.25)'; ctx.fillRect(cx + 1, cy + 1, cellSize - 2, cellSize - 2) }
-        ctx.strokeStyle = isPlayer ? 'rgba(62,224,255,0.9)' : 'rgba(255,255,255,0.08)'
-        ctx.lineWidth = isPlayer ? 1.5 : 0.5
-        ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1)
-        if (showLabels && tile !== '.') {
-          const svc = stamp._services?.[tile]
-          ctx.fillStyle = svc ? svc.color : '#94a3b8'
-          ctx.font = `bold ${Math.floor(cellSize * 0.35)}px monospace`
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-          ctx.fillText(TILE_TEXT[tile] || tile, cx + cellSize / 2, cy + cellSize / 2)
+        const g = ctx.createLinearGradient(x, y, x + s, y + s)
+        if (tile === 'r') {                       // rubble: dark, blocked-looking
+          g.addColorStop(0, '#0d1116'); g.addColorStop(1, '#07090c')
+          ctx.fillStyle = g; rr(x, y, s); ctx.fill()
+          ctx.strokeStyle = 'rgba(212,218,227,0.08)'; ctx.lineWidth = 1; ctx.stroke()
+        } else if (svc) {                         // building: tinted by its colour
+          g.addColorStop(0, svc.color + '55'); g.addColorStop(1, svc.color + '14')
+          ctx.fillStyle = g; rr(x, y, s); ctx.fill()
+          ctx.strokeStyle = svc.color + 'cc'; ctx.lineWidth = big ? 1.5 : 1; ctx.stroke()
+        } else {                                  // floor: brushed platinum
+          g.addColorStop(0, 'rgba(226,232,240,0.16)'); g.addColorStop(1, 'rgba(148,163,184,0.05)')
+          ctx.fillStyle = g; rr(x, y, s); ctx.fill()
+          ctx.strokeStyle = 'rgba(212,218,227,0.22)'; ctx.lineWidth = 1; ctx.stroke()
         }
         if (isPlayer) {
-          ctx.fillStyle = '#3EE0FF'; ctx.beginPath()
-          ctx.arc(cx + cellSize / 2, cy + cellSize / 2, cellSize * 0.18, 0, Math.PI * 2); ctx.fill()
+          ctx.save(); ctx.shadowColor = 'rgba(62,224,255,0.9)'; ctx.shadowBlur = big ? 14 : 8
+          ctx.strokeStyle = '#3EE0FF'; ctx.lineWidth = big ? 2.5 : 1.8; rr(x, y, s); ctx.stroke(); ctx.restore()
+        }
+        if (svc && tile !== '.') {
+          ctx.fillStyle = isPlayer ? '#ffffff' : svc.color
+          ctx.font = `800 ${Math.floor(cellSize * (big ? 0.34 : 0.46))}px -apple-system, BlinkMacSystemFont, sans-serif`
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+          ctx.fillText(TILE_TEXT[tile] || tile, x + s / 2, y + s / 2 + (isPlayer && big ? -s * 0.18 : 0))
+        }
+        if (isPlayer && (!svc || big)) {
+          const cy = y + s / 2 + (svc && big ? s * 0.2 : 0)
+          ctx.save(); ctx.shadowColor = '#3EE0FF'; ctx.shadowBlur = 10
+          ctx.fillStyle = '#e8fbff'; ctx.beginPath(); ctx.arc(x + s / 2, cy, cellSize * (svc ? 0.1 : 0.16), 0, Math.PI * 2); ctx.fill(); ctx.restore()
         }
       }
     }
@@ -101,6 +143,8 @@ export default function PlayerHUD({
   const gx = player.pos?.gx ?? graphicMap?.data.spawn[0] ?? 0
   const gy = player.pos?.gy ?? graphicMap?.data.spawn[1] ?? 0
   const highlight = graphicMap && activeTile ? { x: activeTile.x, y: activeTile.y } : null
+  // Text map: keep the building popup off the player's own square
+  const popupOnTop = !graphicMap && (player.pos?.y ?? 0) >= stamp.size / 2
 
   useEffect(() => {
     if (!miniMapRef.current || !player) return
@@ -120,23 +164,23 @@ export default function PlayerHUD({
         <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', gap: '8px' }}>
 
           {/* Left -- Player Info */}
-          <section style={{ flex: 1, minWidth: 0, paddingRight: '4px', display: 'flex', flexDirection: 'column' }}>
+          <section style={{ flex: 1, minWidth: 0, paddingRight: '4px', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>{player.name}:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace', marginLeft: '4px' }}>Level {player.level}</span></p>
-              <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>Race:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.raceName || player.race}</span></p>
-              <p style={{ margin: 0, fontSize: '12px' }}><span style={{ color: '#fff', fontWeight: 700 }}>A-Spec:</span><span style={{ color: '#cbd5e1', fontSize: '10.5px', marginLeft: '4px' }}>{player.archetype} · {races[player.race]?.primaryStat || player.cci}</span></p>
+              <p style={{ margin: 0, fontSize: '12px' }}><span style={WHITE}>{player.name}:</span><span style={{ ...PLAT, fontSize: '11.5px', marginLeft: '5px' }}>Level {player.level?.toLocaleString()}</span></p>
+              <p style={{ margin: 0, fontSize: '12px' }}><span style={WHITE}>Race:</span><span style={{ ...PLAT, fontSize: '11.5px', marginLeft: '5px' }}>{player.raceName || player.race}</span></p>
+              <p style={{ margin: 0, fontSize: '12px' }}><span style={WHITE}>A-Spec:</span><span style={{ ...PLAT, fontSize: '11.5px', marginLeft: '5px' }}>{player.archetype} • {races[player.race]?.primaryStat || player.cci}</span></p>
 
               {/* Stats Grid */}
               <div style={{ paddingTop: '4px', marginTop: '2px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px' }}>
                 {(['DEX', 'STR', 'WIS', 'NTL', 'VIT'] as const).map(stat => (
                   <div key={stat} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-                    <span style={{ color: '#fff', fontWeight: 700 }}>{stat.charAt(0) + stat.slice(1).toLowerCase()}:</span>
-                    <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{fmt(player.baseStats[stat])}</span>
+                    <span style={WHITE}>{stat.charAt(0) + stat.slice(1).toLowerCase()}:</span>
+                    <span style={{ ...PLAT, fontSize: '11.5px' }}>{fmt(player.baseStats[stat])}</span>
                   </div>
                 ))}
                 <div style={{ display: 'flex', alignItems: 'center', fontSize: '12px' }}>
-                  <span style={{ color: '#fff', fontWeight: 700, marginRight: '4px' }}>Lvls:</span>
-                  <span style={{ color: '#cbd5e1', fontSize: '10.5px', fontFamily: 'monospace' }}>{freeLevels} ({player.attributePoints || 0} AP)</span>
+                  <span style={{ ...WHITE, marginRight: '4px' }}>Lvls:</span>
+                  <span style={{ ...PLAT, fontSize: '11.5px' }}>{freeLevels} ({player.attributePoints || 0} AP)</span>
                 </div>
               </div>
 
@@ -166,27 +210,23 @@ export default function PlayerHUD({
               </div>
 
               {/* Zone Info */}
-              <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                  <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>{zoneId}:</span> <span style={{ color: '#cbd5e1' }}>{zone.name}</span></p>
-                  <button onClick={onLogout} style={{ flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase' }}>Logout</button>
+              <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', lineHeight: 1.35 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '6px' }}>
+                  <span style={{ minWidth: 0 }}><span style={WHITE}>{zoneId}:</span> <span style={{ color: ORANGE, fontWeight: 400 }}>{zone.name}</span></span>
+                  <span style={{ color: ORANGE, fontWeight: 400, flexShrink: 0 }}>{graphicMap ? gx : player.pos?.x ?? 0}, {graphicMap ? gy : player.pos?.y ?? 0}</span>
                 </div>
-                <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{graphicMap ? gx : player.pos?.x ?? 0}, {graphicMap ? gy : player.pos?.y ?? 0}] · Tier {zone.gear} · Lv {zone.level?.toLocaleString()}</p>
-                <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}>
-                  <span style={{ color: '#fff', fontWeight: 700 }}>Type: </span><span style={{ color: TYPE_COLORS[zone.type] || '#fff', fontWeight: 700, textTransform: 'capitalize' }}>{zone.type}</span>
-                  <span style={{ color: '#64748b' }}> · </span>
-                  <span style={{ color: '#fff', fontWeight: 700 }}>Gem: </span><span style={{ color: '#30D158' }}>G{zone.gemMin}{zone.gemMin !== zone.gemMax ? `–${zone.gemMax}` : ''} · {zone.gemRate}</span>
-                </p>
-                <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}>
-                  <span style={{ color: '#fff', fontWeight: 700 }}>Shadow: </span>
-                  <span style={{ color: zone.shadow === 'off' ? '#52525b' : '#BF5AF2', fontWeight: 700 }}>{zone.shadow === 'off' ? 'Off' : zone.shadow}</span>
-                </p>
-                {activeTile && (
-                  <div style={{ marginTop: '4px', padding: '6px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.6)', border: `1px solid ${activeTile.service.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                    <span style={{ fontSize: '11px', color: activeTile.service.color, fontWeight: 700 }}>📍 {activeTile.service.label}</span>
-                    <button onClick={onTileEnter} style={{ fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', background: `${activeTile.service.color}20`, border: `1px solid ${activeTile.service.color}60`, color: activeTile.service.color, cursor: 'pointer' }}>Enter</button>
-                  </div>
-                )}
+                <span style={WHITE}>Zone req:</span>
+                <span style={PLAT}>Tier {romanToInt(zone.gear)}&nbsp;&nbsp;&nbsp;Lv {zone.level?.toLocaleString()}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                  <span><span style={WHITE}>Type:</span> <span style={PLAT}>{TYPE_LABELS[zone.type] || zone.type}</span></span>
+                  <button onClick={onEstate} style={hudBtn('#FFD60A')}>Estate</button>
+                </div>
+                <span style={{ ...WHITE, marginTop: '2px' }}>Drops:</span>
+                <span><span style={WHITE}>Gem:</span> <span style={PLAT}>G{zone.gemMin}{zone.gemMin !== zone.gemMax ? `–${zone.gemMax}` : ''} • {zone.gemRate}</span></span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                  <span><span style={WHITE}>Shadow:</span> <span style={{ color: zone.shadow === 'off' ? PLAT_DIM : '#D4DAE3' }}>{zone.shadow === 'off' ? 'Off' : zone.shadow}</span></span>
+                  <button onClick={onLogout} style={hudBtn('#FF453A')}>Logout</button>
+                </div>
               </div>
             </div>
           </section>
@@ -195,6 +235,15 @@ export default function PlayerHUD({
           <section style={{ width: '162px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px', paddingRight: '4px' }}>
             <div onClick={() => onSetMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
               <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+              {activeTile && (
+                <button onClick={e => { e.stopPropagation(); onTileEnter() }}
+                  style={{ position: 'absolute', left: '6px', right: '6px', ...(popupOnTop ? { top: '6px' } : { bottom: '6px' }), padding: '5px 6px', borderRadius: '8px', cursor: 'pointer',
+                    background: 'rgba(3,8,12,0.88)', border: `1px solid ${activeTile.service.color}aa`, boxShadow: `0 0 12px ${activeTile.service.color}55`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', backdropFilter: 'blur(4px)' }}>
+                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: activeTile.service.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeTile.service.label}</span>
+                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#fff', letterSpacing: '0.04em', padding: '1px 5px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.35)' }}>ENTER</span>
+                </button>
+              )}
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
               <DPad onMove={onMove} onEnter={onEnter} />
