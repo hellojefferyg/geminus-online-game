@@ -1,6 +1,36 @@
 // src/components/ItemIcon.tsx
+// Item art from public/icons (built by tools/build_icons.py); drawn SVG icons are the fallback.
+import { useState } from 'react'
+import ICONS from '../../data/icons.json'
 
-export default function ItemIcon({ subType }: { subType: string }) {
+const ITEM_ART: Record<string, string[]> = (ICONS as any).items || {}
+
+/** 'dropper' | 'shadow' | 'echo' | 'starter' for an inventory item. */
+export function itemQuality(item: any): string {
+  if (item?.type === 'Shadow') return 'shadow'
+  if (item?.type === 'Echo') return 'echo'
+  if (item?.starter) return 'starter'
+  return 'dropper'
+}
+
+export function itemArtUrl(subType: string, quality = 'dropper'): string | null {
+  const slot = (subType || '').toLowerCase()
+  const q = ITEM_ART[quality]?.includes(slot) ? quality : ITEM_ART.dropper?.includes(slot) ? 'dropper' : null
+  return q ? `${import.meta.env.BASE_URL}icons/items/${q}/${slot}.webp` : null
+}
+
+export default function ItemIcon({ subType, quality = 'dropper', size = 28 }: { subType: string; quality?: string; size?: number }) {
+  const [broken, setBroken] = useState(false)
+  const url = itemArtUrl(subType, quality)
+  if (url && !broken) {
+    return <img src={url} alt={subType} loading="lazy" draggable={false} onError={() => setBroken(true)}
+      style={{ width: size, height: size, objectFit: 'contain', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))' }} />
+  }
+  return <DrawnIcon subType={subType} />
+}
+
+
+function DrawnIcon({ subType }: { subType: string }) {
   const s = (subType || '').toLowerCase()
   if (s.includes('helmet') || s.includes('helm'))
     return <svg className="w-7 h-7" style={{ color: '#e4e4e7', filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.4))' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2a8 8 0 00-8 8v4a4 4 0 004 4h8a4 4 0 004-4v-4a8 8 0 00-8-8z"/><path d="M9 12h6M12 2v10M8 15h8"/></svg>

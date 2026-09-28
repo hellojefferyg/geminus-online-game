@@ -1,6 +1,7 @@
 // src/game/components/InlinePanel.tsx
 // Menu popup: Player Info, Training Log, Settings, Equipment, Inventory tabs
-import ItemIcon from './ItemIcon'
+import ItemIcon, { itemQuality } from './ItemIcon'
+import GemIcon from './GemIcon'
 import AccordionItem from './AccordionItem'
 import { gemInfo, gemEffectText, itemDisplayName, enchantmentLines } from '../../systems/services'
 
@@ -45,6 +46,8 @@ interface InlinePanelProps {
   onResetSave: () => void
   onUpdateName: (name: string) => void
   onToggleTheme: () => void
+  mapMode: 'graphic' | 'text'
+  onSetMapMode: (mode: 'graphic' | 'text') => void
 }
 
 export default function InlinePanel({
@@ -52,6 +55,7 @@ export default function InlinePanel({
   BASE_ITEMS, DROPPER_TIERS, SLOT_MODS,
   onSetActiveTab, onSetFilterState, onSetEquipPopup,
   onEquipItem, onUnequipItem, onResetSave, onUpdateName, onToggleTheme,
+  mapMode, onSetMapMode,
 }: InlinePanelProps) {
 
   const renderInventoryBags = () => {
@@ -95,7 +99,7 @@ export default function InlinePanel({
                             {gems[0] && <div className={`gem-overlay ${(gemInfo(gems[0].id).category || 'misc').toLowerCase()}`}>{(gemInfo(gems[0].id).name || 'Gem').slice(0, 3)}</div>}
                             {gems[1] && <div className={`gem-overlay ${(gemInfo(gems[1].id).category || 'misc').toLowerCase()}`}>{(gemInfo(gems[1].id).name || 'Gem').slice(0, 3)}</div>}
                           </div>}
-                          <div className="item-icon-wrapper"><ItemIcon subType={base?.subType || ''} /></div>
+                          <div className="item-icon-wrapper"><ItemIcon subType={base?.subType || ''} quality={itemQuality(item)} size={40} /></div>
                           <span className="item-tier-label">T{item.tier}</span>
                         </div>
                       </div>
@@ -111,7 +115,7 @@ export default function InlinePanel({
               ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '16px', color: '#71717a', fontSize: '11px' }}>No gems stored</div>
               : player.gems.map((g: any, i: number) => {
                 const gd = gemInfo(g.id)
-                return <div key={i} className="gem-item" title={`${gd.name} G${g.grade}: ${gemEffectText(g.id, g.grade)}`}><span style={{ fontSize: '12px' }}>{gd.color === 'Red' ? '🔴' : gd.color === 'Blue' ? '🔵' : gd.color === 'Yellow' ? '🟡' : '🟢'}</span><span className="item-label">{gd.name.slice(0, 3)}{g.grade}</span></div>
+                return <div key={i} className="gem-item" title={`${gd.name} G${g.grade}: ${gemEffectText(g.id, g.grade)}`}><GemIcon id={g.id} size={30} /><span className="item-label">{gd.name.slice(0, 3)}{g.grade}</span></div>
               })}
           </div>
         </AccordionItem>
@@ -168,7 +172,7 @@ export default function InlinePanel({
                       {gems[1] && <div className={`gem-overlay ${(gemInfo(gems[1].id).category || 'misc').toLowerCase()}`}>{(gemInfo(gems[1].id).name || 'Gem').slice(0, 3)}</div>}
                     </div>}
                     {base
-                      ? <><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ItemIcon subType={base.subType} /></div><span className="item-tier-label">T{item.tier}</span></>
+                      ? <><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ItemIcon subType={base.subType} quality={itemQuality(item)} size={40} /></div><span className="item-tier-label">T{item.tier}</span></>
                       : <span style={{ fontSize: '11px', color: '#71717a' }}>Empty</span>}
                   </div>
                 </div>
@@ -249,6 +253,14 @@ export default function InlinePanel({
                 <div><div style={{ color: '#e4e4e7' }}>Dark Mode</div><div style={{ fontSize: '10px', color: '#71717a' }}>Onyx black HUD -- no cyan glass</div></div>
                 <button className="footer-tab-button" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={onToggleTheme}>{theme === 'onyx' ? 'On' : 'Off'}</button>
               </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '10px' }}>
+                <div><div style={{ color: '#e4e4e7' }}>Map Mode</div><div style={{ fontSize: '10px', color: '#71717a' }}>{mapMode === 'graphic' ? 'Painted zone maps you walk around' : 'Simple lettered grid'}</div></div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {(['graphic', 'text'] as const).map(m => (
+                    <button key={m} className={`footer-tab-button${mapMode === m ? ' active' : ''}`} style={{ padding: '6px 10px', fontSize: '11px' }} onClick={() => onSetMapMode(m)}>{m === 'graphic' ? 'Graphic' : 'Text'}</button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -271,7 +283,7 @@ export default function InlinePanel({
                 <button onClick={() => onSetEquipPopup(null)} style={{ position: 'absolute', top: '14px', right: '14px', width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                 <div><h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: modalItem.type === 'Shadow' ? '#BF5AF2' : modalItem.type === 'Echo' ? '#94a3b8' : '#fff' }}>{itemDisplayName(modalItem, modalBase)}</h3><p style={{ margin: '2px 0 0', fontSize: '12px', color: '#3EE0FF', fontWeight: 700 }}>Tier {modalItem.tier} · {modalBase.subType}{modalItem.qualityMultiplier != null ? ` · ${Math.round(modalItem.qualityMultiplier * 100)}% quality` : ''}</p></div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
-                  <ItemIcon subType={modalBase.subType} />
+                  <ItemIcon subType={modalBase.subType} quality={itemQuality(modalItem)} size={96} />
                   <span style={{ position: 'absolute', bottom: '8px', right: '10px', background: 'rgba(255,214,10,0.95)', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '5px', color: '#09090b' }}>T{modalItem.tier}</span>
                 </div>
                 <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -282,8 +294,7 @@ export default function InlinePanel({
                   ))}
                   {modalGems.map((g: any, i: number) => {
                     const gd = gemInfo(g.id)
-                    const gemColor = gd.category === 'Fighter' ? '#FF375F' : gd.category === 'Caster' ? '#0A84FF' : '#30D158'
-                    return <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ fontSize: '11px', padding: '1px 5px', borderRadius: '4px', background: gemColor, color: '#fff', fontWeight: 800 }}>{gd.name.slice(0, 3)}</span><span style={{ fontSize: '13px', color: '#94a3b8' }}>{gd.name} G{g.grade}</span></div><span style={{ fontSize: '11px', color: '#3EE0FF' }}>{gemEffectText(g.id, g.grade)}</span></div>
+                    return <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}><div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><GemIcon id={g.id} size={22} /><span style={{ fontSize: '13px', color: '#94a3b8' }}>{gd.name} G{g.grade}</span></div><span style={{ fontSize: '11px', color: '#3EE0FF' }}>{gemEffectText(g.id, g.grade)}</span></div>
                   })}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>

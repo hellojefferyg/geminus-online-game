@@ -14,6 +14,7 @@ import CombatConsole from './game/components/CombatConsole'
 import ChatConsole from './game/components/ChatConsole'
 import InlinePanel from './game/components/InlinePanel'
 import ServicePanel from './game/components/ServicePanel'
+import { type LoadedMap, hasGraphicMap, loadZoneMap, stepOnMap, serviceNear, resolvePos } from './game/map/zoneMap'
 import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, romanToInt, GEM_POUCH_CAP, INVENTORY_CAP } from './systems/services'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
@@ -23,6 +24,10 @@ const STAMPS: Record<string, any> = STAMPS_DATA
 function getZone(zoneId: string) { return ZONES[zoneId] || ZONES['Z01'] }
 function getStamp(zoneId: string) { const zone = getZone(zoneId); return STAMPS[zone.stamp] || STAMPS['starter_7x7'] }
 function getTileService(tile: string): any { return STAMPS._services[tile] || null }
+function getActionService(action: string): { tile: string; service: any } | null {
+  const hit = Object.entries(STAMPS._services).find(([, s]: [string, any]) => s.action === action)
+  return hit ? { tile: hit[0], service: hit[1] } : null
+}
 
 // ─── RACES ────────────────────────────────────────────────────
 const races: Record<string, any> = {
@@ -129,7 +134,7 @@ function makeItem(baseItemId: string, tier = 1) {
 function buildStartingKit(raceKey: string): { inventory: any[]; equipment: Record<string, string> } {
   const rd = races[raceKey] || races.human; const weapons = RACE_WEAPONS[raceKey] || RACE_WEAPONS.human
   const inv: any[] = []; const eq: Record<string, string> = {}
-  const add = (baseId: string, slot: string) => { const item = makeItem(baseId); inv.push(item); eq[slot] = item.instanceId }
+  const add = (baseId: string, slot: string) => { const item = { ...makeItem(baseId), starter: true }; inv.push(item); eq[slot] = item.instanceId }
   add('base_helm_1','Helmet'); add('base_armor_1','Armor'); add('base_gauntlets_1','Gloves')
   add('base_leggings_1','Leggings'); add('base_boots_1','Boots'); add('base_amulet_1','Amulet'); add('base_ring_1','Ring')
   if (rd.archetype==='True Fighter') { add(weapons.w1,'Weapon 1'); add(weapons.w2,'Weapon 2'); add('base_buffspell_1','Spell 1'); add('base_buffspell_1','Spell 2') }
@@ -201,6 +206,8 @@ if (MAINTENANCE_MODE) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeTile, setActiveTile] = useState<{ tile:string; service:any; x:number; y:number } | null>(null)
   const [activeService, setActiveService] = useState<any>(null)
+  const [mapMode, setMapMode] = useState<'graphic'|'text'>(() => { try { return localStorage.getItem('g_mapmode')==='text' ? 'text' : 'graphic' } catch { return 'graphic' } })
+  const [zoneMap, setZoneMap] = useState<LoadedMap|null>(null)
   const smokeRef = useRef<HTMLCanvasElement>(null)
   const playerRef = useRef<any>(null)
 
@@ -248,6 +255,26 @@ if (MAINTENANCE_MODE) {
     setChatMessages(prev => ({ ...prev, main:[{ sender:'System', text:'Welcome to Geminus. Transmission systems online.', color:'#3EE0FF' }] }))
     const savedColor = localStorage.getItem('g_name'); if (savedColor) setChatNameColor(savedColor)
   }, [uid])
+
+  // Graphic map: load the current zone's map and place the player on it
+  const currentZoneId = player?.pos?.zoneId || 'Z01'
+  useEffect(() => {
+    try { localStorage.setItem('g_mapmode', mapMode) } catch {}
+    setActiveTile(null)
+    if (mapMode !== 'graphic' || !player || !hasGraphicMap(currentZoneId)) { setZoneMap(null); return }
+    let cancelled = false
+    loadZoneMap(currentZoneId).then(m => {
+      if (cancelled) return
+      setZoneMap(m)
+      const cur = playerRef.current
+      if (!m || !cur || cur.pos?.zoneId !== currentZoneId) return
+      const [gx, gy] = resolvePos(m.data, cur.pos?.gx, cur.pos?.gy)
+      if (gx !== cur.pos?.gx || gy !== cur.pos?.gy) { const p = { ...cur, pos: { ...cur.pos, gx, gy } }; playerRef.current = p; setPlayer(p) }
+      const near = serviceNear(m.data, gx, gy); const svc = near && getActionService(near.action)
+      setActiveTile(svc ? { ...svc, x: near!.x, y: near!.y } : null)
+    })
+    return () => { cancelled = true }
+  }, [currentZoneId, mapMode, !!player])
 
   // Live chat: load recent Main/Sales history, then append new messages as they arrive
   useEffect(() => {
@@ -326,6 +353,17 @@ if (MAINTENANCE_MODE) {
 
   const move = (dx: number, dy: number) => {
     const zoneId = player.pos?.zoneId||'Z01'
+    if (mapMode === 'graphic' && zoneMap && zoneMap.data.zid === zoneId) {
+      const [gx, gy] = resolvePos(zoneMap.data, player.pos?.gx, player.pos?.gy)
+      const next = stepOnMap(zoneMap.data, gx, gy, dx, dy)
+      if (!next) return
+      const p = { ...player, pos: { ...player.pos, zoneId, gx: next[0], gy: next[1] } }
+      playerRef.current=p; setPlayer(p)
+      const near = serviceNear(zoneMap.data, next[0], next[1]); const svc = near && getActionService(near.action)
+      setActiveTile(svc ? { ...svc, x: near!.x, y: near!.y } : null)
+      savePlayerNow(p,'move')
+      return
+    }
     const stamp = getStamp(zoneId); const size=stamp.size
     const newX = Math.max(0,Math.min(size-1,(player.pos?.x??0)+dx))
     const newY = Math.max(0,Math.min(size-1,(player.pos?.y??0)+dy))
@@ -490,9 +528,10 @@ if (MAINTENANCE_MODE) {
                 player={player} zone={zone} zoneId={zoneId} stamp={stamp}
                 activeTile={activeTile} menuOpen={menuOpen} mapOverlay={mapOverlay}
                 freeLevels={freeLevels} races={races}
-                onMove={move} onEnter={()=>showToast('Interacting with sector waypoint.')}
+                graphicMap={mapMode==='graphic' && zoneMap?.data.zid===zoneId ? zoneMap : null}
+                onMove={move} onEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } else showToast('Nothing to interact with here.') }}
                 onLogout={handleLogout} onSetMenuOpen={setMenuOpen} onSetActiveTab={setActiveTab}
-                onSetMapOverlay={setMapOverlay} onTileEnter={()=>{ if (activeTile) setActiveService(activeTile.service) }}
+                onSetMapOverlay={setMapOverlay} onTileEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } }}
               />
             )}
 
@@ -505,6 +544,7 @@ if (MAINTENANCE_MODE) {
                 onSetActiveTab={setActiveTab} onSetFilterState={setFilterState}
                 onSetEquipPopup={setEquipPopup} onEquipItem={equipItem} onUnequipItem={unequipItem}
                 onResetSave={resetSave} onUpdateName={updateName}
+                mapMode={mapMode} onSetMapMode={m=>{ setMapMode(m); showToast(m==='graphic'?'Graphic map on':'Text map on') }}
                 onToggleTheme={()=>{ const next=theme==='onyx'?'aether':'onyx'; setTheme(next); showToast(next==='onyx'?'Dark Mode on -- Onyx HUD':'Aether glass restored') }}
               />
             )}
