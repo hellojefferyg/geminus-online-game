@@ -1,7 +1,8 @@
 // src/game/components/PlayerHUD.tsx
 // Player name, level, race, archetype, stats, gold, bank, minimap, dpad, zone info, logout, menu
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import DPad from './DPad'
+import { type LoadedMap, drawZoneMap, loadMapAssets } from '../map/zoneMap'
 
 function fmt(n: number): string {
   if (!n || isNaN(n)) return '0'
@@ -36,6 +37,8 @@ interface PlayerHUDProps {
   mapOverlay: boolean
   freeLevels: number
   races: Record<string, any>
+  /** Painted zone map (graphic mode); null draws the text grid */
+  graphicMap: LoadedMap | null
   onMove: (dx: number, dy: number) => void
   onEnter: () => void
   onLogout: () => void
@@ -47,13 +50,13 @@ interface PlayerHUDProps {
 
 export default function PlayerHUD({
   player, zone, zoneId, stamp, activeTile, menuOpen, mapOverlay,
-  freeLevels, races, onMove, onEnter, onLogout, onSetMenuOpen,
+  freeLevels, races, graphicMap, onMove, onEnter, onLogout, onSetMenuOpen,
   onSetActiveTab, onSetMapOverlay, onTileEnter,
 }: PlayerHUDProps) {
   const miniMapRef = useRef<HTMLCanvasElement>(null)
   const zoneCanvasRef = useRef<HTMLCanvasElement>(null)
 
-  function drawZoneMap(canvas: HTMLCanvasElement, px: number, py: number, cellSize: number, showLabels: boolean) {
+  function drawStampMap(canvas: HTMLCanvasElement, px: number, py: number, cellSize: number, showLabels: boolean) {
     const ctx = canvas.getContext('2d')!
     const dpr = window.devicePixelRatio || 1
     canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
@@ -91,15 +94,25 @@ export default function PlayerHUD({
     ctx.restore()
   }
 
+  // Building/decor images arrive asynchronously; bump a counter to repaint
+  const [assetTick, setAssetTick] = useState(0)
+  useEffect(() => { if (graphicMap) loadMapAssets(() => setAssetTick(t => t + 1)) }, [graphicMap])
+
+  const gx = player.pos?.gx ?? graphicMap?.data.spawn[0] ?? 0
+  const gy = player.pos?.gy ?? graphicMap?.data.spawn[1] ?? 0
+  const highlight = graphicMap && activeTile ? { x: activeTile.x, y: activeTile.y } : null
+
   useEffect(() => {
     if (!miniMapRef.current || !player) return
-    drawZoneMap(miniMapRef.current, player.pos?.x ?? 0, player.pos?.y ?? 0, 18, false)
-  }, [player])
+    if (graphicMap) drawZoneMap(miniMapRef.current, graphicMap, gx, gy, { camera: 'follow', zoom: 0.32, highlight })
+    else drawStampMap(miniMapRef.current, player.pos?.x ?? 0, player.pos?.y ?? 0, 18, false)
+  }, [player, graphicMap, assetTick, activeTile])
 
   useEffect(() => {
     if (!zoneCanvasRef.current || !player || !mapOverlay) return
-    drawZoneMap(zoneCanvasRef.current, player.pos?.x ?? 0, player.pos?.y ?? 0, 42, true)
-  }, [player, mapOverlay])
+    if (graphicMap) drawZoneMap(zoneCanvasRef.current, graphicMap, gx, gy, { camera: 'fit', showGrid: true, labels: true, highlight })
+    else drawStampMap(zoneCanvasRef.current, player.pos?.x ?? 0, player.pos?.y ?? 0, 42, true)
+  }, [player, mapOverlay, graphicMap, assetTick, activeTile])
 
   return (
     <>
@@ -158,7 +171,7 @@ export default function PlayerHUD({
                   <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}><span style={{ color: '#fff', fontWeight: 700 }}>{zoneId}:</span> <span style={{ color: '#cbd5e1' }}>{zone.name}</span></p>
                   <button onClick={onLogout} style={{ flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 7px', borderRadius: '6px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5', cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase' }}>Logout</button>
                 </div>
-                <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{player.pos?.x ?? 0}, {player.pos?.y ?? 0}] · Tier {zone.gear} · Lv {zone.level?.toLocaleString()}</p>
+                <p style={{ margin: 0, fontSize: '9.5px', color: '#94a3b8', fontFamily: 'monospace', lineHeight: 1.3 }}>[{graphicMap ? gx : player.pos?.x ?? 0}, {graphicMap ? gy : player.pos?.y ?? 0}] · Tier {zone.gear} · Lv {zone.level?.toLocaleString()}</p>
                 <p style={{ margin: 0, fontSize: '10.5px', lineHeight: 1.3 }}>
                   <span style={{ color: '#fff', fontWeight: 700 }}>Type: </span><span style={{ color: TYPE_COLORS[zone.type] || '#fff', fontWeight: 700, textTransform: 'capitalize' }}>{zone.type}</span>
                   <span style={{ color: '#64748b' }}> · </span>
@@ -196,8 +209,11 @@ export default function PlayerHUD({
           <div style={{ textAlign: 'center', marginTop: '8px' }}>
             <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '18px', color: '#3EE0FF', margin: 0 }}>{zoneId}</h3>
             <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0' }}>{zone.name}</p>
+            <p style={{ fontSize: '11px', margin: '4px 0 0', minHeight: '15px', color: activeTile ? activeTile.service.color : '#475569', fontWeight: 700 }}>
+              {activeTile ? `📍 ${activeTile.service.label} · press Enter` : graphicMap ? 'Walk the glowing path to a building' : ''}
+            </p>
           </div>
-          <div style={{ width: '100%', maxWidth: '420px', maxHeight: '400px', aspectRatio: '1/1', position: 'relative' }}>
+          <div style={{ width: '100%', maxWidth: '420px', maxHeight: graphicMap ? '52vh' : '400px', aspectRatio: graphicMap ? '3/4' : '1/1', position: 'relative' }}>
             <div className="glass-panel" style={{ width: '100%', height: '100%', borderRadius: '16px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.25)' }}>
               <canvas ref={zoneCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
             </div>

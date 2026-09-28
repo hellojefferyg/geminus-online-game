@@ -755,6 +755,8 @@ export function savePayload(p) {
       zoneId: p.pos?.zoneId ?? 'Z01',
       x: p.pos?.x ?? 7,
       y: p.pos?.y ?? 7,
+      // Graphic-map tile (25x25 zone maps); absent until the player walks on one
+      ...(p.pos?.gx != null && p.pos?.gy != null ? { gx: p.pos.gx, gy: p.pos.gy } : {}),
     },
     inventory: p.inventory ?? [],
     equipment: p.equipment ?? {},
