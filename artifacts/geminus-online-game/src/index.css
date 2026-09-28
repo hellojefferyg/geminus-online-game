@@ -512,3 +512,10 @@ html.theme-onyx .mini-map-circle {
 @media (max-width: 640px) {
   .god-split { grid-template-columns: 1fr !important; }
 }
+
+/* God Editor on phones: bigger text and touch targets; 16px inputs stop iOS zooming in */
+@media (max-width: 640px) {
+  .god-root input, .god-root select { font-size: 16px !important; min-height: 38px; }
+  .god-root button { min-height: 38px; font-size: 13px !important; }
+  .god-root main { font-size: 14px; }
+}

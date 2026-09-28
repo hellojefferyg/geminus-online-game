@@ -151,7 +151,7 @@ export default function GodEditor({ uid }: { uid: string }) {
   }
 
   return (
-    <div style={shell}>
+    <div style={shell} className="god-root">
       {/* Top bar */}
       <header style={{ position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', padding: '10px 14px', background: 'rgba(3,8,12,0.92)', borderBottom: '1px solid rgba(62,224,255,0.25)', backdropFilter: 'blur(8px)' }}>
         <div>

@@ -7,10 +7,10 @@ import { writeDraft } from '../../systems/balance'
 
 export interface DevFlags { oneHit: boolean; noDamage: boolean; forceDrop: '' | 'gem' | 'shadow' }
 
-const row: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.08)' }
-const lbl: React.CSSProperties = { fontSize: '10px', color: '#fff', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', width: '100%' }
-const b = (color = '#FF375F'): React.CSSProperties => ({ fontSize: '11px', fontWeight: 800, padding: '5px 10px', borderRadius: '7px', cursor: 'pointer', background: `${color}1f`, border: `1px solid ${color}88`, color })
-const sel: React.CSSProperties = { padding: '4px 6px', fontSize: '12px' }
+const row: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '14px 0', borderTop: '1px solid rgba(255,255,255,0.08)' }
+const lbl: React.CSSProperties = { fontSize: '12px', color: '#fff', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', width: '100%', marginBottom: '2px' }
+const b = (color = '#FF375F'): React.CSSProperties => ({ fontSize: '14px', fontWeight: 800, padding: '11px 16px', borderRadius: '11px', cursor: 'pointer', background: `${color}1f`, border: `1px solid ${color}88`, color, minHeight: '44px' })
+const sel: React.CSSProperties = { padding: '10px 12px', fontSize: '16px', minHeight: '44px' }  // 16px stops iOS zooming in
 
 interface Props {
   player: any
@@ -34,15 +34,18 @@ export default function DevPanel({ player, BASE_ITEMS, flags, balanceInfo, onFla
   const give = (patch: (p: any) => any, msg: string) => onApply({ ok: true, player: patch({ ...player, inventory: [...(player.inventory || [])], gems: [...(player.gems || [])] }), msg: `DEV: ${msg}` }, 'dev')
 
   return (
-    <div className="glass-panel" style={{ padding: '10px', border: '1px solid rgba(255,55,95,0.6)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 400, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+      background: 'radial-gradient(circle at 50% 0%, #2a0a12 0%, #0a0508 45%, #030104 100%)' }}>
+    <div style={{ maxWidth: '760px', margin: '0 auto', padding: '0 16px max(28px, env(safe-area-inset-bottom))' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+        padding: 'max(14px, env(safe-area-inset-top)) 0 12px', background: 'rgba(8,3,6,0.94)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,55,95,0.35)' }}>
         <div>
-          <div style={{ fontSize: '14px', fontWeight: 900, color: '#FF375F', letterSpacing: '0.08em' }}>DEV TOOLS</div>
-          <div style={{ fontSize: '10px', color: balanceInfo.draft ? '#BF5AF2' : '#94a3b8' }}>
+          <div style={{ fontSize: '22px', fontWeight: 900, color: '#FF375F', letterSpacing: '0.1em' }}>DEV TOOLS</div>
+          <div style={{ fontSize: '13px', color: balanceInfo.draft ? '#BF5AF2' : '#94a3b8' }}>
             {balanceInfo.draft ? 'Previewing a DRAFT balance (only you)' : balanceInfo.version ? `Live balance v${balanceInfo.version}` : 'Balance: code defaults'}
           </div>
         </div>
-        <button onClick={onClose} style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'black', border: '1px solid rgba(255,255,255,0.2)', color: '#d4d4d8', fontSize: '18px', cursor: 'pointer' }}>×</button>
+        <button onClick={onClose} aria-label="Close dev tools" style={{ width: '44px', height: '44px', flexShrink: 0, borderRadius: '50%', background: 'black', border: '1px solid rgba(255,255,255,0.25)', color: '#e4e4e7', fontSize: '26px', lineHeight: 1, cursor: 'pointer' }}>×</button>
       </div>
 
       <div style={row}>
@@ -61,7 +64,7 @@ export default function DevPanel({ player, BASE_ITEMS, flags, balanceInfo, onFla
 
       <div style={row}>
         <span style={lbl}>Character</span>
-        <input className="editor-input" inputMode="numeric" value={level} onChange={e => setLevel(e.target.value)} style={{ width: '90px', ...sel }} />
+        <input className="editor-input" inputMode="numeric" value={level} onChange={e => setLevel(e.target.value)} style={{ width: '120px', ...sel }} />
         <button style={b()} onClick={() => { const lv = Math.max(1, Math.floor(Number(level) || 1)); give(p => ({ ...p, level: lv, xp: 0, xpToNextLevel: xpToLevel(lv) }), `level ${lv}`) }}>Set level</button>
         <button style={b()} onClick={() => give(p => ({ ...p, attributePoints: (p.attributePoints || 0) + 400 }), '+10 banked levels')}>+10 banked lvls</button>
         <button style={b('#30D158')} onClick={() => give(p => ({ ...p, hp: p.derivedStats?.maxHp ?? p.hp }), 'healed')}>Heal</button>
@@ -100,7 +103,7 @@ export default function DevPanel({ player, BASE_ITEMS, flags, balanceInfo, onFla
 
       <div style={row}>
         <span style={lbl}>Free teleport (ignores level)</span>
-        <select className="editor-input" value={zone} onChange={e => setZone(e.target.value)} style={{ ...sel, maxWidth: '220px' }}>
+        <select className="editor-input" value={zone} onChange={e => setZone(e.target.value)} style={{ ...sel, flex: '1 1 220px', minWidth: 0 }}>
           {zoneIds().map(z => <option key={z} value={z}>{z}: {zoneInfo(z)?.name} (Lv {zoneInfo(z)?.level})</option>)}
         </select>
         <button style={b('#FF375F')} onClick={() => {
@@ -119,6 +122,7 @@ export default function DevPanel({ player, BASE_ITEMS, flags, balanceInfo, onFla
           <option value="">Normal drops</option><option value="gem">Every kill drops a gem</option><option value="shadow">Every kill drops a Shadow</option>
         </select>
       </div>
+    </div>
     </div>
   )
 }

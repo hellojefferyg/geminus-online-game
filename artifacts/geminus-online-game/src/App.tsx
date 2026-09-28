@@ -8,7 +8,7 @@ import BESTIARY_DATA from './data/bestiary.json'
 import { runTurn, applyTurnResult, getDefaultAction } from './managers/CombatManager'
 import { savePlayerNow } from './lib/saveQueue'
 import { fetchMyRole, loadLiveBalance, type Role } from './systems/balance'
-import { LIVE_CHANNELS, isLiveChannel, loadRecent, subscribeChat, sendChat, type ChatLine } from './lib/chat'
+import { LIVE_CHANNELS, isLiveChannel, loadRecent, subscribeChat, sendChat, deleteChat, type ChatLine } from './lib/chat'
 import PlayerHUD from './game/components/PlayerHUD'
 import CombatPanel from './game/components/CombatPanel'
 import CombatConsole from './game/components/CombatConsole'
@@ -158,6 +158,9 @@ if (MAINTENANCE_MODE) {
   const [mapOverlay, setMapOverlay] = useState(false)
   const [chatOverlay, setChatOverlay] = useState(false)
   const [chatChannel, setChatChannel] = useState('main')
+  const [chatUnread, setChatUnread] = useState<Record<string, number>>({})
+  const chatChannelRef = useRef('main')
+  useEffect(() => { chatChannelRef.current = chatChannel; setChatUnread(u => ({ ...u, [chatChannel]: 0 })) }, [chatChannel])
   const [chatSub, setChatSub] = useState<Record<string,string>>({ main:'feed', sales:'chat', clan:'chat', groups:'g1' })
   const [chatMessages, setChatMessages] = useState<Record<string,any[]>>({ main:[], sales:[], clan:[], groups:[], g1:[], g2:[], g3:[], g4:[] })
   const [chatInput, setChatInput] = useState('')
@@ -256,7 +259,13 @@ if (MAINTENANCE_MODE) {
       return { ...prev, [channel]: [...cur, ...lines.filter(l => !l.id || !seen.has(l.id))].slice(-150) }
     })
     for (const ch of LIVE_CHANNELS) loadRecent(ch).then(lines => { if (!cancelled) addLines(ch, lines) })
-    const unsubscribe = subscribeChat((channel, line) => addLines(channel, [line]))
+    const unsubscribe = subscribeChat(
+      (channel, line) => {
+        addLines(channel, [line])
+        if (channel !== chatChannelRef.current) setChatUnread(u => ({ ...u, [channel]: Math.min(99, (u[channel] || 0) + 1) }))
+      },
+      id => setChatMessages(prev => Object.fromEntries(Object.entries(prev).map(([k, list]) => [k, list.filter((m: any) => m.id !== id)]))),
+    )
     return () => { cancelled = true; unsubscribe() }
   }, [uid])
 
@@ -465,7 +474,7 @@ if (MAINTENANCE_MODE) {
     e.preventDefault(); if (!chatInput.trim()) return
     if (isLiveChannel(chatChannel)) {
       const text = chatInput; setChatInput('')
-      sendChat(chatChannel, text).then(err => { if (err) { showToast('Message failed to send.'); setChatInput(text) } })
+      sendChat(chatChannel, text).then(err => { if (err) { showToast(/slow down/i.test(err) ? 'Slow down: one message per second.' : 'Message failed to send.'); setChatInput(text) } })
       return
     }
     const key=chatChannel==='groups'?chatSub[chatChannel]:chatChannel
@@ -569,7 +578,10 @@ if (MAINTENANCE_MODE) {
               chatChannel={chatChannel} chatSub={chatSub} chatMessages={chatMessages}
               chatInput={chatInput} emojiOpen={emojiOpen}
               inboxOpen={inboxOpen} chatOverlay={chatOverlay} groupNames={groupNames}
-              playerName={player.name}
+              playerName={player.name} unread={chatUnread}
+              canModerate={role !== 'player'}
+              onDeleteMessage={id => { if (window.confirm('Delete this message for everyone?')) deleteChat(id).then(err => showToast(err ? `Could not delete: ${err}` : 'Message deleted.')) }}
+              onMention={name => setChatInput(prev => (prev && !prev.endsWith(' ') ? prev + ' ' : prev) + `@${name} `)}
               onSwitchChannel={ch=>{ setChatChannel(ch); if (inboxOpen) setInboxOpen(false) }}
               onSetChatSub={setChatSub} onChatInput={setChatInput} onSendMessage={sendMessage}
               onToggleEmoji={()=>setEmojiOpen(prev=>!prev)}
@@ -590,7 +602,7 @@ if (MAINTENANCE_MODE) {
       )}
 
       {/* Toast */}
-      {toast && <div className="glass-panel" style={{ position:'fixed', left:'50%', transform:'translateX(-50%)', bottom:'72px', zIndex:210, padding:'8px 20px', borderRadius:'9999px', fontWeight:500, fontSize:'12px', background:'black', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', boxShadow:'0 4px 24px rgba(0,0,0,0.8)', whiteSpace:'nowrap' }}>{toast}</div>}
+      {toast && <div className="glass-panel" style={{ position:'fixed', left:'50%', transform:'translateX(-50%)', bottom:'72px', zIndex:600, padding:'8px 20px', borderRadius:'9999px', fontWeight:500, fontSize:'12px', background:'black', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', boxShadow:'0 4px 24px rgba(0,0,0,0.8)', whiteSpace:'nowrap' }}>{toast}</div>}
     </>
   )
 }
