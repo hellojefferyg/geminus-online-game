@@ -7,6 +7,7 @@ import STAMPS_DATA from './data/stamps.json'
 import BESTIARY_DATA from './data/bestiary.json'
 import { runTurn, applyTurnResult, getDefaultAction } from './managers/CombatManager'
 import { savePlayerNow } from './lib/saveQueue'
+import { LIVE_CHANNELS, isLiveChannel, loadRecent, subscribeChat, sendChat, type ChatLine } from './lib/chat'
 import PlayerHUD from './game/components/PlayerHUD'
 import CombatPanel from './game/components/CombatPanel'
 import CombatConsole from './game/components/CombatConsole'
@@ -245,6 +246,20 @@ if (MAINTENANCE_MODE) {
     const savedTheme = localStorage.getItem('g_theme')||'aether'
     setTheme(savedTheme); document.documentElement.classList.toggle('theme-onyx',savedTheme==='onyx')
     setChatMessages(prev => ({ ...prev, main:[{ sender:'System', text:'Welcome to Geminus. Transmission systems online.', color:'#3EE0FF' }] }))
+    const savedColor = localStorage.getItem('g_name'); if (savedColor) setChatNameColor(savedColor)
+  }, [uid])
+
+  // Live chat: load recent Main/Sales history, then append new messages as they arrive
+  useEffect(() => {
+    let cancelled = false
+    const addLines = (channel: string, lines: ChatLine[]) => setChatMessages(prev => {
+      const cur = prev[channel] || []
+      const seen = new Set(cur.map((m: any) => m.id).filter(Boolean))
+      return { ...prev, [channel]: [...cur, ...lines.filter(l => !l.id || !seen.has(l.id))].slice(-150) }
+    })
+    for (const ch of LIVE_CHANNELS) loadRecent(ch).then(lines => { if (!cancelled) addLines(ch, lines) })
+    const unsubscribe = subscribeChat((channel, line) => addLines(channel, [line]))
+    return () => { cancelled = true; unsubscribe() }
   }, [uid])
 
   useEffect(() => {
@@ -432,6 +447,11 @@ if (MAINTENANCE_MODE) {
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault(); if (!chatInput.trim()) return
+    if (isLiveChannel(chatChannel)) {
+      const text = chatInput; setChatInput('')
+      sendChat(chatChannel, text, chatNameColor).then(err => { if (err) { showToast('Message failed to send.'); setChatInput(text) } })
+      return
+    }
     const key=chatChannel==='groups'?chatSub[chatChannel]:chatChannel
     setChatMessages(prev=>({...prev,[key]:[...(prev[key]||[]).slice(-149),{sender:player.name||'Pilot',text:chatInput.trim(),color:chatNameColor}]}))
     setChatInput('')
