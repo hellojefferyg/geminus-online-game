@@ -20,7 +20,8 @@ import GEMS_DATA from './data/gems.json'
 export const GDD_VERSION = '3.4-live-2026-09-26'
 
 // ─── Chapter 0 constants ─────────────────────────────────────────
-export const GDD = Object.freeze({
+// Editable at runtime by the God Editor (systems/balance.ts) -- not frozen.
+export const GDD = ({
   XP_BASE: 200,
   XP_GROWTH: 1.12,
   AP_PER_LEVEL: 40,
@@ -224,7 +225,7 @@ export const SLOT_MODS = Object.freeze({
   Rune: { prop: 0, stat: null },
 })
 
-export const DROPPER_TIERS = Object.freeze([
+export const DROPPER_TIERS = ([
   { tier: 1,  levelReq: 1,      gold: 50000,        cv: 13.00 },
   { tier: 2,  levelReq: 1,      gold: 87500,        cv: 15.86 },
   { tier: 3,  levelReq: 100,    gold: 153125,       cv: 19.35 },
@@ -247,7 +248,7 @@ export const DROPPER_TIERS = Object.freeze([
   { tier: 20, levelReq: 400000, gold: 2073446549,   cv: 568.65 },
 ])
 
-export const GEM_GATES = Object.freeze({
+export const GEM_GATES = ({
   1: 1, 2: 100, 3: 253, 4: 1000, 5: 6143, 6: 13636, 7: 35452, 8: 83333, 9: 172222,
 })
 
@@ -644,7 +645,7 @@ export function resolveTurn({ player, monster, kind, rng = Math.random }) {
 }
 
 // ─── Zone spine (25 Sep 2026 lock) ───────────────────────────────
-export const ZONE_TYPES = Object.freeze({
+export const ZONE_TYPES = ({
   starter:  { xp: 1, gold: 1,   shadow: 0,     gem: 1 / 250, grades: 'min-max', hpDef: 1.0 },
   xp:       { xp: 1, gold: 1,   shadow: 1 / 600, gem: 1 / 250, grades: 'min-max', hpDef: 1.0 },
   gold:     { xp: 0, gold: 5,   shadow: 1 / 800, gem: 1 / 400, grades: '1-1',     hpDef: 0.5 },
@@ -653,14 +654,14 @@ export const ZONE_TYPES = Object.freeze({
   prestige: { xp: 1, gold: 1,   shadow: 1 / 400, gem: 1 / 200, grades: '1-9',     hpDef: 1.0 },
 })
 
-export const SHADOW_LADDER = Object.freeze({
+export const SHADOW_LADDER = ({
   Z25: 1 / 200,
   Z60: 1 / 175,
   Z73: 1 / 150,
   Z88: 1 / 125,
 })
 
-export const PURE_GEM_FARMS = Object.freeze({
+export const PURE_GEM_FARMS = ({
   Z34: 3, Z51: 4, Z59: 5, Z66: 6, Z72: 7, Z79: 8, Z87: 9,
 })
 

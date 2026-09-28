@@ -4,10 +4,10 @@ export const GDD_VERSION: string
 export const GDD: Record<string, number>
 export const races: Record<string, any>
 export const AP_WEIGHTS: Record<string, any>
-export const STAT_KEYS: readonly string[]
+export const STAT_KEYS: string[]
 export const OFF_PAIRS: Record<string, string>
 export const SLOT_MODS: Record<string, any>
-export const DROPPER_TIERS: readonly { tier: number; levelReq: number; gold: number; cv: number }[]
+export const DROPPER_TIERS: { tier: number; levelReq: number; gold: number; cv: number }[]
 export const GEM_GATES: Record<number, number>
 export const EQUIP_SLOTS_BY_ARCHETYPE: Record<string, string[]>
 export const ZONE_TYPES: Record<string, any>
