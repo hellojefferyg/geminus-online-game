@@ -516,6 +516,7 @@ if (MAINTENANCE_MODE) {
                 onMove={move} onEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } else showToast('Nothing to interact with here.') }}
                 onLogout={handleLogout} onSetMenuOpen={setMenuOpen} onSetActiveTab={setActiveTab}
                 onSetMapOverlay={setMapOverlay} onTileEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } }}
+                onEstate={()=>showToast('Estate -- coming soon!')}
               />
             )}
 
