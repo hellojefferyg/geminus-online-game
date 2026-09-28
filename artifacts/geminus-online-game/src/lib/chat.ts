@@ -11,15 +11,11 @@ export const LIVE_CHANNELS = ['main', 'sales'] as const
 export const CHAT_HISTORY = 50
 export const CHAT_MAX_LENGTH = 300
 
-export interface ChatLine { id?: number; sender: string; text: string; color: string }
+export interface ChatLine { id?: number; sender: string; text: string; color: string; role?: string | null; system?: boolean }
 
-const ROLE_TAGS: Record<string, string> = { dev: 'Dev', arch: 'Arch', mod: 'Mod' }
-
-/** "Jeff(Dev)" for staff, plain name for players. The role is set by the server, not the client. */
+/** The role comes from the server (set by the database trigger), so it can't be faked. */
 function toLine(row: any): ChatLine {
-  const tag = ROLE_TAGS[row.sender_role]
-  const name = row.sender_name || 'Pilot'
-  return { id: row.id, sender: tag ? `${name}(${tag})` : name, text: row.body, color: row.color || '#3EE0FF' }
+  return { id: row.id, sender: row.sender_name || 'Pilot', role: row.sender_role || null, text: row.body, color: row.color || '#3EE0FF' }
 }
 
 export function isLiveChannel(channel: string): boolean {
@@ -48,10 +44,9 @@ export function subscribeChat(onMessage: (channel: string, line: ChatLine) => vo
   return () => { supabase.removeChannel(sub) }
 }
 
-export async function sendChat(channel: string, text: string, color: string): Promise<string | null> {
+export async function sendChat(channel: string, text: string): Promise<string | null> {
   const body = text.trim().slice(0, CHAT_MAX_LENGTH)
   if (!body) return null
-  const safeColor = /^#[0-9A-Fa-f]{6}$/.test(color) ? color : '#3EE0FF'
-  const { error } = await supabase.from('chat_messages').insert({ channel, body, color: safeColor })
+  const { error } = await supabase.from('chat_messages').insert({ channel, body })
   return error ? error.message : null
 }

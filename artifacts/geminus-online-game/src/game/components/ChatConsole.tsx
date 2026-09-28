@@ -1,23 +1,24 @@
 // src/game/components/ChatConsole.tsx
 import { useRef } from 'react'
-import NameColorPicker from './NameColorPicker'
 
-/** Names too dark to read on the chat background are lightened (e.g. a black name colour). */
-function readableColor(hex: string): string {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex || '')
-  if (!m) return '#3EE0FF'
-  const n = parseInt(m[1], 16)
-  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
-  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
-  if (lum >= 0.35) return hex
-  // Blend toward white until readable
-  const t = Math.min(1, (0.55 - lum) / (1 - lum))
-  r = Math.round(r + (255 - r) * t); g = Math.round(g + (255 - g) * t); b = Math.round(b + (255 - b) * t)
-  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
+/** Staff names: locked colour + tag, bold. Players: plain white. Staff messages: bold platinum. */
+export const ROLE_STYLE: Record<string, { color: string; tag: string }> = {
+  dev:   { color: '#FF2D2D', tag: 'Dev' },
+  admin: { color: '#B84DFF', tag: 'Admin' },
+  arch:  { color: '#2E8BFF', tag: 'Arch' },
+  mod:   { color: '#2BFF5F', tag: 'Mod' },
+}
+const PLATINUM = '#D4DAE3'
+
+function ChatName({ m }: { m: any }) {
+  if (m.system) return <span style={{ color: '#3EE0FF', fontWeight: 800 }}>{m.sender}:</span>
+  const st = ROLE_STYLE[m.role]
+  if (st) return <span style={{ color: st.color, fontWeight: 800 }}>{m.sender}({st.tag}):</span>
+  return <span style={{ color: '#fff', fontWeight: 400 }}>{m.sender}:</span>
 }
 
 const CHAT_SUBS: Record<string, [string, string][]> = {
-  main:   [['feed', 'Main Chat'], ['settings', 'Name Color']],
+  main:   [['feed', 'Main Chat']],
   sales:  [['chat', 'Sales Chat'], ['auction', 'Auction']],
   clan:   [['chat', 'Clan Chat'], ['wars', 'Wars'], ['contrib', 'Contributions']],
   groups: [['g1', ''], ['g2', ''], ['g3', ''], ['g4', '']],
@@ -28,7 +29,6 @@ interface ChatConsoleProps {
   chatSub: Record<string, string>
   chatMessages: Record<string, any[]>
   chatInput: string
-  chatNameColor: string
   emojiOpen: boolean
   inboxOpen: boolean
   chatOverlay: boolean
@@ -41,34 +41,34 @@ interface ChatConsoleProps {
   onToggleEmoji: () => void
   onToggleInbox: () => void
   onSetChatOverlay: (val: boolean) => void
-  onColorChange: (color: string) => void
   onAddEmoji: (em: string) => void
 }
 
 export default function ChatConsole({
-  chatChannel, chatSub, chatMessages, chatInput, chatNameColor,
+  chatChannel, chatSub, chatMessages, chatInput,
   emojiOpen, inboxOpen, chatOverlay, groupNames, playerName,
   onSwitchChannel, onSetChatSub, onChatInput, onSendMessage,
-  onToggleEmoji, onToggleInbox, onSetChatOverlay, onColorChange, onAddEmoji,
+  onToggleEmoji, onToggleInbox, onSetChatOverlay, onAddEmoji,
 }: ChatConsoleProps) {
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   const renderChatContent = () => {
     const sub = chatSub[chatChannel]
-    if (chatChannel === 'main' && sub === 'settings') return <NameColorPicker nameColor={chatNameColor} onColorChange={onColorChange} />
     const key = chatChannel === 'groups' ? sub : chatChannel
     const msgs = chatMessages[key] || []
     return msgs.length === 0
       ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#475569', fontSize: '12px' }}></div>
       : <>{msgs.map((m: any, i: number) => (
-          <div key={i} style={{ margin: '4px 0', fontSize: '12px' }}>
-            <span style={{ color: readableColor(m.color || chatNameColor), fontWeight: 800 }}>{m.sender}:</span>{' '}
-            <span style={{ color: '#fff' }}>{m.text}</span>
+          <div key={m.id ?? i} style={{ margin: '4px 0', fontSize: '12px', lineHeight: 1.4, wordBreak: 'break-word' }}>
+            <ChatName m={m} />{' '}
+            <span style={{ color: m.role ? PLATINUM : '#fff', fontWeight: m.role ? 700 : 400 }}>{m.text}</span>
           </div>
         ))}</>
   }
 
-  const ChatBody = ({ inOverlay = false }: { inOverlay?: boolean }) => (
+  // Called as a function (not <ChatBody/>): a component defined in here would be re-created on
+  // every keystroke, remounting the input and closing the phone keyboard.
+  const chatBody = (inOverlay = false) => (
     <>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
@@ -113,7 +113,7 @@ export default function ChatConsole({
           </div>
         </div>
       ) : (
-        <div ref={chatScrollRef} style={{ fontSize: '12px', flex: 1, overflowY: 'auto', minHeight: '140px', padding: '4px' }}>
+        <div ref={chatScrollRef} style={{ fontSize: '12px', flex: 1, overflowY: 'auto', minHeight: '320px', maxHeight: inOverlay ? undefined : '320px', padding: '4px', position: 'relative', zIndex: 1 }}>
           {renderChatContent()}
         </div>
       )}
@@ -131,9 +131,9 @@ export default function ChatConsole({
   return (
     <>
       {/* Inline chat */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '240px' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '440px' }}>
         <div className="glass-panel" style={{ width: '100%', padding: '10px', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-          <ChatBody />
+          {chatBody()}
         </div>
       </div>
 
@@ -158,7 +158,7 @@ export default function ChatConsole({
       {chatOverlay && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(12px)', zIndex: 150, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '14px' }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '512px', margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column', padding: '12px', border: '1px solid rgba(255,255,255,0.2)' }}>
-            <ChatBody inOverlay />
+            {chatBody(true)}
           </div>
         </div>
       )}
