@@ -2,7 +2,8 @@
 // Town services opened from map tiles: Sanctuary, Gilded Vault, Armory, Arcanium, Gemcutter
 // Logic lives in systems/services.ts -- this component only renders and forwards results.
 import { useState } from 'react'
-import ItemIcon from './ItemIcon'
+import ItemIcon, { itemQuality } from './ItemIcon'
+import GemIcon from './GemIcon'
 import AccordionItem from './AccordionItem'
 import {
   type ServiceResult,
@@ -26,7 +27,6 @@ function fmt(n: number): string {
   return Math.floor(n).toLocaleString()
 }
 
-const gemDot = (color: string) => color === 'Red' ? '🔴' : color === 'Blue' ? '🔵' : color === 'Yellow' ? '🟡' : color === 'Purple' ? '🟣' : '🟢'
 
 const card: React.CSSProperties = { padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }
 const label: React.CSSProperties = { fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }
@@ -141,7 +141,7 @@ function Merchant({ shop, player, BASE_ITEMS, run }: { shop: string; player: any
             const disabled = locked || (player.gold || 0) < t.gold
             return (
               <div key={b.id} style={row}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}><ItemIcon subType={b.subType} /><span style={{ color: '#e4e4e7' }}>{b.name}</span></span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}><ItemIcon subType={b.subType} size={32} /><span style={{ color: '#e4e4e7' }}>{b.name}</span></span>
                 <button style={actBtn('#3EE0FF', disabled)} onClick={() => run(buyItem(player, b.id, tier, BASE_ITEMS))}>Buy</button>
               </div>
             )
@@ -157,7 +157,7 @@ function Merchant({ shop, player, BASE_ITEMS, run }: { shop: string; player: any
             return (
               <div key={item.instanceId} style={row}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                  <ItemIcon subType={base?.subType || ''} />
+                  <ItemIcon subType={base?.subType || ''} quality={itemQuality(item)} size={32} />
                   <span style={{ color: '#e4e4e7' }}>{itemDisplayName(item, base)} <span style={{ color: '#94a3b8', fontFamily: 'monospace' }}>T{item.tier}</span></span>
                 </span>
                 <button style={actBtn('#FFD60A')} onClick={() => run(sellItem(player, item.instanceId))}>{fmt(sellPrice(item))}</button>
@@ -330,7 +330,7 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
                       <div key={s} className="gem-item" style={{ width: '72px', cursor: g ? 'pointer' : 'default' }}
                         title={g ? `Unsocket (${UNSOCKET_COST} gold)` : 'Empty socket'}
                         onClick={() => g && run(unsocketGem(player, item.instanceId, s))}>
-                        {g && gi ? <><span style={{ fontSize: '12px' }}>{gemDot(gi.color)}</span><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span></> : <span className="item-label" style={{ color: '#52525b' }}>Empty</span>}
+                        {g && gi ? <><GemIcon id={g.id} size={30} /><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span></> : <span className="item-label" style={{ color: '#52525b' }}>Empty</span>}
                       </div>
                     )
                   })}
@@ -350,7 +350,7 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
                   <div key={i} className="gem-item" style={{ opacity: !item || gated ? 0.5 : 1 }}
                     title={`${gi.name} G${g.grade}: ${gemEffectText(g.id, g.grade || 1)}${gated ? ` (level ${gemMinLevel(g.id, g.grade || 1).toLocaleString()})` : ''}`}
                     onClick={() => item && run(socketGem(player, item.instanceId, i, BASE_ITEMS))}>
-                    <span style={{ fontSize: '12px' }}>{gemDot(gi.color)}</span><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span>
+                    <GemIcon id={g.id} size={30} /><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span>
                   </div>
                 )
               })}
@@ -370,7 +370,7 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
             const disabled = g.count < 3 || g.grade >= MAX_GEM_GRADE || (player.gold || 0) < cost
             return (
               <div key={`${g.id}|${g.grade}`} style={row}>
-                <span style={{ color: '#e4e4e7', minWidth: 0 }}>{gemDot(gi.color)} {gi.name} G{g.grade} <span style={{ color: '#94a3b8', fontFamily: 'monospace' }}>×{g.count}</span></span>
+                <span style={{ color: '#e4e4e7', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}><GemIcon id={g.id} size={20} /> {gi.name} G{g.grade} <span style={{ color: '#94a3b8', fontFamily: 'monospace' }}>×{g.count}</span></span>
                 <button style={actBtn('#5AC8FA', disabled)} onClick={() => run(upgradeGems(player, g.id, g.grade))}>{g.grade >= MAX_GEM_GRADE ? 'MAX' : `G${g.grade + 1} · ${fmt(cost)}`}</button>
               </div>
             )
@@ -388,7 +388,7 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
             return (
               <div key={r.id} style={{ ...row, alignItems: 'flex-start' }}>
                 <span style={{ minWidth: 0 }}>
-                  <span style={{ color: '#e4e4e7', fontWeight: 700 }}>{gemDot(ri.color)} {r.name}</span>
+                  <span style={{ color: '#e4e4e7', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '6px' }}><GemIcon id={r.id} size={20} /> {r.name}</span>
                   <span style={{ display: 'block', fontSize: '10px', color: '#94a3b8' }}>{gemInfo(r.from[0]).name} + {gemInfo(r.from[1]).name} · {ri.description}</span>
                 </span>
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'flex-end' }}>
@@ -411,7 +411,7 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
             const [lo, hi] = salvageRange(g.grade)
             return (
               <div key={`${g.id}|${g.grade}`} style={row}>
-                <span style={{ color: '#e4e4e7', minWidth: 0 }}>{gemDot(gi.color)} {gi.name} G{g.grade} <span style={{ color: '#94a3b8', fontFamily: 'monospace' }}>×{g.count}</span>
+                <span style={{ color: '#e4e4e7', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}><GemIcon id={g.id} size={20} /> {gi.name} G{g.grade} <span style={{ color: '#94a3b8', fontFamily: 'monospace' }}>×{g.count}</span>
                   <span style={{ display: 'block', fontSize: '10px', color: '#94a3b8' }}>{lo}–{hi} dust each</span></span>
                 <button style={actBtn('#5AC8FA')} onClick={() => run(salvageGems(player, g.id, g.grade))}>Salvage 1</button>
               </div>
@@ -440,7 +440,7 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
               const gi = g ? gemInfo(g.id) : null
               return (
                 <div key={n} className="gem-item" style={{ width: '64px' }} onClick={() => g && setCrucible(crucible.filter((_, i) => i !== n))}>
-                  {g && gi ? <><span style={{ fontSize: '12px' }}>{gemDot(gi.color)}</span><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span></> : <span className="item-label" style={{ color: '#52525b' }}>?</span>}
+                  {g && gi ? <><GemIcon id={g.id} size={30} /><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span></> : <span className="item-label" style={{ color: '#52525b' }}>?</span>}
                 </div>
               )
             })}
@@ -458,7 +458,7 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
               return (
                 <div key={i} className="gem-item" style={{ opacity: picked || wrongGrade ? 0.35 : 1 }}
                   onClick={() => !picked && !wrongGrade && crucible.length < 2 && setCrucible([...crucible, i])}>
-                  <span style={{ fontSize: '12px' }}>{gemDot(gi.color)}</span><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span>
+                  <GemIcon id={g.id} size={30} /><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span>
                 </div>
               )
             })}
