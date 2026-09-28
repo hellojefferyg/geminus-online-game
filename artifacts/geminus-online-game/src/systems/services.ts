@@ -329,13 +329,157 @@ export function generateShadowItem(p: any, BASE_ITEMS: any[], rng: Rng = Math.ra
   return { instanceId: newId(), baseItemId: pick(weighted, rng).id, tier, type: 'Shadow', qualityMultiplier: qm, enchantments: rollEnchantments(tier, qm, rng), socketedGems: [] }
 }
 
+// ─── Soulforge (Geminus.1 soulforgeData.js) ───────────────────────
+
+export const SOULFORGE = {
+  CRIT_CHANCE: 0.05,            // baseCriticalSuccessChance
+  MAX_INFUSION: 10,             // ascensionMinInfusionLevel (Ascension itself not ported yet)
+  INFUSION_GAIN: 0.10,          // +10% base stat per infusion
+  INFUSION_CRIT_GAIN: 0.20,     // "Double stat gain" on a critical
+  INFUSION_GOLD: 100000,        // infusionBaseCosts.goldBase
+  INFUSION_ESSENCE: 50,         // infusionBaseCosts.essenceBase
+  INFUSION_COST_MULT: 1.5,      // cost = base x 1.5^level
+  SHATTER_BASE: 10,             // shatteringYields.tierEssenceBase (x item tier)
+  SHATTER_MULT: { Shadow: 1.0, Echo: 0.5 } as Record<string, number>,
+}
+
+// rerollCosts T1-T20 (gold matches DROPPER_TIERS)
+const REROLL_ESSENCE = [25, 40, 65, 100, 150, 225, 350, 500, 750, 1200, 1800, 2700, 4000, 6000, 9000, 13500, 20000, 30000, 45000, 70000]
+
+export function shatterYield(item: any): number {
+  return Math.floor(SOULFORGE.SHATTER_BASE * (item?.tier || 1) * (SOULFORGE.SHATTER_MULT[item?.type] ?? 0))
+}
+
+export function infusionCost(item: any): { gold: number; essence: number } {
+  const m = Math.pow(SOULFORGE.INFUSION_COST_MULT, item?.infusionLevel || 0)
+  return { gold: Math.floor(SOULFORGE.INFUSION_GOLD * m), essence: Math.floor(SOULFORGE.INFUSION_ESSENCE * m) }
+}
+
+export function rerollCost(item: any): { gold: number; essence: number } {
+  const t = Math.max(1, Math.min(20, item?.tier || 1))
+  return { gold: tierInfo(t).gold, essence: REROLL_ESSENCE[t - 1] }
+}
+
+function findItem(p: any, instanceId: string) {
+  const idx = (p.inventory || []).findIndex((i: any) => i.instanceId === instanceId)
+  if (idx < 0) return { idx, item: null, err: 'Item not found.' }
+  return { idx, item: p.inventory[idx], err: null }
+}
+
+/** Shadow/Echo -> Essence. 5% critical doubles the yield. */
+export function shatterItem(p: any, instanceId: string, rng: Rng = Math.random): ServiceResult {
+  const { item, err } = findItem(p, instanceId)
+  if (err) return fail(err)
+  if (item.type !== 'Shadow' && item.type !== 'Echo') return fail('Only Shadow and Echo items can be shattered.')
+  if (Object.values(p.equipment || {}).includes(instanceId)) return fail('Unequip the item first.')
+  if ((item.socketedGems || []).length) return fail('Remove socketed gems at the Gemcutter first.')
+  const crit = rng() < SOULFORGE.CRIT_CHANCE
+  const gain = shatterYield(item) * (crit ? 2 : 1)
+  const next = clonePlayer(p)
+  next.inventory = next.inventory.filter((i: any) => i.instanceId !== instanceId)
+  next.essence = (p.essence || 0) + gain
+  return { ok: true, player: next, msg: `${crit ? 'CRITICAL! ' : ''}Shattered for ${gain.toLocaleString()} essence.` }
+}
+
+/** Raise a Dropper/Shadow item's base stat by 10% (20% on a critical), up to +10. */
+export function infuseItem(p: any, instanceId: string, rng: Rng = Math.random): ServiceResult {
+  const { idx, item, err } = findItem(p, instanceId)
+  if (err) return fail(err)
+  if (item.type === 'Echo') return fail('Echoes cannot be infused.')
+  const lvl = item.infusionLevel || 0
+  if (lvl >= SOULFORGE.MAX_INFUSION) return fail(`Already at +${SOULFORGE.MAX_INFUSION}.`)
+  const cost = infusionCost(item)
+  if ((p.gold || 0) < cost.gold || (p.essence || 0) < cost.essence) return fail(`Need ${cost.gold.toLocaleString()} gold and ${cost.essence.toLocaleString()} essence.`)
+  const crit = rng() < SOULFORGE.CRIT_CHANCE
+  const gain = crit ? SOULFORGE.INFUSION_CRIT_GAIN : SOULFORGE.INFUSION_GAIN
+  const next = clonePlayer(p)
+  next.gold = (p.gold || 0) - cost.gold
+  next.essence = (p.essence || 0) - cost.essence
+  next.inventory[idx] = { ...item, infusionLevel: lvl + 1, infusionMult: +((item.infusionMult ?? 1) * (1 + gain)).toFixed(4) }
+  return { ok: true, player: next, msg: `${crit ? 'CRITICAL! ' : ''}Infused to +${lvl + 1} (+${gain * 100}% base stat).` }
+}
+
+/** Replace one enchantment on a Shadow item with a different one. 5% critical refunds the cost. */
+export function rerollItemEnchant(p: any, instanceId: string, enchantIdx: number, rng: Rng = Math.random): ServiceResult {
+  const { idx, item, err } = findItem(p, instanceId)
+  if (err) return fail(err)
+  if (item.type !== 'Shadow') return fail('Only Shadow items can be rerolled.')
+  const old = (item.enchantments || [])[enchantIdx]
+  if (!old) return fail('Pick an enchantment to reroll.')
+  const cost = rerollCost(item)
+  if ((p.gold || 0) < cost.gold || (p.essence || 0) < cost.essence) return fail(`Need ${cost.gold.toLocaleString()} gold and ${cost.essence.toLocaleString()} essence.`)
+  const have = (item.enchantments || []).map((e: any) => e.id)
+  const pool = ENCHANTMENTS.filter(e => !have.includes(e.id))
+  const e = (pool.length ? pool : ENCHANTMENTS)[Math.floor(rng() * (pool.length || ENCHANTMENTS.length))]
+  const mt = magicTier(item.tier)
+  const fresh = { id: e.id, name: e.name, tier: mt, effects: Object.entries(e.stats).map(([stat, values]: [string, any]) => ({ stat, value: values[mt - 1] })) }
+  const crit = rng() < SOULFORGE.CRIT_CHANCE
+  const next = clonePlayer(p)
+  if (!crit) { next.gold = (p.gold || 0) - cost.gold; next.essence = (p.essence || 0) - cost.essence }
+  next.inventory[idx] = { ...item, enchantments: item.enchantments.map((x: any, i: number) => (i === enchantIdx ? fresh : x)) }
+  return { ok: true, player: next, msg: `${crit ? 'CRITICAL! Cost refunded. ' : ''}${old.name} → ${e.name}.` }
+}
+
+// ─── Gem salvage + Crucible (Geminus.1 gem_cutter GEM_CRUCIBLE) ───
+
+const SALVAGE_DUST: Record<number, [number, number]> = {
+  1: [1, 4], 2: [2, 8], 3: [3, 12], 4: [4, 16], 5: [5, 20], 6: [6, 24], 7: [7, 28], 8: [9, 36], 9: [10, 40],
+}
+export const MASS_SALVAGE_LEVEL: Record<number, number> = {
+  1: 1, 2: 1, 3: 300, 4: 450, 5: 1500, 6: 5000, 7: 15000, 8: 50000, 9: 200000,
+}
+export const crucibleCost = (grade: number) => 25 * grade
+
+export function salvageRange(grade: number): [number, number] {
+  return SALVAGE_DUST[grade] || SALVAGE_DUST[1]
+}
+
+function rollDust(grade: number, rng: Rng): number {
+  const [lo, hi] = salvageRange(grade)
+  return lo + Math.floor(rng() * (hi - lo + 1))
+}
+
+/** Salvage one gem (by pouch index) or every gem of a grade (all=true, level gated) into Gem Dust. */
+export function salvageGems(p: any, id: string, grade: number, all = false, rng: Rng = Math.random): ServiceResult {
+  if (all && (p.level || 1) < (MASS_SALVAGE_LEVEL[grade] ?? 1)) return fail(`Mass salvage of G${grade} requires level ${MASS_SALVAGE_LEVEL[grade].toLocaleString()}.`)
+  const k = gemKey(id)
+  const hits: number[] = []
+  ;(p.gems || []).forEach((g: any, i: number) => {
+    if ((g.grade || 1) === grade && (all || gemKey(g.id) === k) && (all || hits.length === 0)) hits.push(i)
+  })
+  if (!hits.length) return fail('No matching gems.')
+  let dust = 0
+  for (let n = 0; n < hits.length; n++) dust += rollDust(grade, rng)
+  const next = clonePlayer(p)
+  next.gems = next.gems.filter((_: any, i: number) => !hits.includes(i))
+  next.gemDust = (p.gemDust || 0) + dust
+  return { ok: true, player: next, msg: `Salvaged ${hits.length} gem${hits.length > 1 ? 's' : ''} for ${dust.toLocaleString()} Gem Dust.` }
+}
+
+/** Crucible: two gems of the same grade + dust -> one random standard gem of that grade. */
+export function crucibleFuse(p: any, idxA: number, idxB: number, rng: Rng = Math.random): ServiceResult {
+  const a = p.gems?.[idxA], b = p.gems?.[idxB]
+  if (!a || !b || idxA === idxB) return fail('Pick two different gems.')
+  const grade = a.grade || 1
+  if ((b.grade || 1) !== grade) return fail('Both gems must be the same grade.')
+  const cost = crucibleCost(grade)
+  if ((p.gemDust || 0) < cost) return fail(`Need ${cost} Gem Dust.`)
+  const id = rollGemId(rng)
+  const next = clonePlayer(p)
+  next.gems = next.gems.filter((_: any, i: number) => i !== idxA && i !== idxB)
+  next.gems.push({ id, grade })
+  next.gemDust = (p.gemDust || 0) - cost
+  return { ok: true, player: next, msg: `The Crucible yields ${gemInfo(id).name} G${grade}!` }
+}
+
 // ─── Display helpers ──────────────────────────────────────────────
 
 export function itemDisplayName(item: any, base: any): string {
   const name = base?.name || 'Item'
-  if (item?.type === 'Shadow') return `Shadow of ${name}`
-  if (item?.type === 'Echo') return `Echo of ${name}`
-  return name
+  const plus = item?.infusionLevel ? ` +${item.infusionLevel}` : ''
+  if (item?.type === 'Shadow') return `Shadow of ${name}${plus}`
+  if (item?.type === 'Echo') return `Echo of ${name}${plus}`
+  return name + plus
 }
 
 const PCT_KEYS = ['ACPercent', 'WCPercent', 'SCPercent', 'DEXPercent', 'STRPercent', 'WISPercent', 'NTLPercent', 'VITPercent']

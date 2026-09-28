@@ -12,5 +12,5 @@ export default async function handler(req, res) {
   const { data, error } = await supabase
     .from('players').select('*').eq('uid', uid).single();
   if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
-  return res.json(data ?? { uid, xp: 0, gold: 0, level: 1, hp: 100, max_hp: 100, attribute_points: 0, base_stats: {}, pos: {}, inventory: [], gems: [], kills: 0 });
+  return res.json(data ?? { uid, xp: 0, gold: 0, bank: 0, gem_dust: 0, essence: 0, level: 1, hp: 100, max_hp: 100, attribute_points: 0, base_stats: {}, pos: {}, inventory: [], gems: [], kills: 0 });
 }

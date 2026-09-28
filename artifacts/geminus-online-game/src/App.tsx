@@ -221,6 +221,7 @@ if (MAINTENANCE_MODE) {
         const p: any = {
           uid, name:supa.name||'Pilot', race:supa.race||'human', raceName:supa.race_name||'Human',
           archetype:supa.archetype||'True Fighter', cci:supa.cci||'DEX', bank:supa.bank||0,
+          gemDust:Number(supa.gem_dust)||0, essence:Number(supa.essence)||0,
           xp:supa.xp??0, gold:supa.gold??0, level:supa.level??1, hp:supa.hp??null,
           attributePoints:supa.attribute_points??0, kills:supa.kills??0,
           baseStats:(supa.base_stats&&Object.keys(supa.base_stats).length>0)?supa.base_stats:{STR:15,DEX:20,VIT:10,NTL:5,WIS:5},
