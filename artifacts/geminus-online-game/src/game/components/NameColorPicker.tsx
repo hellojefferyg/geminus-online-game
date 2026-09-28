@@ -85,7 +85,7 @@ export default function NameColorPicker({ nameColor, onColorChange }: NameColorP
     applyColor(hsvToHex(hue, dist / radius, 1))
   }
 
-  const presets = ['#000000', '#0A84FF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#FF9F0A', '#FFFFFF', '#FF375F', '#A2845E']
+  const presets = ['#3EE0FF', '#0A84FF', '#30D158', '#FFD60A', '#FF3B30', '#BF5AF2', '#FF9F0A', '#FFFFFF', '#FF375F', '#A2845E']
 
   return (
     <div style={{ background: '#1c1c1e', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', padding: '14px', overflow: 'hidden' }}>

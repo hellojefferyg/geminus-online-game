@@ -2,6 +2,20 @@
 import { useRef } from 'react'
 import NameColorPicker from './NameColorPicker'
 
+/** Names too dark to read on the chat background are lightened (e.g. a black name colour). */
+function readableColor(hex: string): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex || '')
+  if (!m) return '#3EE0FF'
+  const n = parseInt(m[1], 16)
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  if (lum >= 0.35) return hex
+  // Blend toward white until readable
+  const t = Math.min(1, (0.55 - lum) / (1 - lum))
+  r = Math.round(r + (255 - r) * t); g = Math.round(g + (255 - g) * t); b = Math.round(b + (255 - b) * t)
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`
+}
+
 const CHAT_SUBS: Record<string, [string, string][]> = {
   main:   [['feed', 'Main Chat'], ['settings', 'Name Color']],
   sales:  [['chat', 'Sales Chat'], ['auction', 'Auction']],
@@ -48,7 +62,7 @@ export default function ChatConsole({
       ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#475569', fontSize: '12px' }}></div>
       : <>{msgs.map((m: any, i: number) => (
           <div key={i} style={{ margin: '4px 0', fontSize: '12px' }}>
-            <span style={{ color: m.color || chatNameColor, fontWeight: 800 }}>{m.sender}:</span>{' '}
+            <span style={{ color: readableColor(m.color || chatNameColor), fontWeight: 800 }}>{m.sender}:</span>{' '}
             <span style={{ color: '#fff' }}>{m.text}</span>
           </div>
         ))}</>
