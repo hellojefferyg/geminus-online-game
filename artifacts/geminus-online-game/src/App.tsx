@@ -1,12 +1,13 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from './supabase'
-import { spendAttributeBank, calcDerived as gddCalcDerived } from './gdd'
+import { spendAttributeBank, calcDerived as gddCalcDerived, races, GDD, DROPPER_TIERS, xpToLevel, getAttributeFocusOrder } from './gdd'
 import ZONES_DATA from './data/zones.json'
 import STAMPS_DATA from './data/stamps.json'
 import BESTIARY_DATA from './data/bestiary.json'
 import { runTurn, applyTurnResult, getDefaultAction } from './managers/CombatManager'
 import { savePlayerNow } from './lib/saveQueue'
+import { fetchMyRole, loadLiveBalance, type Role } from './systems/balance'
 import { LIVE_CHANNELS, isLiveChannel, loadRecent, subscribeChat, sendChat, type ChatLine } from './lib/chat'
 import PlayerHUD from './game/components/PlayerHUD'
 import CombatPanel from './game/components/CombatPanel'
@@ -14,6 +15,7 @@ import CombatConsole from './game/components/CombatConsole'
 import ChatConsole from './game/components/ChatConsole'
 import InlinePanel from './game/components/InlinePanel'
 import ServicePanel from './game/components/ServicePanel'
+import DevPanel, { type DevFlags } from './game/components/DevPanel'
 import { type LoadedMap, hasGraphicMap, loadZoneMap, stepOnMap, serviceNear, resolvePos } from './game/map/zoneMap'
 import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, romanToInt, GEM_POUCH_CAP, INVENTORY_CAP } from './systems/services'
 
@@ -29,40 +31,7 @@ function getActionService(action: string): { tile: string; service: any } | null
   return hit ? { tile: hit[0], service: hit[1] } : null
 }
 
-// ─── RACES ────────────────────────────────────────────────────
-const races: Record<string, any> = {
-  human:      { raceName: 'Human',      archetype: 'True Fighter',   primaryStat: 'DEX' },
-  dragonborn: { raceName: 'Dragonborn', archetype: 'True Fighter',   primaryStat: 'DEX' },
-  orc:        { raceName: 'Orc',        archetype: 'True Fighter',   primaryStat: 'DEX' },
-  werewolf:   { raceName: 'Werewolf',   archetype: 'True Fighter',   primaryStat: 'DEX' },
-  minotaur:   { raceName: 'Minotaur',   archetype: 'True Fighter',   primaryStat: 'DEX' },
-  troll:      { raceName: 'Troll',      archetype: 'True Fighter',   primaryStat: 'VIT' },
-  hobbit:     { raceName: 'Hobbit',     archetype: 'True Fighter',   primaryStat: 'DEX' },
-  centaur:    { raceName: 'Centaur',    archetype: 'True Fighter',   primaryStat: 'DEX' },
-  phoenix:    { raceName: 'Phoenix',    archetype: 'True Caster',    primaryStat: 'WIS' },
-  tiefling:   { raceName: 'Tiefling',   archetype: 'True Caster',    primaryStat: 'WIS' },
-  mermaid:    { raceName: 'Mermaid',    archetype: 'True Caster',    primaryStat: 'WIS' },
-  gnome:      { raceName: 'Gnome',      archetype: 'True Caster',    primaryStat: 'WIS' },
-  griffin:    { raceName: 'Griffin',    archetype: 'True Caster',    primaryStat: 'WIS' },
-  vampire:    { raceName: 'Vampire',    archetype: 'True Caster',    primaryStat: 'VIT' },
-  elf:        { raceName: 'Elf',        archetype: 'True Caster',    primaryStat: 'WIS' },
-  babayaga:   { raceName: 'Baba Yaga',  archetype: 'True Caster',    primaryStat: 'WIS' },
-  angel:      { raceName: 'Angel',      archetype: 'Martial Hybrid', primaryStat: 'DEX' },
-  aasimar:    { raceName: 'Aasimar',    archetype: 'Martial Hybrid', primaryStat: 'DEX' },
-  banshee:    { raceName: 'Banshee',    archetype: 'Martial Hybrid', primaryStat: 'DEX' },
-  halfling:   { raceName: 'Halfling',   archetype: 'Martial Hybrid', primaryStat: 'DEX' },
-  dwarf:      { raceName: 'Dwarf',      archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
-  demon:      { raceName: 'Demon',      archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
-  draugr:     { raceName: 'Draugr',     archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
-  unicorn:    { raceName: 'Unicorn',    archetype: 'Mystic Hybrid',  primaryStat: 'WIS' },
-}
-
-const GDD = { XP_BASE: 200, XP_GROWTH: 1.12, AP_PER_LEVEL: 40 }
-
-function getAttributeFocusOrder(raceKey: string): string[] {
-  const rd = races[raceKey] || races.human
-  return [...['DEX', 'STR', 'NTL', 'WIS', 'VIT'].filter(s => s !== rd.primaryStat), rd.primaryStat]
-}
+// Races, GDD constants and gear tiers come from gdd.js so God Editor changes reach them.
 function getBankedLevelsLocal(ap: number): number { return Math.floor((ap || 0) / GDD.AP_PER_LEVEL) }
 
 // ─── ITEMS ────────────────────────────────────────────────────
@@ -91,11 +60,6 @@ const BASE_ITEMS = [
   { id: 'base_arcane_1',    name: 'Novice Arcane Bolt', type: 'Spells',     subType: 'Arcane',    sockets: 2 },
   { id: 'base_death_1',     name: 'Novice Death Coil',  type: 'Spells',     subType: 'Death',     sockets: 2 },
   { id: 'base_offhand_1',   name: 'Novice Focus Orb',   type: 'OffHands',   subType: 'OffHand',   sockets: 1 },
-]
-const DROPPER_TIERS = [
-  { tier: 1, levelReq: 1,   gold: 50000,  cv: 13.00 },
-  { tier: 2, levelReq: 1,   gold: 87500,  cv: 15.86 },
-  { tier: 3, levelReq: 100, gold: 153125, cv: 19.35 },
 ]
 const SLOT_MODS: Record<string, any> = {
   Armor: { prop: 1.00, stat: 'AC' }, Helmet: { prop: 0.75, stat: 'AC' }, Boots: { prop: 0.75, stat: 'AC' },
@@ -208,6 +172,10 @@ if (MAINTENANCE_MODE) {
   const [activeService, setActiveService] = useState<any>(null)
   const [mapMode, setMapMode] = useState<'graphic'|'text'>(() => { try { return localStorage.getItem('g_mapmode')==='text' ? 'text' : 'graphic' } catch { return 'graphic' } })
   const [zoneMap, setZoneMap] = useState<LoadedMap|null>(null)
+  const [role, setRole] = useState<Role>('player')
+  const [devOpen, setDevOpen] = useState(false)
+  const [devFlags, setDevFlags] = useState<DevFlags>({ oneHit: false, noDamage: false, forceDrop: '' })
+  const [balanceInfo, setBalanceInfo] = useState<{ version: number | null; draft: boolean }>({ version: null, draft: false })
   const smokeRef = useRef<HTMLCanvasElement>(null)
   const playerRef = useRef<any>(null)
 
@@ -223,6 +191,11 @@ if (MAINTENANCE_MODE) {
   useEffect(() => {
     const loadPlayer = async () => {
       try {
+        // Role first (devs may be previewing a draft balance), then the published balance
+        const myRole = await fetchMyRole()
+        setRole(myRole)
+        const bal = await loadLiveBalance({ isDev: myRole === 'dev' })
+        setBalanceInfo(bal)
         const res = await fetch(`/api/player?uid=${uid}`)
         const supa = await res.json()
         if (!supa || supa.error || !supa.uid) { setLoadError('Character not found. Sign out and create your character.'); return }
@@ -239,7 +212,7 @@ if (MAINTENANCE_MODE) {
           pos:(supa.pos&&typeof supa.pos==='object')?{zoneId:'Z01',x:7,y:7,...supa.pos}:{zoneId:'Z01',x:0,y:6},
           derivedStats:{},
         }
-        p.xpToNextLevel = Math.floor(GDD.XP_BASE * Math.pow(GDD.XP_GROWTH, p.level))
+        p.xpToNextLevel = xpToLevel(p.level)
         if (p.inventory.length===0) {
           const kit = buildStartingKit(p.race); p.inventory=kit.inventory; p.equipment=kit.equipment
           calcDerived(p); if (!p.hp||p.hp>p.derivedStats.maxHp) p.hp=p.derivedStats.maxHp
@@ -389,7 +362,14 @@ if (MAINTENANCE_MODE) {
     const current = playerRef.current||player
     const action = isMagic ? 'cast' : getDefaultAction(current.race)
     const zoneId = current.pos?.zoneId||'Z01'; const zd = getZone(zoneId)
-    const result = runTurn(current, combatMonster, action, {id:zoneId,type:zd.type,gemMin:zd.gemMin,gemMax:zd.gemMax})
+    // Dev combat cheats (Dev role only; flags can't be set otherwise)
+    const isDev = role === 'dev'
+    const turnPlayer = isDev && devFlags.oneHit ? { ...current, derivedStats: { ...current.derivedStats, hitChance: 100, WC: 1e12, SC: 1e12 } } : current
+    const result = runTurn(turnPlayer, combatMonster, action, {id:zoneId,type:zd.type,gemMin:zd.gemMin,gemMax:zd.gemMax})
+    if (isDev && devFlags.noDamage) { result.monsterDmg = 0; result.playerHp = current.hp; if (result.status === 'DEFEAT') result.status = 'ONGOING' }
+    if (isDev && devFlags.forceDrop && result.status === 'VICTORY') {
+      result.specialDrop = devFlags.forceDrop === 'gem' ? { kind: 'gem', grade: zd.gemMax || 1 } : { kind: 'shadow' }
+    }
     setCombatMonster((prev:any) => ({...prev,currentHP:result.monsterHp}))
     setEnemyCurrentHP(result.monsterHp>0 ? Math.round(result.monsterHp) : null)
     let newPlayer = applyTurnResult({...current,inventory:[...(current.inventory||[])],equipment:{...(current.equipment||{})},gems:[...(current.gems||[])]},result)
@@ -523,7 +503,13 @@ if (MAINTENANCE_MODE) {
           <div style={{ width:'100%', flex:1, display:'flex', flexDirection:'column', padding:'10px', paddingTop:'max(10px, env(safe-area-inset-top, 10px))', gap:'10px', paddingBottom:'112px' }}>
 
             {/* 1 -- PlayerHUD */}
-            {activeTab === null && activeService === null && (
+            {/* 0 -- Dev tools (Dev role only) */}
+            {role === 'dev' && devOpen && activeTab === null && activeService === null && (
+              <DevPanel player={player} BASE_ITEMS={BASE_ITEMS} flags={devFlags} balanceInfo={balanceInfo}
+                onFlags={setDevFlags} onApply={applyService} onClose={() => setDevOpen(false)} />
+            )}
+
+            {activeTab === null && activeService === null && !devOpen && (
               <PlayerHUD
                 player={player} zone={zone} zoneId={zoneId} stamp={stamp}
                 activeTile={activeTile} menuOpen={menuOpen} mapOverlay={mapOverlay}
@@ -597,6 +583,13 @@ if (MAINTENANCE_MODE) {
           </div>
         </div>
       </div>
+
+      {role === 'dev' && !devOpen && (
+        <button onClick={() => { setDevOpen(true); setActiveTab(null); setActiveService(null) }}
+          style={{ position: 'fixed', top: 'max(1px, env(safe-area-inset-top, 1px))', left: '50%', transform: 'translateX(-50%)', zIndex: 60, fontSize: '10px', fontWeight: 900, letterSpacing: '0.08em', padding: '4px 9px', borderRadius: '9999px', background: 'rgba(255,55,95,0.18)', border: '1px solid rgba(255,55,95,0.7)', color: '#FF375F', cursor: 'pointer' }}>
+          DEV{balanceInfo.draft ? ' · DRAFT' : ''}
+        </button>
+      )}
 
       {/* Toast */}
       {toast && <div className="glass-panel" style={{ position:'fixed', left:'50%', transform:'translateX(-50%)', bottom:'72px', zIndex:210, padding:'8px 20px', borderRadius:'9999px', fontWeight:500, fontSize:'12px', background:'black', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', boxShadow:'0 4px 24px rgba(0,0,0,0.8)', whiteSpace:'nowrap' }}>{toast}</div>}

@@ -522,6 +522,17 @@ export function isStarterZone(zoneId: string): boolean {
  * Minions: two floor-geared hits to kill, deal 1/10 of a level-appropriate player's HP.
  * Bosses/Elites: five ceiling-geared hits, deal 1/4 of that HP.
  */
+export const FORGE = {
+  FLOOR_WC: 26, FLOOR_AC: 27,          // previous-tier player gear the minions are tuned against
+  CEIL_WC: 52, CEIL_AC: 55,            // current-tier player gear the bosses are tuned against
+  MINION_DEF: 40, BOSS_DEF: 100,       // monster defence at tier 1 (scales with gear tier)
+  MINION_HITS: 2, BOSS_HITS: 5,        // hits to kill
+  MINION_HP_MIN: 20, BOSS_HP_MIN: 100,
+  MINION_DMG_SHARE: 10, BOSS_DMG_SHARE: 4, // monster hit = player max HP / this
+  PLAYER_VIT_PER_LEVEL: 12,            // assumed VIT per level for the HP target
+  XP_PER_LEVEL: 10, GOLD_PER_LEVEL: 5, // reward = zone level x this (bosses/elites full, minions half)
+}
+
 export function forgeZoneMonsters(zoneId: string): any[] {
   const zone = ZONES[zoneId]
   const slots: any[] = (ZONE_MONSTERS as any)[zoneId] || []
@@ -533,15 +544,16 @@ export function forgeZoneMonsters(zoneId: string): any[] {
   const prevMult = prevTier === 0 ? 0.5 : Math.pow(GDD.CLASSVALUE_GROWTH, prevTier - 1)
   const currMult = Math.pow(GDD.CLASSVALUE_GROWTH, gear - 1)
 
-  const floorWC = 26 * prevMult, floorAC = 27 * prevMult
-  const ceilWC = 52 * currMult, ceilAC = 55 * currMult
-  const minionDef = Math.max(5, Math.floor(40 * prevMult))
-  const bossDef = Math.max(10, Math.floor(100 * currMult))
-  const minionHP = Math.max(20, Math.max(1, Math.floor((K * floorWC) / minionDef)) * 2)
-  const bossHP = Math.max(100, Math.max(1, Math.floor((K * ceilWC) / bossDef)) * 5)
-  const playerMaxHP = GDD.MAX_HP_BASE + 12 * level * GDD.MAX_HP_PER_VIT
-  const minionAtk = Math.max(2, Math.floor(((playerMaxHP / 10) * Math.max(1, floorAC * ACR)) / K))
-  const bossAtk = Math.max(5, Math.floor(((playerMaxHP / 4) * Math.max(1, ceilAC * ACR)) / K))
+  const F = FORGE
+  const floorWC = F.FLOOR_WC * prevMult, floorAC = F.FLOOR_AC * prevMult
+  const ceilWC = F.CEIL_WC * currMult, ceilAC = F.CEIL_AC * currMult
+  const minionDef = Math.max(5, Math.floor(F.MINION_DEF * prevMult))
+  const bossDef = Math.max(10, Math.floor(F.BOSS_DEF * currMult))
+  const minionHP = Math.max(F.MINION_HP_MIN, Math.max(1, Math.floor((K * floorWC) / minionDef)) * F.MINION_HITS)
+  const bossHP = Math.max(F.BOSS_HP_MIN, Math.max(1, Math.floor((K * ceilWC) / bossDef)) * F.BOSS_HITS)
+  const playerMaxHP = GDD.MAX_HP_BASE + F.PLAYER_VIT_PER_LEVEL * level * GDD.MAX_HP_PER_VIT
+  const minionAtk = Math.max(2, Math.floor(((playerMaxHP / F.MINION_DMG_SHARE) * Math.max(1, floorAC * ACR)) / K))
+  const bossAtk = Math.max(5, Math.floor(((playerMaxHP / F.BOSS_DMG_SHARE) * Math.max(1, ceilAC * ACR)) / K))
 
   const rules = ZONE_TYPES[zone.type] || ZONE_TYPES.xp
   const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -557,8 +569,8 @@ export function forgeZoneMonsters(zoneId: string): any[] {
       hp: Math.max(1, Math.floor(lerp(minionHP, bossHP, t) * rules.hpDef)),
       atk: Math.floor(lerp(minionAtk, bossAtk, t)),
       def: Math.max(1, Math.floor(lerp(minionDef, bossDef, t) * rules.hpDef)),
-      xp: Math.floor(Math.max(1, level * 10 * (0.5 + 0.5 * t)) * rules.xp),
-      gold: Math.floor(Math.max(1, level * 5 * (0.5 + 0.5 * t)) * rules.gold),
+      xp: Math.floor(Math.max(1, level * F.XP_PER_LEVEL * (0.5 + 0.5 * t)) * rules.xp),
+      gold: Math.floor(Math.max(1, level * F.GOLD_PER_LEVEL * (0.5 + 0.5 * t)) * rules.gold),
     }
   })
 }

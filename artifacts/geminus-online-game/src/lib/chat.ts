@@ -13,8 +13,13 @@ export const CHAT_MAX_LENGTH = 300
 
 export interface ChatLine { id?: number; sender: string; text: string; color: string }
 
+const ROLE_TAGS: Record<string, string> = { dev: 'Dev', arch: 'Arch', mod: 'Mod' }
+
+/** "Jeff(Dev)" for staff, plain name for players. The role is set by the server, not the client. */
 function toLine(row: any): ChatLine {
-  return { id: row.id, sender: row.sender_name || 'Pilot', text: row.body, color: row.color || '#3EE0FF' }
+  const tag = ROLE_TAGS[row.sender_role]
+  const name = row.sender_name || 'Pilot'
+  return { id: row.id, sender: tag ? `${name}(${tag})` : name, text: row.body, color: row.color || '#3EE0FF' }
 }
 
 export function isLiveChannel(channel: string): boolean {
@@ -25,7 +30,7 @@ export function isLiveChannel(channel: string): boolean {
 export async function loadRecent(channel: string): Promise<ChatLine[]> {
   const { data, error } = await supabase
     .from('chat_messages')
-    .select('id, sender_name, color, body, created_at')
+    .select('id, sender_name, sender_role, color, body, created_at')
     .eq('channel', channel)
     .order('created_at', { ascending: false })
     .limit(CHAT_HISTORY)

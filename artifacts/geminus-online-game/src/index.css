@@ -507,3 +507,8 @@ html.theme-onyx .mini-map-circle {
   max-width: 240px !important;
   border-radius: 50%;
 }
+
+/* God Editor: stack list + detail on narrow screens */
+@media (max-width: 640px) {
+  .god-split { grid-template-columns: 1fr !important; }
+}
