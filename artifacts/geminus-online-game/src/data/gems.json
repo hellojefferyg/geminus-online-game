@@ -1,0 +1,572 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "gdd": "3.4",
+    "note": "All standard and fusion gems. grade is GT1-GT9. Values applied per socketed gem per equipped item in calcDerived."
+  },
+
+  "standard": {
+    "lorestone": {
+      "id": "GEM-STD-LORESTONE",
+      "name": "LoreStone",
+      "category": "Caster",
+      "color": "Blue",
+      "description": "Increase Base Spell Class",
+      "effect": "SC",
+      "grades": { "1": 1.5, "2": 2.5, "3": 3.5, "4": 5.0, "5": 7.0, "6": 9.0, "7": 11.0, "8": 13.0, "9": 15.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "mindrite": {
+      "id": "GEM-STD-MINDRITE",
+      "name": "Mindrite",
+      "category": "Caster",
+      "color": "Blue",
+      "description": "Increase Wisdom",
+      "effect": "WIS",
+      "grades": { "1": 5.0, "2": 7.5, "3": 10.0, "4": 12.5, "5": 15.0, "6": 20.0, "7": 30.0, "8": 40.0, "9": 50.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "dullrite": {
+      "id": "GEM-STD-DULLRITE",
+      "name": "Dullrite",
+      "category": "Caster",
+      "color": "Blue",
+      "description": "Decrease Enemy Wisdom",
+      "effect": "-EnemyWIS",
+      "grades": { "1": 8.0, "2": 10.0, "3": 12.0, "4": 14.0, "5": 16.0, "6": 19.0, "7": 22.0, "8": 26.0, "9": 30.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "drainrite": {
+      "id": "GEM-STD-DRAINRITE",
+      "name": "Drainrite",
+      "category": "Caster",
+      "color": "Blue",
+      "description": "Steal Enemy Wisdom",
+      "effect": "StealWIS",
+      "grades": { "1": 4.0, "2": 6.0, "3": 9.0, "4": 15.0, "5": 25.0, "6": 40.0, "7": 50.0, "8": 60.0, "9": 75.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "mindstone": {
+      "id": "GEM-STD-MINDSTONE",
+      "name": "MindStone",
+      "category": "Caster",
+      "color": "Blue",
+      "description": "Increase Intelligence (NTL)",
+      "effect": "NTL",
+      "grades": { "1": 5.0, "2": 7.5, "3": 10.0, "4": 12.5, "5": 15.0, "6": 20.0, "7": 30.0, "8": 40.0, "9": 50.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "dullstone": {
+      "id": "GEM-STD-DULLSTONE",
+      "name": "DullStone",
+      "category": "Caster",
+      "color": "Blue",
+      "description": "Decrease Enemy Intelligence",
+      "effect": "-EnemyNTL",
+      "grades": { "1": 8.0, "2": 10.0, "3": 12.0, "4": 14.0, "5": 16.0, "6": 19.0, "7": 22.0, "8": 26.0, "9": 30.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "drawstone": {
+      "id": "GEM-STD-DRAWSTONE",
+      "name": "DrawStone",
+      "category": "Caster",
+      "color": "Blue",
+      "description": "Steal Enemy Intelligence",
+      "effect": "StealNTL",
+      "grades": { "1": 4.0, "2": 6.0, "3": 9.0, "4": 15.0, "5": 25.0, "6": 40.0, "7": 50.0, "8": 60.0, "9": 75.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "warstone": {
+      "id": "GEM-STD-WARSTONE",
+      "name": "WarStone",
+      "category": "Fighter",
+      "color": "Red",
+      "description": "Increase Base Weapon Class",
+      "effect": "WC",
+      "grades": { "1": 1.5, "2": 2.5, "3": 3.5, "4": 5.0, "5": 7.0, "6": 9.0, "7": 11.0, "8": 13.0, "9": 15.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "mightrite": {
+      "id": "GEM-STD-MIGHTRITE",
+      "name": "Mightrite",
+      "category": "Fighter",
+      "color": "Red",
+      "description": "Increase Dexterity",
+      "effect": "DEX",
+      "grades": { "1": 5.0, "2": 7.5, "3": 10.0, "4": 12.5, "5": 15.0, "6": 20.0, "7": 30.0, "8": 40.0, "9": 50.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "cripplite": {
+      "id": "GEM-STD-CRIPPLITE",
+      "name": "Cripplite",
+      "category": "Fighter",
+      "color": "Red",
+      "description": "Decrease Enemy Dexterity",
+      "effect": "-EnemyDEX",
+      "grades": { "1": 8.0, "2": 10.0, "3": 12.0, "4": 14.0, "5": 16.0, "6": 19.0, "7": 22.0, "8": 26.0, "9": 30.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "siphilite": {
+      "id": "GEM-STD-SIPHILITE",
+      "name": "Siphilite",
+      "category": "Fighter",
+      "color": "Red",
+      "description": "Steal Enemy Dexterity",
+      "effect": "StealDEX",
+      "grades": { "1": 4.0, "2": 6.0, "3": 9.0, "4": 15.0, "5": 25.0, "6": 40.0, "7": 50.0, "8": 60.0, "9": 75.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "mightstone": {
+      "id": "GEM-STD-MIGHTSTONE",
+      "name": "MightStone",
+      "category": "Fighter",
+      "color": "Red",
+      "description": "Increase Strength",
+      "effect": "STR",
+      "grades": { "1": 5.0, "2": 7.5, "3": 10.0, "4": 12.5, "5": 15.0, "6": 20.0, "7": 30.0, "8": 40.0, "9": 50.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "weakstone": {
+      "id": "GEM-STD-WEAKSTONE",
+      "name": "WeakStone",
+      "category": "Fighter",
+      "color": "Red",
+      "description": "Decrease Enemy Strength",
+      "effect": "-EnemySTR",
+      "grades": { "1": 8.0, "2": 10.0, "3": 12.0, "4": 14.0, "5": 16.0, "6": 19.0, "7": 22.0, "8": 26.0, "9": 30.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "sapstone": {
+      "id": "GEM-STD-SAPSTONE",
+      "name": "SapStone",
+      "category": "Fighter",
+      "color": "Red",
+      "description": "Steal Enemy Strength",
+      "effect": "StealSTR",
+      "grades": { "1": 4.0, "2": 6.0, "3": 9.0, "4": 15.0, "5": 25.0, "6": 40.0, "7": 50.0, "8": 60.0, "9": 75.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "obsidianheart": {
+      "id": "GEM-STD-OBSIDIANHEART",
+      "name": "Obsidian Heart",
+      "category": "Misc",
+      "color": "Green",
+      "description": "Increase Base Armor Class",
+      "effect": "AC",
+      "grades": { "1": 1.5, "2": 2.5, "3": 3.5, "4": 5.0, "5": 7.0, "6": 9.0, "7": 11.0, "8": 13.0, "9": 15.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "spikecore": {
+      "id": "GEM-STD-SPIKECORE",
+      "name": "Spike-Core",
+      "category": "Misc",
+      "color": "Yellow",
+      "description": "Increase Critical Hit Chance",
+      "effect": "Crit",
+      "grades": { "1": 1.0, "2": 2.5, "3": 5.0, "4": 7.5, "5": 10.0, "6": 12.5, "7": 15.0, "8": 17.5, "9": 20.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "truecore": {
+      "id": "GEM-STD-TRUECORE",
+      "name": "True-Core",
+      "category": "Misc",
+      "color": "Green",
+      "description": "Increase Hit Chance",
+      "effect": "Hit",
+      "grades": { "1": 3.0, "2": 6.0, "3": 9.0, "4": 12.0, "5": 15.0, "6": 18.0, "7": 21.0, "8": 25.0, "9": 30.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "veilcore": {
+      "id": "GEM-STD-VEILCORE",
+      "name": "Veil-Core",
+      "category": "Misc",
+      "color": "Green",
+      "description": "Decrease Enemy Hit Chance",
+      "effect": "-EnemyHit",
+      "grades": { "1": 2.7, "2": 5.4, "3": 8.1, "4": 10.8, "5": 13.5, "6": 16.2, "7": 18.9, "8": 22.5, "9": 27.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "vitalcore": {
+      "id": "GEM-STD-VITALCORE",
+      "name": "Vital-Core",
+      "category": "Misc",
+      "color": "Green",
+      "description": "Increase Vitality. God-tier for Trolls and Vampires.",
+      "effect": "VIT",
+      "grades": { "1": 5.0, "2": 7.5, "3": 10.0, "4": 12.5, "5": 15.0, "6": 20.0, "7": 30.0, "8": 40.0, "9": 50.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "bloodcore": {
+      "id": "GEM-STD-BLOODCORE",
+      "name": "Blood-Core",
+      "category": "Misc",
+      "color": "Green",
+      "description": "Steal Enemy Health (life steal)",
+      "effect": "LifeSteal",
+      "grades": { "1": 4.0, "2": 6.0, "3": 9.0, "4": 15.0, "5": 25.0, "6": 40.0, "7": 50.0, "8": 60.0, "9": 75.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "shadowcore": {
+      "id": "GEM-STD-SHADOWCORE",
+      "name": "Shadow-Core",
+      "category": "Misc",
+      "color": "Yellow",
+      "description": "Increase Shadow Drop Chance",
+      "effect": "ShadowDrop",
+      "grades": { "1": 8.0, "2": 10.0, "3": 12.0, "4": 14.0, "5": 16.0, "6": 19.0, "7": 22.0, "8": 26.0, "9": 30.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "treasurecore": {
+      "id": "GEM-STD-TREASURECORE",
+      "name": "Treasure-Core",
+      "category": "Misc",
+      "color": "Yellow",
+      "description": "Increase Drop Chance",
+      "effect": "Drop",
+      "grades": { "1": 2.0, "2": 3.0, "3": 4.0, "4": 5.0, "5": 6.0, "6": 7.0, "7": 8.0, "8": 9.0, "9": 10.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "ascendcore": {
+      "id": "GEM-STD-ASCENDCORE",
+      "name": "Ascend-Core",
+      "category": "Misc",
+      "color": "Yellow",
+      "description": "Increase Experience Gain",
+      "effect": "XP",
+      "grades": { "1": 2.0, "2": 4.0, "3": 6.0, "4": 9.0, "5": 12.0, "6": 15.0, "7": 19.0, "8": 24.0, "9": 30.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "midascore": {
+      "id": "GEM-STD-MIDASCORE",
+      "name": "Midas-Core",
+      "category": "Misc",
+      "color": "Yellow",
+      "description": "Increase Gold Earned",
+      "effect": "Gold",
+      "grades": { "1": 2.0, "2": 4.0, "3": 6.0, "4": 9.0, "5": 12.0, "6": 15.0, "7": 19.0, "8": 24.0, "9": 30.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "masterworkcore": {
+      "id": "GEM-STD-MASTERWORKCORE",
+      "name": "Masterwork-Core",
+      "category": "Misc",
+      "color": "Yellow",
+      "description": "Increase Mastery Chance",
+      "effect": "Mastery",
+      "grades": { "1": 5.0, "2": 10.0, "3": 15.0, "4": 20.0, "5": 25.0, "6": 30.0, "7": 35.0, "8": 40.0, "9": 50.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "echoingcore": {
+      "id": "GEM-STD-ECHOINGCORE",
+      "name": "Echoing-Core",
+      "category": "Misc",
+      "color": "Yellow",
+      "description": "Increase Double Hit Chance",
+      "effect": "DoubleHit",
+      "grades": { "1": 2.0, "2": 3.0, "3": 4.0, "4": 5.0, "5": 6.0, "6": 7.0, "7": 8.0, "8": 10.0, "9": 12.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "harvestercore": {
+      "id": "GEM-STD-HARVESTERCORE",
+      "name": "Harvester-Core",
+      "category": "Misc",
+      "color": "Yellow",
+      "description": "Increase Resource Drop Chance",
+      "effect": "ResourceDrop",
+      "grades": { "1": 5.0, "2": 10.0, "3": 15.0, "4": 20.0, "5": 30.0, "6": 50.0, "7": 55.0, "8": 60.0, "9": 75.0 },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    }
+  },
+
+  "fusion": {
+    "warheart": {
+      "id": "GEM-FSN-WARHEART",
+      "name": "WarHeart",
+      "category": "Fighter",
+      "color": "Red",
+      "fusedFrom": ["warstone", "obsidianheart"],
+      "description": "Increases Base Weapon Class and Base Armor Class",
+      "effects": ["WC", "AC"],
+      "grades": {
+        "1": { "WC": 1.5, "AC": 1.5 }, "2": { "WC": 2.5, "AC": 2.5 },
+        "3": { "WC": 3.5, "AC": 3.5 }, "4": { "WC": 5.0, "AC": 5.0 },
+        "5": { "WC": 7.0, "AC": 7.0 }, "6": { "WC": 9.0, "AC": 9.0 },
+        "7": { "WC": 11.0, "AC": 11.0 }, "8": { "WC": 13.0, "AC": 13.0 },
+        "9": { "WC": 15.0, "AC": 15.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "loreheart": {
+      "id": "GEM-FSN-LOREHEART",
+      "name": "LoreHeart",
+      "category": "Caster",
+      "color": "Blue",
+      "fusedFrom": ["lorestone", "obsidianheart"],
+      "description": "Increases Base Spell Class and Base Armor Class",
+      "effects": ["SC", "AC"],
+      "grades": {
+        "1": { "SC": 1.5, "AC": 1.5 }, "2": { "SC": 2.5, "AC": 2.5 },
+        "3": { "SC": 3.5, "AC": 3.5 }, "4": { "SC": 5.0, "AC": 5.0 },
+        "5": { "SC": 7.0, "AC": 7.0 }, "6": { "SC": 9.0, "AC": 9.0 },
+        "7": { "SC": 11.0, "AC": 11.0 }, "8": { "SC": 13.0, "AC": 13.0 },
+        "9": { "SC": 15.0, "AC": 15.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "truerite": {
+      "id": "GEM-FSN-TRUERITE",
+      "name": "True-Rite",
+      "category": "Caster",
+      "color": "Blue",
+      "fusedFrom": ["truecore", "dullrite"],
+      "description": "Increases Hit Chance and decreases Enemy Wisdom",
+      "effects": ["Hit", "-EnemyWIS"],
+      "grades": {
+        "1": { "Hit": 3.0, "-EnemyWIS": 8.0 }, "2": { "Hit": 6.0, "-EnemyWIS": 10.0 },
+        "3": { "Hit": 9.0, "-EnemyWIS": 12.0 }, "4": { "Hit": 12.0, "-EnemyWIS": 14.0 },
+        "5": { "Hit": 15.0, "-EnemyWIS": 16.0 }, "6": { "Hit": 18.0, "-EnemyWIS": 19.0 },
+        "7": { "Hit": 21.0, "-EnemyWIS": 22.0 }, "8": { "Hit": 25.0, "-EnemyWIS": 26.0 },
+        "9": { "Hit": 30.0, "-EnemyWIS": 30.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "truelite": {
+      "id": "GEM-FSN-TRUELITE",
+      "name": "True-Lite",
+      "category": "Fighter",
+      "color": "Red",
+      "fusedFrom": ["truecore", "cripplite"],
+      "description": "Increases Hit Chance and decreases Enemy Dexterity",
+      "effects": ["Hit", "-EnemyDEX"],
+      "grades": {
+        "1": { "Hit": 3.0, "-EnemyDEX": 8.0 }, "2": { "Hit": 6.0, "-EnemyDEX": 10.0 },
+        "3": { "Hit": 9.0, "-EnemyDEX": 12.0 }, "4": { "Hit": 12.0, "-EnemyDEX": 14.0 },
+        "5": { "Hit": 15.0, "-EnemyDEX": 16.0 }, "6": { "Hit": 18.0, "-EnemyDEX": 19.0 },
+        "7": { "Hit": 21.0, "-EnemyDEX": 22.0 }, "8": { "Hit": 25.0, "-EnemyDEX": 26.0 },
+        "9": { "Hit": 30.0, "-EnemyDEX": 30.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "shadowtreasure": {
+      "id": "GEM-FSN-SHADOWTREASURE",
+      "name": "Shadow Treasure",
+      "category": "Misc",
+      "color": "Yellow",
+      "fusedFrom": ["shadowcore", "treasurecore"],
+      "description": "Increases Shadow Drop Chance and Drop Chance",
+      "effects": ["ShadowDrop", "Drop"],
+      "grades": {
+        "1": { "ShadowDrop": 8.0, "Drop": 2.0 }, "2": { "ShadowDrop": 10.0, "Drop": 3.0 },
+        "3": { "ShadowDrop": 12.0, "Drop": 4.0 }, "4": { "ShadowDrop": 14.0, "Drop": 5.0 },
+        "5": { "ShadowDrop": 16.0, "Drop": 6.0 }, "6": { "ShadowDrop": 19.0, "Drop": 7.0 },
+        "7": { "ShadowDrop": 22.0, "Drop": 8.0 }, "8": { "ShadowDrop": 26.0, "Drop": 9.0 },
+        "9": { "ShadowDrop": 30.0, "Drop": 10.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "ascendtreasure": {
+      "id": "GEM-FSN-ASCENDTREASURE",
+      "name": "Ascend-Treasure",
+      "category": "Misc",
+      "color": "Yellow",
+      "fusedFrom": ["ascendcore", "treasurecore"],
+      "description": "Increases Experience Gain and Drop Chance",
+      "effects": ["XP", "Drop"],
+      "grades": {
+        "1": { "XP": 2.0, "Drop": 2.0 }, "2": { "XP": 4.0, "Drop": 3.0 },
+        "3": { "XP": 6.0, "Drop": 4.0 }, "4": { "XP": 9.0, "Drop": 5.0 },
+        "5": { "XP": 12.0, "Drop": 6.0 }, "6": { "XP": 15.0, "Drop": 7.0 },
+        "7": { "XP": 19.0, "Drop": 8.0 }, "8": { "XP": 24.0, "Drop": 9.0 },
+        "9": { "XP": 30.0, "Drop": 10.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "ascendmidas": {
+      "id": "GEM-FSN-ASCENDMIDAS",
+      "name": "Ascend-Midas",
+      "category": "Misc",
+      "color": "Yellow",
+      "fusedFrom": ["ascendcore", "midascore"],
+      "description": "Increases Experience Gain and Gold Earned",
+      "effects": ["XP", "Gold"],
+      "grades": {
+        "1": { "XP": 2.0, "Gold": 2.0 }, "2": { "XP": 4.0, "Gold": 4.0 },
+        "3": { "XP": 6.0, "Gold": 6.0 }, "4": { "XP": 9.0, "Gold": 9.0 },
+        "5": { "XP": 12.0, "Gold": 12.0 }, "6": { "XP": 15.0, "Gold": 15.0 },
+        "7": { "XP": 19.0, "Gold": 19.0 }, "8": { "XP": 24.0, "Gold": 24.0 },
+        "9": { "XP": 30.0, "Gold": 30.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "midastreasure": {
+      "id": "GEM-FSN-MIDASTREASURE",
+      "name": "Midas-Treasure",
+      "category": "Misc",
+      "color": "Yellow",
+      "fusedFrom": ["midascore", "treasurecore"],
+      "description": "Increases Gold Earned and Drop Chance",
+      "effects": ["Gold", "Drop"],
+      "grades": {
+        "1": { "Gold": 2.0, "Drop": 2.0 }, "2": { "Gold": 4.0, "Drop": 3.0 },
+        "3": { "Gold": 6.0, "Drop": 4.0 }, "4": { "Gold": 9.0, "Drop": 5.0 },
+        "5": { "Gold": 12.0, "Drop": 6.0 }, "6": { "Gold": 15.0, "Drop": 7.0 },
+        "7": { "Gold": 19.0, "Drop": 8.0 }, "8": { "Gold": 24.0, "Drop": 9.0 },
+        "9": { "Gold": 30.0, "Drop": 10.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "masteryechoing": {
+      "id": "GEM-FSN-MASTERYECHOING",
+      "name": "Mastery-Echoing",
+      "category": "Misc",
+      "color": "Yellow",
+      "fusedFrom": ["masterworkcore", "echoingcore"],
+      "description": "Increases Mastery Chance and Double Hit Chance",
+      "effects": ["Mastery", "DoubleHit"],
+      "grades": {
+        "1": { "Mastery": 5.0, "DoubleHit": 2.0 }, "2": { "Mastery": 10.0, "DoubleHit": 3.0 },
+        "3": { "Mastery": 15.0, "DoubleHit": 4.0 }, "4": { "Mastery": 20.0, "DoubleHit": 5.0 },
+        "5": { "Mastery": 25.0, "DoubleHit": 6.0 }, "6": { "Mastery": 30.0, "DoubleHit": 7.0 },
+        "7": { "Mastery": 35.0, "DoubleHit": 8.0 }, "8": { "Mastery": 40.0, "DoubleHit": 10.0 },
+        "9": { "Mastery": 50.0, "DoubleHit": 12.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "sagerite": {
+      "id": "GEM-FSN-SAGERITE",
+      "name": "Sagerite",
+      "category": "Caster",
+      "color": "Blue",
+      "fusedFrom": ["mindstone", "mindrite"],
+      "description": "Increases Intelligence and Wisdom",
+      "effects": ["NTL", "WIS"],
+      "grades": {
+        "1": { "NTL": 5.0, "WIS": 5.0 }, "2": { "NTL": 7.5, "WIS": 7.5 },
+        "3": { "NTL": 10.0, "WIS": 10.0 }, "4": { "NTL": 12.5, "WIS": 12.5 },
+        "5": { "NTL": 15.0, "WIS": 15.0 }, "6": { "NTL": 20.0, "WIS": 20.0 },
+        "7": { "NTL": 30.0, "WIS": 30.0 }, "8": { "NTL": 40.0, "WIS": 40.0 },
+        "9": { "NTL": 50.0, "WIS": 50.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "drowseite": {
+      "id": "GEM-FSN-DROWSEITE",
+      "name": "Drowseite",
+      "category": "Caster",
+      "color": "Blue",
+      "fusedFrom": ["dullrite", "dullstone"],
+      "description": "Decreases Enemy Wisdom and Enemy Intelligence",
+      "effects": ["-EnemyWIS", "-EnemyNTL"],
+      "grades": {
+        "1": { "-EnemyWIS": 8.0, "-EnemyNTL": 8.0 }, "2": { "-EnemyWIS": 10.0, "-EnemyNTL": 10.0 },
+        "3": { "-EnemyWIS": 12.0, "-EnemyNTL": 12.0 }, "4": { "-EnemyWIS": 14.0, "-EnemyNTL": 14.0 },
+        "5": { "-EnemyWIS": 16.0, "-EnemyNTL": 16.0 }, "6": { "-EnemyWIS": 19.0, "-EnemyNTL": 19.0 },
+        "7": { "-EnemyWIS": 22.0, "-EnemyNTL": 22.0 }, "8": { "-EnemyWIS": 26.0, "-EnemyNTL": 26.0 },
+        "9": { "-EnemyWIS": 30.0, "-EnemyNTL": 30.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "leechrite": {
+      "id": "GEM-FSN-LEECHRITE",
+      "name": "Leechrite",
+      "category": "Caster",
+      "color": "Blue",
+      "fusedFrom": ["drainrite", "drawstone"],
+      "description": "Steals Enemy Wisdom and Enemy Intelligence",
+      "effects": ["StealWIS", "StealNTL"],
+      "grades": {
+        "1": { "StealWIS": 4.0, "StealNTL": 4.0 }, "2": { "StealWIS": 6.0, "StealNTL": 6.0 },
+        "3": { "StealWIS": 9.0, "StealNTL": 9.0 }, "4": { "StealWIS": 15.0, "StealNTL": 15.0 },
+        "5": { "StealWIS": 25.0, "StealNTL": 25.0 }, "6": { "StealWIS": 40.0, "StealNTL": 40.0 },
+        "7": { "StealWIS": 50.0, "StealNTL": 50.0 }, "8": { "StealWIS": 60.0, "StealNTL": 60.0 },
+        "9": { "StealWIS": 75.0, "StealNTL": 75.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "vigorite": {
+      "id": "GEM-FSN-VIGORITE",
+      "name": "Vigorite",
+      "category": "Fighter",
+      "color": "Red",
+      "fusedFrom": ["mightstone", "mightrite"],
+      "description": "Increases Strength and Dexterity",
+      "effects": ["STR", "DEX"],
+      "grades": {
+        "1": { "STR": 5.0, "DEX": 5.0 }, "2": { "STR": 7.5, "DEX": 7.5 },
+        "3": { "STR": 10.0, "DEX": 10.0 }, "4": { "STR": 12.5, "DEX": 12.5 },
+        "5": { "STR": 15.0, "DEX": 15.0 }, "6": { "STR": 20.0, "DEX": 20.0 },
+        "7": { "STR": 30.0, "DEX": 30.0 }, "8": { "STR": 40.0, "DEX": 40.0 },
+        "9": { "STR": 50.0, "DEX": 50.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "debilitate": {
+      "id": "GEM-FSN-DEBILITATE",
+      "name": "Debilitate",
+      "category": "Fighter",
+      "color": "Red",
+      "fusedFrom": ["cripplite", "weakstone"],
+      "description": "Decreases Enemy Dexterity and Enemy Strength",
+      "effects": ["-EnemyDEX", "-EnemySTR"],
+      "grades": {
+        "1": { "-EnemyDEX": 8.0, "-EnemySTR": 8.0 }, "2": { "-EnemyDEX": 10.0, "-EnemySTR": 10.0 },
+        "3": { "-EnemyDEX": 12.0, "-EnemySTR": 12.0 }, "4": { "-EnemyDEX": 14.0, "-EnemySTR": 14.0 },
+        "5": { "-EnemyDEX": 16.0, "-EnemySTR": 16.0 }, "6": { "-EnemyDEX": 19.0, "-EnemySTR": 19.0 },
+        "7": { "-EnemyDEX": 22.0, "-EnemySTR": 22.0 }, "8": { "-EnemyDEX": 26.0, "-EnemySTR": 26.0 },
+        "9": { "-EnemyDEX": 30.0, "-EnemySTR": 30.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "syphonite": {
+      "id": "GEM-FSN-SYPHONITE",
+      "name": "Syphonite",
+      "category": "Fighter",
+      "color": "Red",
+      "fusedFrom": ["siphilite", "sapstone"],
+      "description": "Steals Enemy Dexterity and Enemy Strength",
+      "effects": ["StealDEX", "StealSTR"],
+      "grades": {
+        "1": { "StealDEX": 4.0, "StealSTR": 4.0 }, "2": { "StealDEX": 6.0, "StealSTR": 6.0 },
+        "3": { "StealDEX": 9.0, "StealSTR": 9.0 }, "4": { "StealDEX": 15.0, "StealSTR": 15.0 },
+        "5": { "StealDEX": 25.0, "StealSTR": 25.0 }, "6": { "StealDEX": 40.0, "StealSTR": 40.0 },
+        "7": { "StealDEX": 50.0, "StealSTR": 50.0 }, "8": { "StealDEX": 60.0, "StealSTR": 60.0 },
+        "9": { "StealDEX": 75.0, "StealSTR": 75.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "juggernautseye": {
+      "id": "GEM-FSN-JUGGERNAUTSEYE",
+      "name": "Juggernaut's Eye",
+      "category": "Fighter",
+      "color": "Red",
+      "fusedFrom": ["vitalcore", "warstone"],
+      "description": "Increases Vitality and Base Weapon Class",
+      "effects": ["VIT", "WC"],
+      "grades": {
+        "1": { "VIT": 5.0, "WC": 1.5 }, "2": { "VIT": 7.5, "WC": 2.5 },
+        "3": { "VIT": 10.0, "WC": 3.5 }, "4": { "VIT": 12.5, "WC": 5.0 },
+        "5": { "VIT": 15.0, "WC": 7.0 }, "6": { "VIT": 20.0, "WC": 9.0 },
+        "7": { "VIT": 30.0, "WC": 11.0 }, "8": { "VIT": 40.0, "WC": 13.0 },
+        "9": { "VIT": 50.0, "WC": 15.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    },
+    "sanguineheart": {
+      "id": "GEM-FSN-SANGUINEHEART",
+      "name": "Sanguine-Heart",
+      "category": "Caster",
+      "color": "Blue",
+      "fusedFrom": ["vitalcore", "lorestone"],
+      "description": "Increases Vitality and Base Spell Class",
+      "effects": ["VIT", "SC"],
+      "grades": {
+        "1": { "VIT": 5.0, "SC": 1.5 }, "2": { "VIT": 7.5, "SC": 2.5 },
+        "3": { "VIT": 10.0, "SC": 3.5 }, "4": { "VIT": 12.5, "SC": 5.0 },
+        "5": { "VIT": 15.0, "SC": 7.0 }, "6": { "VIT": 20.0, "SC": 9.0 },
+        "7": { "VIT": 30.0, "SC": 11.0 }, "8": { "VIT": 40.0, "SC": 13.0 },
+        "9": { "VIT": 50.0, "SC": 15.0 }
+      },
+      "minLevel": { "1": 1, "2": 100, "3": 253, "4": 1000, "5": 6143, "6": 13636, "7": 35452, "8": 83333, "9": 172222 }
+    }
+  }
+}

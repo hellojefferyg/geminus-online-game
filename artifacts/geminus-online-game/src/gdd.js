@@ -15,6 +15,7 @@
  *   Starter gems G1+G2
  *   Flat shadow 1/150
  */
+import GEMS_DATA from './data/gems.json'
 
 export const GDD_VERSION = '3.4-live-2026-09-26'
 
@@ -297,6 +298,114 @@ export function sumGear(p, BASE_ITEMS = []) {
   return { ac, wc, sc, hitBonus, classBonus }
 }
 
+/**
+ * GEMINUS -- Updated calcDerived
+ * Replace the existing calcDerived function in gdd.js with this one.
+ *
+ * Changes from previous version:
+ * 1. Hybrid items contribute both WC and SC at 75% (cv * 0.75 each)
+ * 2. qualityMultiplier (QM) applied to item base stat
+ * 3. Enchantments on shadow items applied (flat stat adds)
+ * 4. Socketed gems applied per item -- WC/SC/AC flat adds + stat bonuses
+ * 5. Leggings +10% hit, Gauntlets +15% WC/SC fully wired
+ */
+
+import GEMS_DATA from './data/gems.json'
+
+// ─── Gem lookup helper ────────────────────────────────────────
+// Finds a gem definition by id key (e.g. 'warstone', 'warheart')
+function getGemDef(gemId) {
+  const id = (gemId || '').toLowerCase().replace(/[-_\s]/g, '')
+  return (
+    GEMS_DATA.standard[id] ||
+    GEMS_DATA.fusion[id] ||
+    null
+  )
+}
+
+// ─── Apply gem bonuses to a running totals object ─────────────
+function applyGemBonuses(gem, totals) {
+  if (!gem || !gem.id) return
+  const gradeKey = String(gem.grade || 1)
+  const def = getGemDef(gem.id)
+  if (!def) return
+
+  // Standard gem -- single effect
+  if (def.grades) {
+    const val = def.grades[gradeKey]
+    if (val === undefined) return
+    applyEffect(def.effect, val, totals)
+  }
+
+  // Fusion gem -- multiple effects object
+  if (def.effects && def.grades) {
+    const gradeValues = def.grades[gradeKey]
+    if (!gradeValues) return
+    for (const [effectKey, effectVal] of Object.entries(gradeValues)) {
+      applyEffect(effectKey, effectVal, totals)
+    }
+  }
+}
+
+// ─── Map effect key → stat totals ─────────────────────────────
+function applyEffect(effectKey, val, totals) {
+  switch (effectKey) {
+    case 'WC':         totals.gemWC  += val; break
+    case 'SC':         totals.gemSC  += val; break
+    case 'AC':         totals.gemAC  += val; break
+    case 'DEX':        totals.gemDEX += val; break
+    case 'STR':        totals.gemSTR += val; break
+    case 'WIS':        totals.gemWIS += val; break
+    case 'NTL':        totals.gemNTL += val; break
+    case 'VIT':        totals.gemVIT += val; break
+    case 'Hit':        totals.gemHit += val; break
+    case 'Crit':       totals.gemCrit += val; break
+    case 'XP':         totals.gemXP  += val; break
+    case 'Gold':       totals.gemGold += val; break
+    case 'Drop':       totals.gemDrop += val; break
+    case 'ShadowDrop': totals.gemShadowDrop += val; break
+    case 'DoubleHit':  totals.gemDoubleHit += val; break
+    case 'Mastery':    totals.gemMastery += val; break
+    case 'LifeSteal':  totals.gemLifeSteal += val; break
+    case 'ResourceDrop': totals.gemResourceDrop += val; break
+    // Enemy debuffs -- stored for combat resolution, not calcDerived
+    case '-EnemyWIS': case '-EnemyNTL': case '-EnemyDEX':
+    case '-EnemySTR': case '-EnemyHit':
+    case 'StealWIS': case 'StealNTL': case 'StealDEX': case 'StealSTR':
+      totals.enemyDebuffs[effectKey] = (totals.enemyDebuffs[effectKey] || 0) + val
+      break
+    default: break
+  }
+}
+
+// ─── Apply enchantment bonuses (shadow items) ─────────────────
+function applyEnchantments(enchantments, totals) {
+  if (!Array.isArray(enchantments)) return
+  for (const ench of enchantments) {
+    if (!ench?.effect) continue
+    const { stat, value } = ench.effect
+    // Map enchant stat names → our effect keys
+    const statMap = {
+      armorClass:             'AC',
+      armorClassPercent:      'ACPercent',
+      weaponClass:            'WC',
+      weaponClassPercent:     'WCPercent',
+      spellClass:             'SC',
+      spellClassPercent:      'SCPercent',
+      vitality:               'VIT',
+      dexterity:              'DEX',
+      strength:               'STR',
+      wisdom:                 'WIS',
+      intelligence:           'NTL',
+      criticalHitChancePercent: 'Crit',
+      hitChancePercent:       'Hit',
+    }
+    const mapped = statMap[stat] || stat
+    applyEffect(mapped, value, totals)
+  }
+}
+
+// ─── Main calcDerived ─────────────────────────────────────────
 export function calcDerived(p, BASE_ITEMS = []) {
   if (!p.baseStats) p.baseStats = { STR: 15, DEX: 20, VIT: 10, NTL: 5, WIS: 5 }
   if (!Array.isArray(p.inventory)) p.inventory = []
@@ -305,46 +414,167 @@ export function calcDerived(p, BASE_ITEMS = []) {
   if (!p.pos || typeof p.pos !== 'object') p.pos = { zoneId: 'Z01', x: 7, y: 7 }
 
   const rd = raceOf(p.race)
-  const { ac, wc, sc, hitBonus, classBonus } = sumGear(p, BASE_ITEMS)
-  const vit = p.baseStats.VIT || 10
-  const dex = p.baseStats.DEX || 10
-  const wis = p.baseStats.WIS || 10
-  const focusKey = focusStat(rd)
-  const focus = p.baseStats[focusKey] || 10
 
-  let WC = 0
-  let SC = 0
+  // ── Running totals ─────────────────────────────────────────
+  let ac = 0, wc = 0, sc = 0
+  let hitBonus = 0    // flat % (leggings +10)
+  let classBonus = 0  // flat % (gauntlets +15)
+
+  // Gem totals (accumulated across all socketed gems on all equipped items)
+  const gemTotals = {
+    gemWC: 0, gemSC: 0, gemAC: 0,
+    gemDEX: 0, gemSTR: 0, gemWIS: 0, gemNTL: 0, gemVIT: 0,
+    gemHit: 0, gemCrit: 0,
+    gemXP: 0, gemGold: 0, gemDrop: 0, gemShadowDrop: 0,
+    gemDoubleHit: 0, gemMastery: 0, gemLifeSteal: 0, gemResourceDrop: 0,
+    enemyDebuffs: {},
+    // Enchant percent bonuses
+    ACPercent: 0, WCPercent: 0, SCPercent: 0,
+  }
+
+  // ── Loop equipped items ────────────────────────────────────
+  for (const slotName of Object.keys(p.equipment)) {
+    const iid = p.equipment[slotName]
+    if (!iid) continue
+    const item = p.inventory.find(i => i.instanceId === iid)
+    if (!item) continue
+    const base = BASE_ITEMS.find(b => b.id === item.baseItemId)
+    if (!base) continue
+
+    const subType = base.subType || base.type || ''
+    const qm = item.qualityMultiplier ?? 1.0
+    const isHybrid = item.isHybrid ?? false
+
+    // Get CV -- hybrid items store both WC and SC explicitly
+    // Otherwise look up from DROPPER_TIERS
+    let itemWC = 0, itemSC = 0, itemAC = 0
+
+    if (isHybrid && item.hybridWC !== undefined) {
+      // Hybrid weapon/spell -- has both WC and SC at 75%
+      itemWC = (item.hybridWC || 0) * qm
+      itemSC = (item.hybridSC || 0) * qm
+    } else {
+      // Standard dropper -- use DROPPER_TIERS cv × slot prop
+      const tier = DROPPER_TIERS.find(t => t.tier === item.tier) || DROPPER_TIERS[0]
+      const cv = item.cv ?? tier.cv
+      const baseVal = cv * qm
+
+      const SLOT_PROPS = {
+        Armor: { prop: 1.00, stat: 'AC' },
+        Helmet: { prop: 0.75, stat: 'AC' },
+        Boots: { prop: 0.75, stat: 'AC' },
+        Leggings: { prop: 0.50, stat: 'AC', hitBonus: 10 },
+        Gauntlets: { prop: 0.50, stat: 'AC', classBonus: 15 },
+        Gloves: { prop: 0.50, stat: 'AC', classBonus: 15 },
+        Sword: { prop: 1.0, stat: 'WC' }, Mace: { prop: 1.0, stat: 'WC' },
+        Claw: { prop: 1.0, stat: 'WC' }, Axe: { prop: 1.0, stat: 'WC' },
+        Staff: { prop: 1.0, stat: 'WC' }, Dagger: { prop: 1.0, stat: 'WC' },
+        Bow: { prop: 1.0, stat: 'WC' }, Arrow: { prop: 0.0, stat: 'WC' },
+        BuffSpell: { prop: 0.25, stat: 'WC' },
+        Fire: { prop: 1.0, stat: 'SC' }, Cold: { prop: 1.0, stat: 'SC' },
+        Earth: { prop: 1.0, stat: 'SC' }, Air: { prop: 1.0, stat: 'SC' },
+        Drain: { prop: 1.0, stat: 'SC' }, Arcane: { prop: 1.0, stat: 'SC' },
+        Death: { prop: 1.0, stat: 'SC' }, OffHand: { prop: 0.25, stat: 'SC' },
+        Amulet: { prop: 0, stat: null }, Ring: { prop: 0, stat: null },
+        Rune: { prop: 0, stat: null }, Accessory: { prop: 0, stat: null },
+      }
+
+      const mod = SLOT_PROPS[subType] || { prop: 0, stat: null }
+      const val = baseVal * (mod.prop || 0)
+
+      if (mod.stat === 'AC') itemAC = val
+      if (mod.stat === 'WC') itemWC = val
+      if (mod.stat === 'SC') itemSC = val
+      if (mod.hitBonus) hitBonus += mod.hitBonus
+      if (mod.classBonus) classBonus += mod.classBonus
+    }
+
+    ac += itemAC
+    wc += itemWC
+    sc += itemSC
+
+    // Apply socketed gems
+    const socketedGems = item.socketedGems || []
+    for (const gem of socketedGems) {
+      applyGemBonuses(gem, gemTotals)
+    }
+
+    // Apply enchantments (shadow items)
+    applyEnchantments(item.enchantments, gemTotals)
+  }
+
+  // ── Apply gem stat bonuses to base stats ───────────────────
+  const bs = p.baseStats
+  const effDEX = (bs.DEX || 0) + gemTotals.gemDEX
+  const effSTR = (bs.STR || 0) + gemTotals.gemSTR
+  const effWIS = (bs.WIS || 0) + gemTotals.gemWIS
+  const effNTL = (bs.NTL || 0) + gemTotals.gemNTL
+  const effVIT = (bs.VIT || 0) + gemTotals.gemVIT
+
+  // ── Apply flat gem class bonuses ───────────────────────────
+  ac += gemTotals.gemAC
+  wc += gemTotals.gemWC
+  sc += gemTotals.gemSC
+
+  // ── Apply percent enchant bonuses ──────────────────────────
+  if (gemTotals.ACPercent) ac *= (1 + gemTotals.ACPercent)
+  if (gemTotals.WCPercent) wc *= (1 + gemTotals.WCPercent)
+  if (gemTotals.SCPercent) sc *= (1 + gemTotals.SCPercent)
+
+  // ── Class scaling ──────────────────────────────────────────
+  const focusKey = focusStat(rd)
+  const focusVal = focusKey === 'VIT' ? effVIT : focusKey === 'WIS' ? effWIS : effDEX
+
+  let WC = 0, SC = 0
+  const classMult = 1 + (classBonus / 100)
+
   if (rd.archetype === 'True Fighter') {
-    const scaleStat = rd.primaryStat === 'VIT' ? vit : dex
-    WC = Math.max(12, wc * (1 + scaleStat * GDD.CLASS_STAT_SCALE) * (1 + classBonus))
+    const scaleStat = rd.primaryStat === 'VIT' ? effVIT : effDEX
+    WC = Math.max(12, wc * (1 + scaleStat * GDD.CLASS_STAT_SCALE) * classMult)
     SC = 0
   } else if (rd.archetype === 'True Caster') {
-    const scaleStat = rd.primaryStat === 'VIT' ? vit : wis
-    SC = Math.max(10, sc * (1 + scaleStat * GDD.CLASS_STAT_SCALE) * (1 + classBonus))
+    const scaleStat = rd.primaryStat === 'VIT' ? effVIT : effWIS
+    SC = Math.max(10, sc * (1 + scaleStat * GDD.CLASS_STAT_SCALE) * classMult)
     WC = 0
   } else {
-    const mul = (1 + focus * GDD.CLASS_STAT_SCALE) * (1 + classBonus)
-    WC = Math.max(12, wc * mul)
-    SC = Math.max(10, sc * mul)
+    // Hybrid -- both WC and SC scale off focus stat
+    WC = Math.max(12, wc * (1 + focusVal * GDD.CLASS_STAT_SCALE) * classMult)
+    SC = Math.max(10, sc * (1 + focusVal * GDD.CLASS_STAT_SCALE) * classMult)
   }
 
-  const hit = Math.min(99, GDD.HIT_BASE + focus * GDD.HIT_PER_FOCUS)
-  const crit = Math.min(60, GDD.CRIT_BASE + focus * GDD.CRIT_PER_FOCUS)
+  // ── Hit and Crit ───────────────────────────────────────────
+  const baseHit = Math.min(99, GDD.HIT_BASE + focusVal * GDD.HIT_PER_FOCUS)
+  const hitWithBonus = Math.min(99, baseHit * (1 + hitBonus / 100) + gemTotals.gemHit)
+  const critChance = Math.min(60, GDD.CRIT_BASE + focusVal * GDD.CRIT_PER_FOCUS + gemTotals.gemCrit)
+
+  // ── AC scaling ─────────────────────────────────────────────
+  const finalAC = Math.max(10, ac * (1 + effVIT * GDD.AC_VIT_SCALE))
 
   p.derivedStats = {
-    maxHp: GDD.MAX_HP_BASE + vit * GDD.MAX_HP_PER_VIT,
-    AC: Math.max(10, ac * (1 + vit * GDD.AC_VIT_SCALE)),
+    maxHp: GDD.MAX_HP_BASE + effVIT * GDD.MAX_HP_PER_VIT,
+    AC: finalAC,
     WC,
     SC,
-    hitChance: Math.min(99, hit * (1 + hitBonus)),
-    critChance: crit,
+    hitChance: hitWithBonus,
+    critChance,
     baseRegen: Math.floor(GDD.REGEN_BASE + (p.level || 1) * GDD.REGEN_PER_LEVEL),
+    // Bonus stats from gems -- passed to combat/loot resolution
+    gemXPBonus: gemTotals.gemXP,
+    gemGoldBonus: gemTotals.gemGold,
+    gemDropBonus: gemTotals.gemDrop,
+    gemShadowDropBonus: gemTotals.gemShadowDrop,
+    gemDoubleHit: gemTotals.gemDoubleHit,
+    gemLifeSteal: gemTotals.gemLifeSteal,
+    enemyDebuffs: gemTotals.enemyDebuffs,
   }
+
   if (p.hp === undefined || p.hp === null || p.hp > p.derivedStats.maxHp) {
     p.hp = p.derivedStats.maxHp
   }
+
   return p
 }
+
 
 // ─── Chapter 0 combat packets ────────────────────────────────────
 export function playerPacket(derived, monsterDef, kind) {
