@@ -18,12 +18,21 @@ import { DROPPER_TIERS, GEM_GATES, GDD, ZONE_TYPES, STARTER_RACE } from '../gdd.
 export type ServiceResult = { ok: true; player: any; msg: string } | { ok: false; msg: string }
 type Rng = () => number
 
-export const GEM_POUCH_CAP = 200
-export const INVENTORY_CAP = 200
 export const MAX_GEM_GRADE = 9
-export const UNSOCKET_COST = 250                       // Geminus.1 gem_cutter GDD.UNSOCKET_COST
-export const SELL_RATE = 0.25                          // Geminus.1 MerchantManager: sell for 25%
-export const fuseCost = (grade: number) => grade * grade * 10000 // Geminus.1 gem_cutter fusingCost
+
+/** Shop, Gemcutter, Teleporter and bag numbers. God Editor → Shops & Services edits this live. */
+export const ECONOMY = {
+  SELL_RATE: 0.25,              // Geminus.1 MerchantManager: sell for 25%
+  UNSOCKET_COST: 250,           // Geminus.1 gem_cutter GDD.UNSOCKET_COST
+  FUSE_COST_BASE: 10000,        // upgrade/fuse = grade² x this (Geminus.1 gem_cutter fusingCost)
+  CRUCIBLE_DUST_PER_GRADE: 25,  // crucible = grade x this gem dust
+  TELEPORT_BASE: 10000,         // teleport = base + zone level x per-level (Geminus.1 portal.html)
+  TELEPORT_PER_LEVEL: 50,
+  ITEM_DROP_CHANCE: 0.40,       // chance a kill drops a normal item
+  INVENTORY_CAP: 200,           // gem pouch size lives in Constants (GEM_POUCH_CAP)
+}
+export const gemPouchCap = () => GDD.GEM_POUCH_CAP ?? 200
+export const fuseCost = (grade: number) => grade * grade * ECONOMY.FUSE_COST_BASE
 
 const fail = (msg: string): ServiceResult => ({ ok: false, msg })
 const clonePlayer = (p: any) => ({
@@ -131,13 +140,13 @@ export function unsocketGem(p: any, instanceId: string, socketIdx: number): Serv
   const item = p.inventory[idx]
   const gem = (item.socketedGems || [])[socketIdx]
   if (!gem) return fail('Socket is empty.')
-  if ((p.gold || 0) < UNSOCKET_COST) return fail(`Unsocketing costs ${UNSOCKET_COST} gold.`)
-  if ((p.gems || []).length >= GEM_POUCH_CAP) return fail('Gem pouch is full.')
+  if ((p.gold || 0) < ECONOMY.UNSOCKET_COST) return fail(`Unsocketing costs ${ECONOMY.UNSOCKET_COST} gold.`)
+  if ((p.gems || []).length >= gemPouchCap()) return fail('Gem pouch is full.')
   const next = clonePlayer(p)
-  next.gold = (p.gold || 0) - UNSOCKET_COST
+  next.gold = (p.gold || 0) - ECONOMY.UNSOCKET_COST
   next.inventory[idx] = { ...item, socketedGems: item.socketedGems.filter((_: any, i: number) => i !== socketIdx) }
   next.gems.push({ id: gemKey(gem.id), grade: gem.grade || 1 })
-  return { ok: true, player: next, msg: `${gemInfo(gem.id).name} returned to pouch (-${UNSOCKET_COST} gold).` }
+  return { ok: true, player: next, msg: `${gemInfo(gem.id).name} returned to pouch (-${ECONOMY.UNSOCKET_COST} gold).` }
 }
 
 /** Three identical gems -> one gem of the next grade. */
@@ -222,7 +231,7 @@ export function buyItem(p: any, baseItemId: string, tier: number, BASE_ITEMS: an
   const t = tierInfo(tier)
   if ((p.level || 1) < t.levelReq) return fail(`Tier ${tier} requires level ${t.levelReq.toLocaleString()}.`)
   if ((p.gold || 0) < t.gold) return fail('Insufficient gold.')
-  if ((p.inventory || []).length >= INVENTORY_CAP) return fail('Inventory is full.')
+  if ((p.inventory || []).length >= ECONOMY.INVENTORY_CAP) return fail('Inventory is full.')
   const next = clonePlayer(p)
   next.gold = (p.gold || 0) - t.gold
   next.inventory.push({ instanceId: newId(), baseItemId, tier, type: 'Dropper', socketedGems: [] })
@@ -230,7 +239,7 @@ export function buyItem(p: any, baseItemId: string, tier: number, BASE_ITEMS: an
 }
 
 export function sellPrice(item: any): number {
-  return Math.floor(tierInfo(item?.tier || 1).gold * SELL_RATE * (item?.qualityMultiplier ?? 1))
+  return Math.floor(tierInfo(item?.tier || 1).gold * ECONOMY.SELL_RATE * (item?.qualityMultiplier ?? 1))
 }
 
 export function sellItem(p: any, instanceId: string): ServiceResult {
@@ -341,10 +350,9 @@ export const SOULFORGE = {
   INFUSION_COST_MULT: 1.5,      // cost = base x 1.5^level
   SHATTER_BASE: 10,             // shatteringYields.tierEssenceBase (x item tier)
   SHATTER_MULT: { Shadow: 1.0, Echo: 0.5 } as Record<string, number>,
+  // Reroll essence cost for tiers 1-20 (the gold part matches the gear tier price)
+  REROLL_ESSENCE: [25, 40, 65, 100, 150, 225, 350, 500, 750, 1200, 1800, 2700, 4000, 6000, 9000, 13500, 20000, 30000, 45000, 70000],
 }
-
-// rerollCosts T1-T20 (gold matches DROPPER_TIERS)
-const REROLL_ESSENCE = [25, 40, 65, 100, 150, 225, 350, 500, 750, 1200, 1800, 2700, 4000, 6000, 9000, 13500, 20000, 30000, 45000, 70000]
 
 export function shatterYield(item: any): number {
   return Math.floor(SOULFORGE.SHATTER_BASE * (item?.tier || 1) * (SOULFORGE.SHATTER_MULT[item?.type] ?? 0))
@@ -357,7 +365,7 @@ export function infusionCost(item: any): { gold: number; essence: number } {
 
 export function rerollCost(item: any): { gold: number; essence: number } {
   const t = Math.max(1, Math.min(20, item?.tier || 1))
-  return { gold: tierInfo(t).gold, essence: REROLL_ESSENCE[t - 1] }
+  return { gold: tierInfo(t).gold, essence: SOULFORGE.REROLL_ESSENCE[t - 1] ?? 0 }
 }
 
 function findItem(p: any, instanceId: string) {
@@ -422,13 +430,14 @@ export function rerollItemEnchant(p: any, instanceId: string, enchantIdx: number
 
 // ─── Gem salvage + Crucible (Geminus.1 gem_cutter GEM_CRUCIBLE) ───
 
-const SALVAGE_DUST: Record<number, [number, number]> = {
-  1: [1, 4], 2: [2, 8], 3: [3, 12], 4: [4, 16], 5: [5, 20], 6: [6, 24], 7: [7, 28], 8: [9, 36], 9: [10, 40],
+/** Gem dust per salvaged gem (min, max) and the level needed to mass-salvage each grade. God Editor → Gem Salvage. */
+export const SALVAGE = {
+  DUST: { 1: [1, 4], 2: [2, 8], 3: [3, 12], 4: [4, 16], 5: [5, 20], 6: [6, 24], 7: [7, 28], 8: [9, 36], 9: [10, 40] } as Record<number, [number, number]>,
+  MASS_LEVEL: { 1: 1, 2: 1, 3: 300, 4: 450, 5: 1500, 6: 5000, 7: 15000, 8: 50000, 9: 200000 } as Record<number, number>,
 }
-export const MASS_SALVAGE_LEVEL: Record<number, number> = {
-  1: 1, 2: 1, 3: 300, 4: 450, 5: 1500, 6: 5000, 7: 15000, 8: 50000, 9: 200000,
-}
-export const crucibleCost = (grade: number) => 25 * grade
+const SALVAGE_DUST = SALVAGE.DUST
+export const MASS_SALVAGE_LEVEL = SALVAGE.MASS_LEVEL
+export const crucibleCost = (grade: number) => ECONOMY.CRUCIBLE_DUST_PER_GRADE * grade
 
 export function salvageRange(grade: number): [number, number] {
   return SALVAGE_DUST[grade] || SALVAGE_DUST[1]
@@ -592,7 +601,7 @@ export function zoneTargets(zoneId: string, starter: any[]): any[] {
 
 // ─── Zone travel (Exits + Teleporter) ─────────────────────────────
 
-export const TELEPORT_COST = (zoneId: string) => 10000 + (ZONES[zoneId]?.level || 1) * 50 // Geminus.1 portal.html
+export const TELEPORT_COST = (zoneId: string) => ECONOMY.TELEPORT_BASE + (ZONES[zoneId]?.level || 1) * ECONOMY.TELEPORT_PER_LEVEL
 
 export function zoneIds(): string[] {
   return Object.keys(ZONES).sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10))

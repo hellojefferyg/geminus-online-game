@@ -13,6 +13,7 @@ import {
   isHybrid,
   GDD,
 } from '../gdd.js'
+import { ECONOMY } from '../systems/services'
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ const CASTER_POOL  = ['base_helm_1', 'base_armor_1', 'base_gauntlets_1', 'base_l
 function rollItemDrop(raceKey: string): boolean {
   // 40% drop chance -- item creation handled in App.tsx via rollItemDrop()
   // CombatManager just signals whether a drop occurred
-  return Math.random() < 0.40
+  return Math.random() < ECONOMY.ITEM_DROP_CHANCE
 }
 
 // ─── Core: runTurn ────────────────────────────────────────────────
