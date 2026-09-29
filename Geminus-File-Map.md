@@ -128,7 +128,7 @@ artifacts/geminus-online-game/
 
 ### Server (runs on Vercel, not in the browser)
 5. **api/player.js:** loads a player's saved character from the database when the game starts.
-6. **api/player/save.js:** a backup save endpoint (the game normally saves through `saveQueue.ts`).
+6. **api/player/save.js:** an older server-side save route. **Not called right now**: the game saves through `saveQueue.ts` (38). Kept for when saves move to the server (a security to-do).
 
 ### Pictures (served as-is)
 7. **public/avatars/:** race characters that walk the Graphics map (`orc_male.webp`, `angel_female.webp`…). Built by tool 58.
