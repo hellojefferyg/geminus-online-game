@@ -208,7 +208,6 @@ if (MAINTENANCE_MODE) {
     loadPlayer()
     const savedTheme = localStorage.getItem('g_theme')||'aether'
     setTheme(savedTheme); document.documentElement.classList.toggle('theme-onyx',savedTheme==='onyx')
-    setChatMessages(prev => ({ ...prev, main:[{ sender:'System', system:true, text:'Welcome to Geminus. Transmission systems online.', color:'#3EE0FF' }] }))
   }, [uid])
 
   // Graphic mode: the zone painting sits behind the hexes. Position and buildings come from the stamp either way.
