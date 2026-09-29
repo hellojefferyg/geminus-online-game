@@ -80,7 +80,7 @@ Kept the online game's UI. Pulled the gameplay logic over from Geminus.1.
 ## Accounts and roles right now
 | Character | Login | Role |
 |---|---|---|
-| Jeff (Lv 7 Dragonborn, main) | mrjefferyleonguinn@gmail.com | Dev |
+| Jeff (Lv 7 Dragonborn, main) |  | Dev |
 | Jeff (Lv 1 Dragonborn) | ImJuug@icloud.com | Dev |
 | Syn (Josh) | synesence7600@gmail.com | Dev |
 
