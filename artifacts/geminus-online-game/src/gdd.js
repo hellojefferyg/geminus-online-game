@@ -763,6 +763,7 @@ export function savePayload(p) {
     equipment: p.equipment ?? {},
     gems: p.gems ?? [],
     kills: p.kills ?? 0,
+    gender: p.gender === 'female' ? 'female' : 'male',
   }
 }
 

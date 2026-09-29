@@ -66,6 +66,8 @@ const BASE_STATS: Record<string, any> = {
   unicorn:    { STR: 12, DEX: 10, VIT: 8,  NTL: 12, WIS: 18 },
 }
 
+const avatarSrc = (race: string, g: 'male' | 'female') => `${import.meta.env.BASE_URL}avatars/${race}_${g}.webp`
+
 interface Props {
   username: string
   userId: string
@@ -74,6 +76,7 @@ interface Props {
 
 export default function RaceSelect({ username, userId, onComplete }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
+  const [gender, setGender] = useState<'male' | 'female'>('male')
   const [confirmed, setConfirmed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -95,6 +98,7 @@ export default function RaceSelect({ username, userId, onComplete }: Props) {
           race_name:       selectedRace.name,
           archetype:       selectedRace.archetype,
           cci:             selectedRace.cci,
+          gender,          // with race, picks the character on the Graphics map
           base_stats:      stats,
           hp:              maxHp,
           max_hp:          maxHp,
@@ -122,7 +126,7 @@ export default function RaceSelect({ username, userId, onComplete }: Props) {
         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif',
       }}>
         <div style={{ textAlign: 'center', padding: '24px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚔️</div>
+          <img src={avatarSrc(selectedRace.key, gender)} alt="" style={{ height: '180px', marginBottom: '12px', filter: `drop-shadow(0 0 18px ${selectedRace.color}66)` }} />
           <h2 style={{ color: '#3EE0FF', fontSize: '24px', fontWeight: 800, margin: '0 0 8px' }}>Welcome, {username}</h2>
           <p style={{ color: '#94a3b8', fontSize: '14px', margin: '0 0 4px' }}>
             You are a <span style={{ color: selectedRace.color, fontWeight: 700 }}>{selectedRace.name}</span>
@@ -148,7 +152,7 @@ export default function RaceSelect({ username, userId, onComplete }: Props) {
       </div>
 
       {/* Race groups */}
-      <div style={{ padding: '20px 16px 160px' }}>
+      <div style={{ padding: '20px 16px 300px' }}>
         {GROUPS.map(group => {
           const races = RACES.filter(r => r.archetype === group.archetype)
           const groupColor = races[0]?.color || '#fff'
@@ -212,10 +216,26 @@ export default function RaceSelect({ username, userId, onComplete }: Props) {
         backdropFilter: 'blur(12px)', zIndex: 20,
       }}>
         {selected && selectedRace && (
-          <div style={{ textAlign: 'center', marginBottom: '10px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Selected: </span>
-            <span style={{ fontSize: '13px', fontWeight: 800, color: selectedRace.color }}>{selectedRace.name}</span>
-            <span style={{ fontSize: '12px', color: '#64748b' }}> — {selectedRace.cci}</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', marginBottom: '10px' }}>
+            {/* Race + gender = the character that walks the Graphics map */}
+            <img src={avatarSrc(selectedRace.key, gender)} alt="" style={{ height: '96px', width: '72px', objectFit: 'contain', filter: `drop-shadow(0 0 10px ${selectedRace.color}55)` }} />
+            <div>
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>Selected: </span>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: selectedRace.color }}>{selectedRace.name}</span>
+                <span style={{ fontSize: '12px', color: '#64748b' }}> — {selectedRace.cci}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {(['male', 'female'] as const).map(g => (
+                  <button key={g} onClick={() => setGender(g)} style={{
+                    padding: '8px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: 800, cursor: 'pointer',
+                    border: `1.5px solid ${gender === g ? selectedRace.color : 'rgba(255,255,255,0.15)'}`,
+                    background: gender === g ? `${selectedRace.color}22` : 'rgba(0,0,0,0.3)',
+                    color: gender === g ? '#fff' : '#94a3b8',
+                  }}>{g === 'male' ? 'Male' : 'Female'}</button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
         {error && <p style={{ color: '#f87171', fontSize: '12px', textAlign: 'center', margin: '0 0 8px' }}>{error}</p>}
