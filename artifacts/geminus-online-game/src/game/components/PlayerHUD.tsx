@@ -2,11 +2,8 @@
 // Player name, level, race, archetype, stats, gold, bank, minimap, dpad, zone info, logout, menu
 import { useRef, useEffect, useState } from 'react'
 import DPad from './DPad'
-import { type LoadedMap, drawZoneMap, loadMapAssets } from '../map/zoneMap'
+import { type MapMode, type Stamp, drawLattice, loadBuildingArt } from '../map/lattice'
 import { romanToInt } from '../../systems/services'
-import STAMPS from '../../data/stamps.json'
-
-const SERVICES: Record<string, { label: string; color: string }> = (STAMPS as any)._services
 
 const hudBtn = (color: string): React.CSSProperties => ({
   flexShrink: 0, fontSize: '9px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', cursor: 'pointer',
@@ -22,15 +19,6 @@ function fmt(n: number): string {
   return Math.floor(n).toLocaleString()
 }
 
-const TILE_COLORS: Record<string, string> = {
-  '.': '#0d1f2d', 'r': '#1a1a1a', 'E': '#2d3748', 'R': '#14532d', 'B': '#713f12',
-  'S': '#0c4a6e', 'M': '#4a1d96', 'Q': '#7c2d12', 'T': '#7f1d1d', 'G': '#164e63',
-  'F': '#431407', 'C': '#14532d', 'X': '#450a0a',
-}
-const TILE_TEXT: Record<string, string> = {
-  '.': '', 'r': 'r', 'E': 'E', 'R': 'R', 'B': 'B', 'S': 'S',
-  'M': 'M', 'Q': 'Q', 'T': 'T', 'G': 'G', 'F': 'F', 'C': 'C', 'X': 'X',
-}
 const WHITE: React.CSSProperties = { color: '#fff', fontWeight: 800 }
 const PLAT: React.CSSProperties = { color: '#D4DAE3', fontWeight: 400 }
 const PLAT_DIM = '#7C8591'
@@ -47,14 +35,15 @@ interface PlayerHUDProps {
   player: any
   zone: any
   zoneId: string
-  stamp: any
+  stamp: Stamp
   activeTile: { tile: string; service: any; x: number; y: number } | null
   menuOpen: boolean
   mapOverlay: boolean
   freeLevels: number
   races: Record<string, any>
-  /** Painted zone map (graphic mode); null draws the text grid */
-  graphicMap: LoadedMap | null
+  /** Same stamp either way: squares in text mode, hexes (over the zone painting) in graphic mode */
+  mapMode: MapMode
+  zoneBg: HTMLImageElement | null
   onMove: (dx: number, dy: number) => void
   onEnter: () => void
   onLogout: () => void
@@ -67,96 +56,29 @@ interface PlayerHUDProps {
 
 export default function PlayerHUD({
   player, zone, zoneId, stamp, activeTile, menuOpen, mapOverlay,
-  freeLevels, races, graphicMap, onMove, onEnter, onLogout, onSetMenuOpen,
+  freeLevels, races, mapMode, zoneBg, onMove, onEnter, onLogout, onSetMenuOpen,
   onSetActiveTab, onSetMapOverlay, onTileEnter, onEstate,
 }: PlayerHUDProps) {
   const miniMapRef = useRef<HTMLCanvasElement>(null)
   const zoneCanvasRef = useRef<HTMLCanvasElement>(null)
 
-  /** Text map: rounded platinum tiles, buildings tinted in their colour with their letter. */
-  function drawStampMap(canvas: HTMLCanvasElement, px: number, py: number, cellSize: number, big: boolean) {
-    const ctx = canvas.getContext('2d')!
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr
-    ctx.scale(dpr, dpr)
-    const w = canvas.offsetWidth; const h = canvas.offsetHeight
-    const bg = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.75)
-    bg.addColorStop(0, '#0b1118'); bg.addColorStop(1, '#03060a')
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h)
-    // Fit the whole grid in the box (stamps are 5x5 to 11x11)
-    const size = stamp.size
-    const pad = big ? 14 : 6
-    cellSize = Math.floor((Math.min(w, h) - pad * 2) / size)
-    const gap = big ? 4 : 2
-    const ox = Math.floor((w - cellSize * size) / 2)
-    const oy = Math.floor((h - cellSize * size) / 2)
-    const r = Math.max(2, cellSize * 0.18)
-    const rr = (x: number, y: number, s: number) => {
-      ctx.beginPath()
-      if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, s, s, r); else ctx.rect(x, y, s, s) // older iOS
-    }
-    ctx.save(); ctx.translate(ox, oy)
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) {
-        const tile = stamp.grid[row]?.[col] ?? '.'
-        const x = col * cellSize + gap / 2, y = row * cellSize + gap / 2, s = cellSize - gap
-        const svc = SERVICES[tile]
-        const isPlayer = col === px && row === py
-        const g = ctx.createLinearGradient(x, y, x + s, y + s)
-        if (tile === 'r') {                       // rubble: dark, blocked-looking
-          g.addColorStop(0, '#0d1116'); g.addColorStop(1, '#07090c')
-          ctx.fillStyle = g; rr(x, y, s); ctx.fill()
-          ctx.strokeStyle = 'rgba(212,218,227,0.08)'; ctx.lineWidth = 1; ctx.stroke()
-        } else if (svc) {                         // building: tinted by its colour
-          g.addColorStop(0, svc.color + '55'); g.addColorStop(1, svc.color + '14')
-          ctx.fillStyle = g; rr(x, y, s); ctx.fill()
-          ctx.strokeStyle = svc.color + 'cc'; ctx.lineWidth = big ? 1.5 : 1; ctx.stroke()
-        } else {                                  // floor: brushed platinum
-          g.addColorStop(0, 'rgba(226,232,240,0.16)'); g.addColorStop(1, 'rgba(148,163,184,0.05)')
-          ctx.fillStyle = g; rr(x, y, s); ctx.fill()
-          ctx.strokeStyle = 'rgba(212,218,227,0.22)'; ctx.lineWidth = 1; ctx.stroke()
-        }
-        if (isPlayer) {
-          ctx.save(); ctx.shadowColor = 'rgba(62,224,255,0.9)'; ctx.shadowBlur = big ? 14 : 8
-          ctx.strokeStyle = '#3EE0FF'; ctx.lineWidth = big ? 2.5 : 1.8; rr(x, y, s); ctx.stroke(); ctx.restore()
-        }
-        if (svc && tile !== '.') {
-          ctx.fillStyle = isPlayer ? '#ffffff' : svc.color
-          ctx.font = `800 ${Math.floor(cellSize * (big ? 0.34 : 0.46))}px -apple-system, BlinkMacSystemFont, sans-serif`
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-          ctx.fillText(TILE_TEXT[tile] || tile, x + s / 2, y + s / 2 + (isPlayer && big ? -s * 0.18 : 0))
-        }
-        if (isPlayer && (!svc || big)) {
-          const cy = y + s / 2 + (svc && big ? s * 0.2 : 0)
-          ctx.save(); ctx.shadowColor = '#3EE0FF'; ctx.shadowBlur = 10
-          ctx.fillStyle = '#e8fbff'; ctx.beginPath(); ctx.arc(x + s / 2, cy, cellSize * (svc ? 0.1 : 0.16), 0, Math.PI * 2); ctx.fill(); ctx.restore()
-        }
-      }
-    }
-    ctx.restore()
-  }
+  // Building sprites arrive asynchronously; bump a counter to repaint
+  const [artTick, setArtTick] = useState(0)
+  useEffect(() => { if (mapMode === 'graphic') loadBuildingArt(() => setArtTick(t => t + 1)) }, [mapMode])
 
-  // Building/decor images arrive asynchronously; bump a counter to repaint
-  const [assetTick, setAssetTick] = useState(0)
-  useEffect(() => { if (graphicMap) loadMapAssets(() => setAssetTick(t => t + 1)) }, [graphicMap])
-
-  const gx = player.pos?.gx ?? graphicMap?.data.spawn[0] ?? 0
-  const gy = player.pos?.gy ?? graphicMap?.data.spawn[1] ?? 0
-  const highlight = graphicMap && activeTile ? { x: activeTile.x, y: activeTile.y } : null
-  // Text map: keep the building popup off the player's own square
-  const popupOnTop = !graphicMap && (player.pos?.y ?? 0) >= stamp.size / 2
+  const px = player.pos?.x ?? stamp.spawn[0]
+  const py = player.pos?.y ?? stamp.spawn[1]
+  const graphic = mapMode === 'graphic'
+  // Keep the building popup off the player's own cell (y grows north, so a high y is near the top)
+  const popupOnTop = py < stamp.size / 2
 
   useEffect(() => {
-    if (!miniMapRef.current || !player) return
-    if (graphicMap) drawZoneMap(miniMapRef.current, graphicMap, gx, gy, { camera: 'follow', zoom: 0.32, highlight })
-    else drawStampMap(miniMapRef.current, player.pos?.x ?? 0, player.pos?.y ?? 0, 18, false)
-  }, [player, graphicMap, assetTick, activeTile])
+    if (miniMapRef.current) drawLattice(miniMapRef.current, { stamp, mode: mapMode, px, py, big: false, bg: zoneBg })
+  }, [stamp, mapMode, px, py, zoneBg, artTick])
 
   useEffect(() => {
-    if (!zoneCanvasRef.current || !player || !mapOverlay) return
-    if (graphicMap) drawZoneMap(zoneCanvasRef.current, graphicMap, gx, gy, { camera: 'fit', showGrid: true, labels: true, highlight })
-    else drawStampMap(zoneCanvasRef.current, player.pos?.x ?? 0, player.pos?.y ?? 0, 42, true)
-  }, [player, mapOverlay, graphicMap, assetTick, activeTile])
+    if (zoneCanvasRef.current && mapOverlay) drawLattice(zoneCanvasRef.current, { stamp, mode: mapMode, px, py, big: true, bg: zoneBg })
+  }, [stamp, mapMode, px, py, zoneBg, artTick, mapOverlay])
 
   return (
     <>
@@ -213,7 +135,7 @@ export default function PlayerHUD({
               <div style={{ paddingTop: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', lineHeight: 1.35 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '6px' }}>
                   <span style={{ minWidth: 0 }}><span style={WHITE}>{zoneId}:</span> <span style={{ color: ORANGE, fontWeight: 400 }}>{zone.name}</span></span>
-                  <span style={{ color: ORANGE, fontWeight: 400, flexShrink: 0 }}>{graphicMap ? gx : player.pos?.x ?? 0}, {graphicMap ? gy : player.pos?.y ?? 0}</span>
+                  <span style={{ color: ORANGE, fontWeight: 400, flexShrink: 0 }}>{px}, {py}</span>
                 </div>
                 <span style={WHITE}>Zone req:</span>
                 <span style={PLAT}>Tier {romanToInt(zone.gear)}&nbsp;&nbsp;&nbsp;Lv {zone.level?.toLocaleString()}</span>
@@ -259,10 +181,10 @@ export default function PlayerHUD({
             <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '18px', color: '#3EE0FF', margin: 0 }}>{zoneId}</h3>
             <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0' }}>{zone.name}</p>
             <p style={{ fontSize: '11px', margin: '4px 0 0', minHeight: '15px', color: activeTile ? activeTile.service.color : '#475569', fontWeight: 700 }}>
-              {activeTile ? `📍 ${activeTile.service.label} · press Enter` : graphicMap ? 'Walk the glowing path to a building' : ''}
+              {activeTile ? `📍 ${activeTile.service.label} · press Enter` : graphic ? 'Walk onto a building to enter it' : ''}
             </p>
           </div>
-          <div style={{ width: '100%', maxWidth: '420px', maxHeight: graphicMap ? '52vh' : '400px', aspectRatio: graphicMap ? '3/4' : '1/1', position: 'relative' }}>
+          <div style={{ width: '100%', maxWidth: '420px', maxHeight: '420px', aspectRatio: '1/1', position: 'relative' }}>
             <div className="glass-panel" style={{ width: '100%', height: '100%', borderRadius: '16px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.25)' }}>
               <canvas ref={zoneCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
             </div>

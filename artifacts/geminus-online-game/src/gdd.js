@@ -754,10 +754,10 @@ export function savePayload(p) {
     base_stats: p.baseStats ?? {},
     pos: {
       zoneId: p.pos?.zoneId ?? 'Z01',
-      x: p.pos?.x ?? 7,
-      y: p.pos?.y ?? 7,
-      // Graphic-map tile (25x25 zone maps); absent until the player walks on one
-      ...(p.pos?.gx != null && p.pos?.gy != null ? { gx: p.pos.gx, gy: p.pos.gy } : {}),
+      // Cell on the zone's stamp (y grows north); v = lattice version, shared by Text and Graphic maps
+      x: p.pos?.x ?? 0,
+      y: p.pos?.y ?? 0,
+      ...(p.pos?.v != null ? { v: p.pos.v } : {}),
     },
     inventory: p.inventory ?? [],
     equipment: p.equipment ?? {},

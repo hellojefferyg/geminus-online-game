@@ -12,7 +12,7 @@ import GEMS_DATA from '../data/gems.json'
 import ENCHANT_DATA from '../data/enchantments.json'
 import ZONE_MONSTERS from '../data/zoneMonsters.json'
 import ZONES_DATA from '../data/zones.json'
-import STAMPS_DATA from '../data/stamps.json'
+import { LATTICE_VERSION, getStampById } from '../game/map/lattice'
 import { DROPPER_TIERS, GEM_GATES, GDD, ZONE_TYPES, STARTER_RACE } from '../gdd.js'
 
 export type ServiceResult = { ok: true; player: any; msg: string } | { ok: false; msg: string }
@@ -498,7 +498,6 @@ export function enchantmentLines(item: any): string[] {
 // ─── Zone monsters (Geminus.1 Monster Forge) ──────────────────────
 
 const ZONES: Record<string, any> = ZONES_DATA as any
-const STAMPS: Record<string, any> = STAMPS_DATA as any
 const ROMAN: Record<string, number> = { I: 1, V: 5, X: 10 }
 
 export function romanToInt(r: string): number {
@@ -627,11 +626,11 @@ export function travelTo(p: any, zoneId: string, cost = 0): ServiceResult {
   if (zoneId === p.pos?.zoneId) return fail('You are already here.')
   if (!canEnterZone(p, zoneId)) return fail(`${zone.name} requires level ${zone.level.toLocaleString()}.`)
   if ((p.gold || 0) < cost) return fail(`Travel costs ${cost.toLocaleString()} gold.`)
-  const stamp = STAMPS[zone.stamp] || STAMPS.starter_7x7
-  const [x, y] = stamp.spawn || [0, stamp.size - 1]
+  // Arrive at the Sanctuary (the stamp's spawn), same cell in Text and Graphic mode
+  const [x, y] = getStampById(zone.stamp).spawn
   return {
     ok: true,
-    player: { ...p, gold: (p.gold || 0) - cost, pos: { zoneId, x, y } },
+    player: { ...p, gold: (p.gold || 0) - cost, pos: { zoneId, x, y, v: LATTICE_VERSION } },
     msg: `Arrived at ${zoneId}: ${zone.name}${cost ? ` (-${cost.toLocaleString()} gold)` : ''}.`,
   }
 }
