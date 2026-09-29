@@ -123,7 +123,7 @@ export function ZonesEditor({ value, def, onChange, zoneTypes }: EditorProps & {
     { key: '_key', label: 'Zone', kind: 'readonly' }, { key: 'name', label: 'Name', kind: 'text', width: 170 },
     { key: 'level', label: 'Level', kind: 'num', width: 80 }, { key: 'gear', label: 'Gear', kind: 'select', options: GEARS },
     { key: 'type', label: 'Type', kind: 'select', options: zoneTypes }, { key: 'gemMin', label: 'Gem min', kind: 'num', width: 55 },
-    { key: 'gemMax', label: 'Gem max', kind: 'num', width: 55 }, { key: 'stamp', label: 'Text map', kind: 'select', options: STAMP_IDS },
+    { key: 'gemMax', label: 'Gem max', kind: 'num', width: 55 }, { key: 'stamp', label: 'Map layout', kind: 'select', options: STAMP_IDS },
     { key: 'shadow', label: 'Shadow (label)', kind: 'text', width: 70 }, { key: 'gemRate', label: 'Gem (label)', kind: 'text', width: 70 },
   ]
   return <div style={card}>

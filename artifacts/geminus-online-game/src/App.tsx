@@ -16,7 +16,7 @@ import ChatConsole from './game/components/ChatConsole'
 import InlinePanel from './game/components/InlinePanel'
 import ServicePanel from './game/components/ServicePanel'
 import DevPanel, { type DevFlags } from './game/components/DevPanel'
-import { type LoadedMap, hasGraphicMap, loadZoneMap, stepOnMap, serviceNear, resolvePos } from './game/map/zoneMap'
+import { LATTICE_VERSION, getStampById, loadZoneBackground, resolvePos, stepOn, tileAt } from './game/map/lattice'
 import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, romanToInt, GEM_POUCH_CAP, INVENTORY_CAP } from './systems/services'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
@@ -24,11 +24,13 @@ const MAINTENANCE_MODE = false;
 const ZONES: Record<string, any> = ZONES_DATA
 const STAMPS: Record<string, any> = STAMPS_DATA
 function getZone(zoneId: string) { return ZONES[zoneId] || ZONES['Z01'] }
-function getStamp(zoneId: string) { const zone = getZone(zoneId); return STAMPS[zone.stamp] || STAMPS['starter_7x7'] }
+function getStamp(zoneId: string) { return getStampById(getZone(zoneId).stamp) }
 function getTileService(tile: string): any { return STAMPS._services[tile] || null }
-function getActionService(action: string): { tile: string; service: any } | null {
-  const hit = Object.entries(STAMPS._services).find(([, s]: [string, any]) => s.action === action)
-  return hit ? { tile: hit[0], service: hit[1] } : null
+/** The building on this cell of the zone, if any (same answer in Text and Graphic mode). */
+function tileHere(zoneId: string, x: number, y: number): { tile: string; service: any; x: number; y: number } | null {
+  const tile = tileAt(getStamp(zoneId), x, y) ?? '.'
+  const service = getTileService(tile)
+  return service ? { tile, service, x, y } : null
 }
 
 // Races, GDD constants and gear tiers come from gdd.js so God Editor changes reach them.
@@ -173,7 +175,7 @@ if (MAINTENANCE_MODE) {
   const [activeTile, setActiveTile] = useState<{ tile:string; service:any; x:number; y:number } | null>(null)
   const [activeService, setActiveService] = useState<any>(null)
   const [mapMode, setMapMode] = useState<'graphic'|'text'>(() => { try { return localStorage.getItem('g_mapmode')==='text' ? 'text' : 'graphic' } catch { return 'graphic' } })
-  const [zoneMap, setZoneMap] = useState<LoadedMap|null>(null)
+  const [zoneBg, setZoneBg] = useState<HTMLImageElement|null>(null)
   const [role, setRole] = useState<Role>('player')
   const [devOpen, setDevOpen] = useState(false)
   const [devFlags, setDevFlags] = useState<DevFlags>({ oneHit: false, noDamage: false, forceDrop: '' })
@@ -211,10 +213,14 @@ if (MAINTENANCE_MODE) {
           gems:Array.isArray(supa.gems)?supa.gems:[],
           inventory:Array.isArray(supa.inventory)?supa.inventory:[],
           equipment:(supa.equipment&&typeof supa.equipment==='object')?supa.equipment:{},
-          pos:(supa.pos&&typeof supa.pos==='object')?{zoneId:'Z01',x:7,y:7,...supa.pos}:{zoneId:'Z01',x:0,y:6},
+          pos:(supa.pos&&typeof supa.pos==='object')?{zoneId:'Z01',...supa.pos}:{zoneId:'Z01'},
           derivedStats:{},
         }
         p.xpToNextLevel = xpToLevel(p.level)
+        // Positions saved before the shared lattice (or off the stamp) go back to the zone's Sanctuary
+        const [sx, sy] = resolvePos(getStamp(p.pos.zoneId), p.pos)
+        p.pos = { zoneId: p.pos.zoneId, x: sx, y: sy, v: LATTICE_VERSION }
+        setActiveTile(tileHere(p.pos.zoneId, sx, sy))
         if (p.inventory.length===0) {
           const kit = buildStartingKit(p.race); p.inventory=kit.inventory; p.equipment=kit.equipment
           calcDerived(p); if (!p.hp||p.hp>p.derivedStats.maxHp) p.hp=p.derivedStats.maxHp
@@ -230,25 +236,15 @@ if (MAINTENANCE_MODE) {
     setChatMessages(prev => ({ ...prev, main:[{ sender:'System', system:true, text:'Welcome to Geminus. Transmission systems online.', color:'#3EE0FF' }] }))
   }, [uid])
 
-  // Graphic map: load the current zone's map and place the player on it
+  // Graphic mode: the zone painting sits behind the hexes. Position and buildings come from the stamp either way.
   const currentZoneId = player?.pos?.zoneId || 'Z01'
   useEffect(() => {
     try { localStorage.setItem('g_mapmode', mapMode) } catch {}
-    setActiveTile(null)
-    if (mapMode !== 'graphic' || !player || !hasGraphicMap(currentZoneId)) { setZoneMap(null); return }
+    if (mapMode !== 'graphic') { setZoneBg(null); return }
     let cancelled = false
-    loadZoneMap(currentZoneId).then(m => {
-      if (cancelled) return
-      setZoneMap(m)
-      const cur = playerRef.current
-      if (!m || !cur || cur.pos?.zoneId !== currentZoneId) return
-      const [gx, gy] = resolvePos(m.data, cur.pos?.gx, cur.pos?.gy)
-      if (gx !== cur.pos?.gx || gy !== cur.pos?.gy) { const p = { ...cur, pos: { ...cur.pos, gx, gy } }; playerRef.current = p; setPlayer(p) }
-      const near = serviceNear(m.data, gx, gy); const svc = near && getActionService(near.action)
-      setActiveTile(svc ? { ...svc, x: near!.x, y: near!.y } : null)
-    })
+    loadZoneBackground(currentZoneId).then(img => { if (!cancelled) setZoneBg(img) })
     return () => { cancelled = true }
-  }, [currentZoneId, mapMode, !!player])
+  }, [currentZoneId, mapMode])
 
   // Live chat: load recent Main/Sales history, then append new messages as they arrive
   useEffect(() => {
@@ -333,25 +329,14 @@ if (MAINTENANCE_MODE) {
 
   const move = (dx: number, dy: number) => {
     const zoneId = player.pos?.zoneId||'Z01'
-    if (mapMode === 'graphic' && zoneMap && zoneMap.data.zid === zoneId) {
-      const [gx, gy] = resolvePos(zoneMap.data, player.pos?.gx, player.pos?.gy)
-      const next = stepOnMap(zoneMap.data, gx, gy, dx, dy)
-      if (!next) return
-      const p = { ...player, pos: { ...player.pos, zoneId, gx: next[0], gy: next[1] } }
-      playerRef.current=p; setPlayer(p)
-      const near = serviceNear(zoneMap.data, next[0], next[1]); const svc = near && getActionService(near.action)
-      setActiveTile(svc ? { ...svc, x: near!.x, y: near!.y } : null)
-      savePlayerNow(p,'move')
-      return
-    }
-    const stamp = getStamp(zoneId); const size=stamp.size
-    const newX = Math.max(0,Math.min(size-1,(player.pos?.x??0)+dx))
-    const newY = Math.max(0,Math.min(size-1,(player.pos?.y??0)+dy))
-    const tile = stamp.grid[newY]?.[newX]??'.'
-    const svc = getTileService(tile)
-    const p = { ...player, pos:{...player.pos,zoneId,x:newX,y:newY} }
+    const stamp = getStamp(zoneId)
+    const [x, y] = resolvePos(stamp, player.pos)
+    // D-pad up is screen-up = north, and y grows north on the lattice
+    const next = stepOn(stamp, x, y, dx, -dy)
+    if (!next) return
+    const p = { ...player, pos: { zoneId, x: next[0], y: next[1], v: LATTICE_VERSION } }
     playerRef.current=p; setPlayer(p)
-    setActiveTile(svc ? {tile,service:svc,x:newX,y:newY} : null)
+    setActiveTile(tileHere(zoneId, next[0], next[1]))
     savePlayerNow(p,'move')
   }
 
@@ -466,7 +451,7 @@ if (MAINTENANCE_MODE) {
       // Arrived in a new zone: close the building, drop combat, pick the zone's first monster
       const targets = zoneTargets(p.pos.zoneId, BESTIARY_DATA.starter)
       setSelectedTargetId(targets[0]?.id||'E01'); setEngaged(false); setEnemyCurrentHP(null); setCombatLog([])
-      setActiveService(null); setActiveTile(null)
+      setActiveService(null); setActiveTile(tileHere(p.pos.zoneId, p.pos.x, p.pos.y))
     }
   }
 
@@ -521,7 +506,7 @@ if (MAINTENANCE_MODE) {
                 player={player} zone={zone} zoneId={zoneId} stamp={stamp}
                 activeTile={activeTile} menuOpen={menuOpen} mapOverlay={mapOverlay}
                 freeLevels={freeLevels} races={races}
-                graphicMap={mapMode==='graphic' && zoneMap?.data.zid===zoneId ? zoneMap : null}
+                mapMode={mapMode} zoneBg={zoneBg}
                 onMove={move} onEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } else showToast('Nothing to interact with here.') }}
                 onLogout={handleLogout} onSetMenuOpen={setMenuOpen} onSetActiveTab={setActiveTab}
                 onSetMapOverlay={setMapOverlay} onTileEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } }}

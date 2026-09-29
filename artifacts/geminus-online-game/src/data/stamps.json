@@ -1,4 +1,5 @@
 {
+  "_about": "ZONE-LATTICE-DUALVIEW-v1 (GDD 3.4, 29 Sep 2026). rows[y] is a west->east string; y=0 is the SOUTH row, y grows north, so rows[y][x] matches pos {x, y}. Text mode draws each cell as a square, Graphic mode as a hex on the same point. spawn = the Sanctuary R.",
   "_legend": {
     ".": "fight",
     "r": "rubble",
@@ -15,122 +16,187 @@
     "X": "boss"
   },
   "_services": {
-    "R": { "label": "Sanctuary",    "color": "#30D158", "action": "sanctuary"  },
-    "B": { "label": "Gilded Vault", "color": "#FFD60A", "action": "vault"      },
-    "S": { "label": "Armory",       "color": "#3EE0FF", "action": "armory"     },
-    "M": { "label": "Arcanium",     "color": "#BF5AF2", "action": "arcanium"   },
-    "Q": { "label": "Quest Board",  "color": "#FF9500", "action": "quests"     },
-    "T": { "label": "Teleporter",   "color": "#FF375F", "action": "teleport"   },
-    "G": { "label": "Gemcutter",    "color": "#5AC8FA", "action": "gemcutter"  },
-    "F": { "label": "Soulforge",    "color": "#FF6B35", "action": "soulforge"  },
-    "C": { "label": "Clan Banner",  "color": "#A8E6CF", "action": "clan"       },
-    "X": { "label": "Boss Dais",    "color": "#FF375F", "action": "boss"       },
-    "E": { "label": "Exit",         "color": "#94a3b8", "action": "portal"     }
+    "R": {
+      "label": "Sanctuary",
+      "color": "#30D158",
+      "action": "sanctuary"
+    },
+    "B": {
+      "label": "Gilded Vault",
+      "color": "#FFD60A",
+      "action": "vault"
+    },
+    "S": {
+      "label": "Armory",
+      "color": "#3EE0FF",
+      "action": "armory"
+    },
+    "M": {
+      "label": "Arcanium",
+      "color": "#BF5AF2",
+      "action": "arcanium"
+    },
+    "Q": {
+      "label": "Quest Board",
+      "color": "#FF9500",
+      "action": "quests"
+    },
+    "T": {
+      "label": "Teleporter",
+      "color": "#FF375F",
+      "action": "teleport"
+    },
+    "G": {
+      "label": "Gemcutter",
+      "color": "#5AC8FA",
+      "action": "gemcutter"
+    },
+    "F": {
+      "label": "Soulforge",
+      "color": "#FF6B35",
+      "action": "soulforge"
+    },
+    "C": {
+      "label": "Clan Banner",
+      "color": "#A8E6CF",
+      "action": "clan"
+    },
+    "X": {
+      "label": "Boss Dais",
+      "color": "#FF375F",
+      "action": "boss"
+    },
+    "E": {
+      "label": "Exit",
+      "color": "#94a3b8",
+      "action": "portal"
+    }
   },
   "starter_7x7": {
     "size": 7,
-    "spawn": [0, 6],
-    "grid": [
-      ["E", ".", ".", ".", ".", ".", "E"],
-      [".", ".", ".", ".", ".", ".", "."],
-      [".", "R", ".", "B", ".", "G", "."],
-      [".", ".", ".", ".", ".", ".", "."],
-      [".", "E", ".", ".", ".", "E", "."],
-      [".", ".", ".", ".", ".", ".", "."],
-      [".", "S", ".", "M", ".", "Q", "."]
+    "spawn": [
+      0,
+      0
     ],
-    "_note": "Row 0 = north (top). Row 6 = south (bottom). Spawn at col 0, row 6 = SW corner (Sanctuary). E portals lead to world map."
+    "rows": [
+      "R..T..E",
+      ".B...G.",
+      ".......",
+      "...Q...",
+      ".......",
+      ".S...M.",
+      "E..r..."
+    ],
+    "locked": true
   },
   "farm_5x5": {
     "size": 5,
-    "spawn": [3, 1],
-    "grid": [
-      [".", ".", ".", ".", "."],
-      [".", ".", ".", "R", "."],
-      [".", ".", "X", ".", "."],
-      [".", ".", ".", ".", "."],
-      ["E", ".", ".", ".", "E"]
+    "spawn": [
+      3,
+      1
     ],
-    "_note": "Spawn at Sanctuary (3,1). Boss dais center. Two exits south."
+    "rows": [
+      "E...E",
+      ".B.R.",
+      "..X..",
+      ".....",
+      "E...E"
+    ],
+    "locked": true
   },
   "city_9x9": {
     "size": 9,
-    "spawn": [0, 8],
-    "grid": [
-      ["E", ".", ".", ".", ".", ".", ".", ".", "E"],
-      [".", ".", ".", ".", ".", ".", ".", ".", "."],
-      [".", "R", ".", "B", ".", "S", ".", "M", "."],
-      [".", ".", ".", ".", ".", ".", ".", ".", "."],
-      [".", "Q", ".", "T", ".", "G", ".", "F", "."],
-      [".", ".", ".", ".", ".", ".", ".", ".", "."],
-      [".", "C", ".", ".", ".", ".", ".", "X", "."],
-      [".", ".", ".", ".", ".", ".", ".", ".", "."],
-      ["E", ".", ".", ".", ".", ".", ".", ".", "E"]
+    "spawn": [
+      0,
+      0
     ],
-    "_note": "Full service town. All buildings present. Exits N and S."
+    "rows": [
+      "R.......E",
+      ".B.....C.",
+      ".......F.",
+      ".........",
+      "...QXG...",
+      ".........",
+      ".........",
+      ".S.....M.",
+      "E...T...E"
+    ],
+    "locked": true
   },
   "xp_7x7": {
     "size": 7,
-    "spawn": [0, 6],
-    "grid": [
-      ["E", ".", ".", ".", ".", ".", "E"],
-      [".", ".", "r", ".", "r", ".", "."],
-      [".", "R", ".", ".", ".", ".", "."],
-      [".", ".", ".", "X", ".", ".", "."],
-      [".", ".", "r", ".", "r", ".", "."],
-      [".", ".", ".", ".", ".", ".", "."],
-      [".", ".", ".", ".", ".", ".", "."]
+    "spawn": [
+      1,
+      4
     ],
-    "_note": "XP zone small. Sanctuary + Boss dais. No shops."
+    "rows": [
+      ".......",
+      ".......",
+      "..r.r..",
+      "...X...",
+      ".R.....",
+      "..r.r..",
+      "E.....E"
+    ],
+    "locked": false
   },
   "xp_9x9": {
     "size": 9,
-    "spawn": [0, 8],
-    "grid": [
-      ["E", ".", ".", ".", ".", ".", ".", ".", "E"],
-      [".", ".", "r", ".", ".", ".", "r", ".", "."],
-      [".", "R", ".", ".", ".", ".", ".", ".", "."],
-      [".", ".", ".", ".", "r", ".", ".", ".", "."],
-      [".", ".", ".", ".", "X", ".", ".", ".", "."],
-      [".", ".", ".", ".", "r", ".", ".", ".", "."],
-      [".", ".", "r", ".", ".", ".", "r", ".", "."],
-      [".", ".", ".", ".", ".", ".", ".", ".", "."],
-      [".", ".", ".", ".", ".", ".", ".", ".", "."]
+    "spawn": [
+      1,
+      6
     ],
-    "_note": "XP zone medium. Sanctuary + Boss dais. No shops."
+    "rows": [
+      ".........",
+      ".........",
+      "..r...r..",
+      "....r....",
+      "....X....",
+      "....r....",
+      ".R.......",
+      "..r...r..",
+      "E.......E"
+    ],
+    "locked": false
   },
   "xp_11x11": {
     "size": 11,
-    "spawn": [0, 10],
-    "grid": [
-      ["E", ".", ".", ".", ".", ".", ".", ".", ".", ".", "E"],
-      [".", ".", "r", ".", ".", ".", ".", ".", "r", ".", "."],
-      [".", "R", ".", ".", ".", ".", ".", ".", ".", ".", "."],
-      [".", ".", ".", ".", "r", ".", "r", ".", ".", ".", "."],
-      [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
-      [".", ".", ".", ".", ".", "X", ".", ".", ".", ".", "."],
-      [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
-      [".", ".", ".", ".", "r", ".", "r", ".", ".", ".", "."],
-      [".", ".", "r", ".", ".", ".", ".", ".", "r", ".", "."],
-      [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."],
-      [".", ".", ".", ".", ".", ".", ".", ".", ".", ".", "."]
+    "spawn": [
+      1,
+      8
     ],
-    "_note": "XP zone large. Sanctuary + Boss dais. No shops."
+    "rows": [
+      "...........",
+      "...........",
+      "..r.....r..",
+      "....r.r....",
+      "...........",
+      ".....X.....",
+      "...........",
+      "....r.r....",
+      ".R.........",
+      "..r.....r..",
+      "E.........E"
+    ],
+    "locked": false
   },
   "prestige_9x9": {
     "size": 9,
-    "spawn": [0, 8],
-    "grid": [
-      ["E", ".", ".", ".", ".", ".", ".", ".", "E"],
-      [".", ".", "r", "r", ".", "r", "r", ".", "."],
-      [".", "R", ".", ".", ".", ".", ".", "S", "."],
-      [".", ".", ".", "r", ".", "r", ".", ".", "."],
-      [".", "B", ".", ".", "X", ".", ".", "G", "."],
-      [".", ".", ".", "r", ".", "r", ".", ".", "."],
-      [".", "T", ".", ".", ".", ".", ".", "F", "."],
-      [".", ".", "r", "r", ".", "r", "r", ".", "."],
-      ["E", ".", ".", ".", ".", ".", ".", ".", "E"]
+    "spawn": [
+      1,
+      6
     ],
-    "_note": "Z101 prestige zone. Full services. Boss dais center."
+    "rows": [
+      "E.......E",
+      "..rr.rr..",
+      ".T.....F.",
+      "...r.r...",
+      ".B..X..G.",
+      "...r.r...",
+      ".R.....S.",
+      "..rr.rr..",
+      "E.......E"
+    ],
+    "locked": false
   }
 }

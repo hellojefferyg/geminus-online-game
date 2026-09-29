@@ -46,7 +46,7 @@ export default function SignUp({ onSwitchToLogin }: { onSwitchToLogin: () => voi
         attribute_points: 0,  // granted after race pick
         kills: 0,
         base_stats: {},
-        pos: { zoneId: 'Z01', x: 0, y: 6 },
+        pos: { zoneId: 'Z01', x: 0, y: 0, v: 2 },  // Z01 Sanctuary (src/game/map/lattice.ts)
         inventory: [],
         equipment: {},
         gems: [],
