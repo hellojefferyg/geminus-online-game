@@ -19,6 +19,11 @@ function fmt(n: number): string {
   return Math.floor(n).toLocaleString()
 }
 
+/** Same black screen + cyan edge as the chat messages */
+const SCREEN: React.CSSProperties = {
+  background: '#000', border: '1px solid rgba(62,224,255,0.28)', borderRadius: '12px',
+  boxShadow: 'inset 0 0 18px rgba(0,0,0,0.9), 0 0 10px rgba(62,224,255,0.08)',
+}
 const WHITE: React.CSSProperties = { color: '#fff', fontWeight: 800 }
 const PLAT: React.CSSProperties = { color: '#D4DAE3', fontWeight: 400 }
 const PLAT_DIM = '#7C8591'
@@ -165,8 +170,9 @@ export default function PlayerHUD({
           </section>
 
           {/* Right -- Minimap + DPad */}
-          <section style={{ width: '162px', flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid rgba(255,255,255,0.1)', marginLeft: '6px', paddingRight: '4px' }}>
-            <div onClick={() => onSetMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '10px', border: '1.5px dashed rgba(62,224,255,0.5)', boxShadow: '0 0 12px rgba(62,224,255,0.2)', flexShrink: 0 }}>
+          {/* Black "screen" like the chat: the map floats inside it, with the D-pad and map buttons below */}
+          <section style={{ ...SCREEN, width: '164px', flexShrink: 0, display: 'flex', flexDirection: 'column', marginLeft: '6px', padding: '6px', position: 'relative', zIndex: 1 }}>
+            <div onClick={() => onSetMapOverlay(true)} style={{ cursor: 'pointer', width: '100%', aspectRatio: '1/1', position: 'relative', overflow: 'hidden', borderRadius: '9px', border: '1px solid rgba(62,224,255,0.16)', boxShadow: '0 4px 14px rgba(0,0,0,0.8)', flexShrink: 0 }}>
               <canvas ref={miniMapRef} style={{ width: '100%', height: '100%', display: 'block' }} />
               {activeTile && (
                 <button onClick={e => { e.stopPropagation(); onTileEnter() }}
@@ -179,10 +185,10 @@ export default function PlayerHUD({
               )}
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
-              <DPad onMove={onMove} onEnter={onEnter} />
+              <DPad onMove={onMove} onEnter={onEnter} size={46} />
             </div>
             {/* Map style, right under the D-pad */}
-            <div style={{ display: 'flex', gap: '6px', marginTop: '8px', padding: '3px', borderRadius: '10px', background: 'rgba(0,8,14,0.6)', border: '1px solid rgba(62,224,255,0.2)' }}>
+            <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
               {(['text', 'graphic'] as const).map(m => (
                 <button key={m} onClick={() => onSetMapMode(m)} className={`footer-tab-button${mapMode === m ? ' active' : ''}`}
                   style={{ flex: 1, padding: '7px 0', fontSize: '11px', fontWeight: 800 }}>{m === 'text' ? 'Text' : 'Graphics'}</button>
@@ -197,13 +203,14 @@ export default function PlayerHUD({
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(12px)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}>
           <div style={{ textAlign: 'center', marginTop: '8px' }}>
             <h3 style={{ fontFamily: "'Orbitron', sans-serif", fontSize: '18px', color: '#3EE0FF', margin: 0 }}>{zoneId}</h3>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0' }}>{zone.name}</p>
-            <p style={{ fontSize: '11px', margin: '4px 0 0', minHeight: '15px', color: activeTile ? activeTile.service.color : '#475569', fontWeight: 700 }}>
-              {activeTile ? `📍 ${activeTile.service.label} · press Enter` : graphic ? 'Walk onto a building to enter it' : ''}
+            <p style={{ fontSize: '13px', color: ORANGE, margin: '2px 0 0' }}>{zone.name}</p>
+            <p style={{ fontSize: '13px', color: '#D4DAE3', fontFamily: 'monospace', fontWeight: 700, margin: '2px 0 0' }}>({px},{py})</p>
+            <p style={{ fontSize: '11px', margin: '4px 0 0', minHeight: '15px', color: activeTile ? activeTile.service.color : '#64748b', fontWeight: 700 }}>
+              {activeTile ? `📍 ${activeTile.service.label} · press Enter` : 'Walk onto a building to enter it'}
             </p>
           </div>
           <div style={{ width: '100%', maxWidth: '420px', maxHeight: '420px', aspectRatio: '1/1', position: 'relative' }}>
-            <div className="glass-panel" style={{ width: '100%', height: '100%', borderRadius: '16px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.25)' }}>
+            <div style={{ ...SCREEN, width: '100%', height: '100%', borderRadius: '16px', overflow: 'hidden', position: 'relative' }}>
               <canvas ref={zoneCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
             </div>
           </div>
