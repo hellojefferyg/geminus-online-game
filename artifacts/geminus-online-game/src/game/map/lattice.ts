@@ -77,6 +77,8 @@ export interface LatticeView {
   big: boolean
   /** Zone painting behind the hexes (graphic mode) */
   bg?: HTMLImageElement | null
+  /** Race character that walks the hexes (graphic mode); falls back to the dot until it loads */
+  avatar?: HTMLImageElement | null
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -109,7 +111,7 @@ export function drawLattice(canvas: HTMLCanvasElement, v: LatticeView) {
   const n = stamp.size
   const pad = big ? 14 : 6
   // Graphic sprites stand taller than their hex, so leave headroom above the north row
-  const head = mode === 'graphic' ? 0.45 : 0
+  const head = mode === 'graphic' ? 0.65 : 0
   const tile = Math.floor((Math.min(w, h) - pad * 2) / (n + head))   // square cells: tileW = tileH
   const originX = Math.floor((w - tile * n) / 2) + tile / 2
   const originY = Math.floor((h - tile * (n + head)) / 2) + tile * head + tile / 2
@@ -120,7 +122,7 @@ export function drawLattice(canvas: HTMLCanvasElement, v: LatticeView) {
     const s = Math.max(w / v.bg.naturalWidth, h / v.bg.naturalHeight)   // cover
     const bw = v.bg.naturalWidth * s, bh = v.bg.naturalHeight * s
     ctx.drawImage(v.bg, (w - bw) / 2, (h - bh) / 2, bw, bh)
-    ctx.fillStyle = 'rgba(2,6,10,0.45)'; ctx.fillRect(0, 0, w, h)
+    ctx.fillStyle = 'rgba(2,6,10,0.25)'; ctx.fillRect(0, 0, w, h)
   } else {
     const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.75)
     g.addColorStop(0, '#0b1118'); g.addColorStop(1, '#03060a')
@@ -137,17 +139,25 @@ export function drawLattice(canvas: HTMLCanvasElement, v: LatticeView) {
     const shape = () => mode === 'graphic'
       ? hexPath(ctx, cx, cy, hexR)
       : roundRect(ctx, cx - tile / 2 + gap / 2, cy - tile / 2 + gap / 2, tile - gap, tile - gap, Math.max(2, tile * 0.18))
+    if (mode === 'graphic') {
+      // Barely-there hexes so the painting reads as the map; buildings get a soft coloured footprint
+      shape()
+      if (svc) {
+        ctx.fillStyle = svc.color + '1c'; ctx.fill()
+        ctx.strokeStyle = svc.color + '55'; ctx.lineWidth = 1; ctx.stroke()
+      } else if (t !== 'r') {
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1; ctx.stroke()
+      }
+      continue
+    }
     shape()
     const g = ctx.createLinearGradient(cx - tile / 2, cy - tile / 2, cx + tile / 2, cy + tile / 2)
     if (t === 'r') {
-      g.addColorStop(0, mode === 'graphic' ? 'rgba(20,24,30,0.75)' : '#0d1116'); g.addColorStop(1, mode === 'graphic' ? 'rgba(8,10,14,0.75)' : '#07090c')
+      g.addColorStop(0, '#0d1116'); g.addColorStop(1, '#07090c')
       ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(212,218,227,0.12)'; ctx.lineWidth = 1; ctx.stroke()
     } else if (svc) {
-      g.addColorStop(0, svc.color + (mode === 'graphic' ? '66' : '55')); g.addColorStop(1, svc.color + (mode === 'graphic' ? '26' : '14'))
+      g.addColorStop(0, svc.color + '55'); g.addColorStop(1, svc.color + '14')
       ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = svc.color + 'cc'; ctx.lineWidth = big ? 1.5 : 1; ctx.stroke()
-    } else if (mode === 'graphic') {
-      g.addColorStop(0, 'rgba(62,224,255,0.16)'); g.addColorStop(1, 'rgba(8,20,30,0.40)')
-      ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(62,224,255,0.38)'; ctx.lineWidth = 1; ctx.stroke()
     } else {
       g.addColorStop(0, 'rgba(226,232,240,0.16)'); g.addColorStop(1, 'rgba(148,163,184,0.05)')
       ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(212,218,227,0.22)'; ctx.lineWidth = 1; ctx.stroke()
@@ -160,25 +170,30 @@ export function drawLattice(canvas: HTMLCanvasElement, v: LatticeView) {
 
   // Buildings: letters (text) or sprites standing on their hex (graphic), drawn south-last so they overlap correctly
   const fontSize = Math.floor(tile * (big ? 0.34 : 0.46))
-  for (let y = n - 1; y >= 0; y--) for (let x = 0; x < n; x++) {
-    const t = stamp.rows[y][x]
-    if (t === '.') continue
-    const svc = SERVICES[t]
-    const { cx, cy } = at(x, y)
-    const isPlayer = x === px && y === py
-    const img = mode === 'graphic' ? art(t) : null
-    if (img) {
-      const size = tile * (t === 'r' ? 0.8 : 1.02)
-      const ih = size * (img.naturalHeight / img.naturalWidth)
-      ctx.globalAlpha = isPlayer ? 0.55 : 1
-      ctx.drawImage(img, cx - size / 2, cy + hexR * 0.55 - ih, size, ih)   // feet on the lower part of the hex
-      ctx.globalAlpha = 1
-    } else if (svc || t === 'r') {
-      ctx.fillStyle = isPlayer ? '#fff' : svc?.color || 'rgba(212,218,227,0.35)'
-      ctx.font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText(t, cx, cy + (isPlayer && big ? -tile * 0.16 : 0))
+  const character = mode === 'graphic' && v.avatar && v.avatar.complete && v.avatar.naturalWidth > 0 ? v.avatar : null
+  for (let y = n - 1; y >= 0; y--) {
+    for (let x = 0; x < n; x++) {
+      const t = stamp.rows[y][x]
+      if (t === '.') continue
+      const svc = SERVICES[t]
+      const { cx, cy } = at(x, y)
+      const isPlayer = x === px && y === py
+      const img = mode === 'graphic' ? art(t) : null
+      if (img) {
+        const size = tile * (t === 'r' ? 0.8 : 1.02)
+        const ih = size * (img.naturalHeight / img.naturalWidth)
+        ctx.globalAlpha = isPlayer ? (character ? 0.4 : 0.55) : 1
+        ctx.drawImage(img, cx - size / 2, cy + hexR * 0.55 - ih, size, ih)   // feet on the lower part of the hex
+        ctx.globalAlpha = 1
+      } else if (svc || t === 'r') {
+        ctx.fillStyle = isPlayer ? '#fff' : svc?.color || 'rgba(212,218,227,0.35)'
+        ctx.font = `800 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+        ctx.fillText(t, cx, cy + (isPlayer && big ? -tile * 0.16 : 0))
+      }
     }
+    // Mini map: the character stands in front of its own row, behind anything further south
+    if (character && !big && y === py) drawCharacter(ctx, character, at(px, py), tile, hexR, big)
   }
 
   // Big graphic map: name under each building, after all sprites so none get covered; shrunk to fit its cell
@@ -197,13 +212,50 @@ export function drawLattice(canvas: HTMLCanvasElement, v: LatticeView) {
     }
   }
 
-  // Player marker
+  // Big map: character on top of the building names so they never cover you
+  if (character) { if (big) drawCharacter(ctx, character, at(px, py), tile, hexR, big); return }
+
+  // Player marker (text mode, or until the character art loads)
   const { cx, cy } = at(px, py)
   const onBuilding = !!SERVICES[stamp.rows[py]?.[px]]
   ctx.save(); ctx.shadowColor = '#3EE0FF'; ctx.shadowBlur = 10
   ctx.fillStyle = '#e8fbff'; ctx.beginPath()
   ctx.arc(cx, cy + (onBuilding ? tile * 0.2 : 0), tile * (onBuilding ? 0.1 : 0.16), 0, Math.PI * 2); ctx.fill()
   ctx.restore()
+}
+
+/** Race art standing on the hex: sized by height, feet on a soft glow so it reads as "you". */
+function drawCharacter(ctx: CanvasRenderingContext2D, img: HTMLImageElement, c: { cx: number; cy: number }, tile: number, hexR: number, big: boolean) {
+  const feetY = c.cy + hexR * 0.55
+  ctx.save()
+  const glow = ctx.createRadialGradient(c.cx, feetY, 0, c.cx, feetY, tile * 0.42)
+  glow.addColorStop(0, 'rgba(62,224,255,0.55)'); glow.addColorStop(1, 'rgba(62,224,255,0)')
+  ctx.fillStyle = glow
+  ctx.beginPath(); ctx.ellipse(c.cx, feetY, tile * 0.42, tile * 0.16, 0, 0, Math.PI * 2); ctx.fill()
+  let ih = tile * (big ? 1.25 : 1.35)
+  let iw = ih * (img.naturalWidth / img.naturalHeight)
+  const maxW = tile * 1.3                                  // winged races are wide
+  if (iw > maxW) { ih *= maxW / iw; iw = maxW }
+  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 6
+  ctx.drawImage(img, c.cx - iw / 2, feetY - ih, iw, ih)
+  ctx.restore()
+}
+
+// ─── Race characters (tools/build_avatars.py) ──────────────────────
+
+const avatarCache = new Map<string, HTMLImageElement>()
+
+/** The player's race character; onReady fires once it has loaded. */
+export function loadAvatar(race: string, gender: 'male' | 'female', onReady: () => void): HTMLImageElement {
+  const key = `${race}_${gender}`
+  let img = avatarCache.get(key)
+  if (!img) {
+    img = new Image()
+    img.src = `${import.meta.env.BASE_URL}avatars/${key}.webp`
+    avatarCache.set(key, img)
+  }
+  if (img.complete) { if (img.naturalWidth > 0) onReady() } else img.addEventListener('load', onReady, { once: true })
+  return img
 }
 
 // ─── Zone paintings (graphic backdrop) ─────────────────────────────
