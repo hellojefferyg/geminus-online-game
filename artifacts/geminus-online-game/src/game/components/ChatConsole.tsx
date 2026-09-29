@@ -1,7 +1,7 @@
 // src/game/components/ChatConsole.tsx
 import { useEffect, useRef, useState } from 'react'
 
-/** Staff names: locked colour + tag, bold. Players: plain white. Staff messages: bold platinum. */
+/** Staff: bold platinum-gray name with the (Tag) in the role colour. Players: plain white. Staff messages: bold platinum. */
 export const ROLE_STYLE: Record<string, { color: string; tag: string }> = {
   dev:   { color: '#FF2D2D', tag: 'Dev' },
   admin: { color: '#B84DFF', tag: 'Admin' },
@@ -13,10 +13,10 @@ const PLATINUM = '#D4DAE3'
 function ChatName({ m, onMention }: { m: any; onMention?: (name: string) => void }) {
   if (m.system) return <span style={{ color: '#3EE0FF', fontWeight: 800 }}>{m.sender}:</span>
   const st = ROLE_STYLE[m.role]
-  const style: React.CSSProperties = st ? { color: st.color, fontWeight: 800 } : { color: '#fff', fontWeight: 400 }
+  const style: React.CSSProperties = st ? { color: PLATINUM, fontWeight: 800 } : { color: '#fff', fontWeight: 400 }
   return (
     <span role="button" title="Tap to mention" onClick={() => onMention?.(m.sender)} style={{ ...style, cursor: 'pointer' }}>
-      {m.sender}{st ? `(${st.tag})` : ''}:
+      {m.sender}{st && <span style={{ color: st.color }}>({st.tag})</span>}:
     </span>
   )
 }
