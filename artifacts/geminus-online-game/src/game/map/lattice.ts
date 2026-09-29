@@ -245,8 +245,8 @@ function drawCharacter(ctx: CanvasRenderingContext2D, img: HTMLImageElement, c: 
 
 const avatarCache = new Map<string, HTMLImageElement>()
 
-/** The player's race character; onReady fires once it has loaded. */
-export function loadAvatar(race: string, gender: 'male' | 'female', onReady: () => void): HTMLImageElement {
+/** The player's race character; onReady gets the image once it has loaded (right away if it's cached). */
+export function loadAvatar(race: string, gender: 'male' | 'female', onReady: (img: HTMLImageElement) => void): void {
   const key = `${race}_${gender}`
   let img = avatarCache.get(key)
   if (!img) {
@@ -254,8 +254,8 @@ export function loadAvatar(race: string, gender: 'male' | 'female', onReady: () 
     img.src = `${import.meta.env.BASE_URL}avatars/${key}.webp`
     avatarCache.set(key, img)
   }
-  if (img.complete) { if (img.naturalWidth > 0) onReady() } else img.addEventListener('load', onReady, { once: true })
-  return img
+  const ready = img
+  if (ready.complete) { if (ready.naturalWidth > 0) onReady(ready) } else ready.addEventListener('load', () => onReady(ready), { once: true })
 }
 
 // ─── Zone paintings (graphic backdrop) ─────────────────────────────

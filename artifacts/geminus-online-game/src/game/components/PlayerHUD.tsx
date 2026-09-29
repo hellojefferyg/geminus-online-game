@@ -73,7 +73,7 @@ export default function PlayerHUD({
   useEffect(() => {
     if (mapMode !== 'graphic' || !player.race) { setAvatar(null); return }
     let live = true
-    const img = loadAvatar(player.race, avatarGender, () => { if (live) setAvatar(img) })
+    loadAvatar(player.race, avatarGender, img => { if (live) setAvatar(img) })
     return () => { live = false }
   }, [mapMode, player.race, avatarGender])
 

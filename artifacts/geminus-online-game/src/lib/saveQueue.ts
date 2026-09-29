@@ -54,6 +54,7 @@ export function savePlayerNow(player: any, reason = '') {
         equipment:        snapshot.equipment,
         gems:             snapshot.gems,
         kills:            snapshot.kills,
+        gender:           snapshot.gender,
       })
       .eq('uid', snapshot.uid)
 

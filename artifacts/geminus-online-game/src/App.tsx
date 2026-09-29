@@ -175,7 +175,6 @@ if (MAINTENANCE_MODE) {
   const [activeTile, setActiveTile] = useState<{ tile:string; service:any; x:number; y:number } | null>(null)
   const [activeService, setActiveService] = useState<any>(null)
   const [mapMode, setMapMode] = useState<'graphic'|'text'>(() => { try { return localStorage.getItem('g_mapmode')==='text' ? 'text' : 'graphic' } catch { return 'graphic' } })
-  const [avatarGender, setAvatarGender] = useState<'male'|'female'>(() => { try { return localStorage.getItem('g_avatar')==='female' ? 'female' : 'male' } catch { return 'male' } })
   const [zoneBg, setZoneBg] = useState<HTMLImageElement|null>(null)
   const [role, setRole] = useState<Role>('player')
   const [devOpen, setDevOpen] = useState(false)
@@ -206,7 +205,7 @@ if (MAINTENANCE_MODE) {
         if (!supa || supa.error || !supa.uid) { setLoadError('Character not found. Sign out and create your character.'); return }
         const p: any = {
           uid, name:supa.name||'Pilot', race:supa.race||'human', raceName:supa.race_name||'Human',
-          archetype:supa.archetype||'True Fighter', cci:supa.cci||'DEX', bank:supa.bank||0,
+          archetype:supa.archetype||'True Fighter', cci:supa.cci||'DEX', bank:supa.bank||0, gender:supa.gender==='female'?'female':'male',
           gemDust:Number(supa.gem_dust)||0, essence:Number(supa.essence)||0,
           xp:supa.xp??0, gold:supa.gold??0, level:supa.level??1, hp:supa.hp??null,
           attributePoints:supa.attribute_points??0, kills:supa.kills??0,
@@ -507,7 +506,7 @@ if (MAINTENANCE_MODE) {
                 player={player} zone={zone} zoneId={zoneId} stamp={stamp}
                 activeTile={activeTile} menuOpen={menuOpen} mapOverlay={mapOverlay}
                 freeLevels={freeLevels} races={races}
-                mapMode={mapMode} zoneBg={zoneBg} avatarGender={avatarGender} onSetMapMode={setMapMode}
+                mapMode={mapMode} zoneBg={zoneBg} avatarGender={player.gender} onSetMapMode={setMapMode}
                 onMove={move} onEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } else showToast('Nothing to interact with here.') }}
                 onLogout={handleLogout} onSetMenuOpen={setMenuOpen} onSetActiveTab={setActiveTab}
                 onSetMapOverlay={setMapOverlay} onTileEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } }}
@@ -524,7 +523,7 @@ if (MAINTENANCE_MODE) {
                 onSetActiveTab={setActiveTab} onSetFilterState={setFilterState}
                 onSetEquipPopup={setEquipPopup} onEquipItem={equipItem} onUnequipItem={unequipItem}
                 onResetSave={resetSave} onUpdateName={updateName}
-                avatarGender={avatarGender} onSetAvatarGender={g=>{ setAvatarGender(g); try { localStorage.setItem('g_avatar', g) } catch {} }}
+                avatarGender={player.gender} onSetAvatarGender={g=>{ const p={...(playerRef.current||player), gender:g}; playerRef.current=p; setPlayer(p); savePlayerNow(p,'gender') }}
                 onToggleTheme={()=>{ const next=theme==='onyx'?'aether':'onyx'; setTheme(next); showToast(next==='onyx'?'Dark Mode on -- Onyx HUD':'Aether glass restored') }}
               />
             )}
