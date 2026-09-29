@@ -11,7 +11,7 @@ import {
   shopStock, tierInfo, buyItem, sellItem, sellPrice,
   socketCapacity, socketGem, unsocketGem, upgradeGems, fuseGems,
   groupPouch, countGems, gemInfo, gemEffectText, gemMinLevel,
-  FUSION_RECIPES, MAX_GEM_GRADE, UNSOCKET_COST, fuseCost,
+  FUSION_RECIPES, MAX_GEM_GRADE, ECONOMY, fuseCost,
   itemDisplayName, enchantmentLines,
   zoneIds, zoneInfo, exitDestinations, canEnterZone, travelTo, TELEPORT_COST, homeZone,
   shatterItem, shatterYield, infuseItem, infusionCost, rerollItemEnchant, rerollCost, SOULFORGE,
@@ -295,7 +295,7 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
   const [crucible, setCrucible] = useState<number[]>([])
   const [itemId, setItemId] = useState<string | null>(null)
   const gems: any[] = player.gems || []
-  const socketable = (player.inventory || []).filter((i: any) => socketCapacity(i, BASE_ITEMS) > 0)
+  const socketable = (player.inventory || []).filter((i: any) => socketCapacity(i, BASE_ITEMS) > 0 || (i.socketedGems || []).length > 0)
   const item = socketable.find((i: any) => i.instanceId === itemId) || null
   const itemBase = item ? BASE_ITEMS.find(b => b.id === item.baseItemId) : null
   const equipped = Object.values(player.equipment || {})
@@ -323,19 +323,20 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
             {item && (
               <>
                 <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                  {Array.from({ length: socketCapacity(item, BASE_ITEMS) }, (_, s) => {
+                  {/* Extra gems (sockets lowered in the God Editor) stay visible so they can be removed */}
+                  {Array.from({ length: Math.max(socketCapacity(item, BASE_ITEMS), (item.socketedGems || []).length) }, (_, s) => {
                     const g = (item.socketedGems || [])[s]
                     const gi = g ? gemInfo(g.id) : null
                     return (
                       <div key={s} className="gem-item" style={{ width: '72px', cursor: g ? 'pointer' : 'default' }}
-                        title={g ? `Unsocket (${UNSOCKET_COST} gold)` : 'Empty socket'}
+                        title={g ? `Unsocket (${ECONOMY.UNSOCKET_COST} gold)` : 'Empty socket'}
                         onClick={() => g && run(unsocketGem(player, item.instanceId, s))}>
                         {g && gi ? <><GemIcon id={g.id} size={30} /><span className="item-label">{gi.name.slice(0, 3)}{g.grade}</span></> : <span className="item-label" style={{ color: '#52525b' }}>Empty</span>}
                       </div>
                     )
                   })}
                 </div>
-                <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '6px' }}>Tap a socketed gem to remove it ({UNSOCKET_COST} gold). {itemBase?.name}</div>
+                <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '6px' }}>Tap a socketed gem to remove it ({ECONOMY.UNSOCKET_COST} gold). {itemBase?.name}</div>
                 {enchantmentLines(item).map((l, i) => <div key={i} style={{ fontSize: '10.5px', color: '#BF5AF2', marginTop: '2px' }}>✦ {l}</div>)}
               </>
             )}

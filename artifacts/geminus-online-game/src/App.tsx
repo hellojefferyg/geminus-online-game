@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import { spendAttributeBank, calcDerived as gddCalcDerived, races, GDD, DROPPER_TIERS, xpToLevel, getAttributeFocusOrder } from './gdd'
 import ZONES_DATA from './data/zones.json'
 import STAMPS_DATA from './data/stamps.json'
+import { BASE_ITEMS } from './data/baseItems'
 import BESTIARY_DATA from './data/bestiary.json'
 import { runTurn, applyTurnResult, getDefaultAction } from './managers/CombatManager'
 import { savePlayerNow } from './lib/saveQueue'
@@ -17,7 +18,7 @@ import InlinePanel from './game/components/InlinePanel'
 import ServicePanel from './game/components/ServicePanel'
 import DevPanel, { type DevFlags } from './game/components/DevPanel'
 import { LATTICE_VERSION, getStampById, loadZoneBackground, resolvePos, stepOn, tileAt } from './game/map/lattice'
-import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, romanToInt, GEM_POUCH_CAP, INVENTORY_CAP } from './systems/services'
+import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, romanToInt, ECONOMY, gemPouchCap } from './systems/services'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
 const MAINTENANCE_MODE = false;
@@ -36,33 +37,7 @@ function tileHere(zoneId: string, x: number, y: number): { tile: string; service
 // Races, GDD constants and gear tiers come from gdd.js so God Editor changes reach them.
 function getBankedLevelsLocal(ap: number): number { return Math.floor((ap || 0) / GDD.AP_PER_LEVEL) }
 
-// ─── ITEMS ────────────────────────────────────────────────────
-const BASE_ITEMS = [
-  { id: 'base_helm_1',      name: 'Novice Helm',        type: 'Armor',      subType: 'Helmet',    sockets: 2 },
-  { id: 'base_armor_1',     name: 'Novice Cuirass',     type: 'Armor',      subType: 'Armor',     sockets: 2 },
-  { id: 'base_gauntlets_1', name: 'Novice Gauntlets',   type: 'Armor',      subType: 'Gauntlets', sockets: 2 },
-  { id: 'base_leggings_1',  name: 'Novice Leggings',    type: 'Armor',      subType: 'Leggings',  sockets: 2 },
-  { id: 'base_boots_1',     name: 'Novice Boots',       type: 'Armor',      subType: 'Boots',     sockets: 2 },
-  { id: 'base_amulet_1',    name: 'Novice Pendant',     type: 'Amulet',     subType: 'Amulet',    sockets: 0 },
-  { id: 'base_ring_1',      name: 'Novice Ring',        type: 'Ring',       subType: 'Ring',      sockets: 0 },
-  { id: 'base_sword_1',     name: 'Novice Sword',       type: 'Weapons',    subType: 'Sword',     sockets: 2 },
-  { id: 'base_mace_1',      name: 'Novice Mace',        type: 'Weapons',    subType: 'Mace',      sockets: 2 },
-  { id: 'base_claw_1',      name: 'Novice Claw',        type: 'Weapons',    subType: 'Claw',      sockets: 2 },
-  { id: 'base_axe_1',       name: 'Novice Axe',         type: 'Weapons',    subType: 'Axe',       sockets: 2 },
-  { id: 'base_staff_1',     name: 'Novice Staff',       type: 'Weapons',    subType: 'Staff',     sockets: 2 },
-  { id: 'base_dagger_1',    name: 'Novice Dagger',      type: 'Weapons',    subType: 'Dagger',    sockets: 2 },
-  { id: 'base_bow_1',       name: 'Novice Bow',         type: 'Weapons',    subType: 'Bow',       sockets: 2 },
-  { id: 'base_arrow_1',     name: 'Novice Arrow',       type: 'Weapons',    subType: 'Arrow',     sockets: 0 },
-  { id: 'base_buffspell_1', name: 'Novice Warcry',      type: 'BuffSpells', subType: 'BuffSpell', sockets: 1 },
-  { id: 'base_fire_1',      name: 'Novice Fire Surge',  type: 'Spells',     subType: 'Fire',      sockets: 2 },
-  { id: 'base_cold_1',      name: 'Novice Frost Bolt',  type: 'Spells',     subType: 'Cold',      sockets: 2 },
-  { id: 'base_earth_1',     name: 'Novice Stone Spike', type: 'Spells',     subType: 'Earth',     sockets: 2 },
-  { id: 'base_air_1',       name: 'Novice Zephyr',      type: 'Spells',     subType: 'Air',       sockets: 2 },
-  { id: 'base_drain_1',     name: 'Novice Drain Touch', type: 'Spells',     subType: 'Drain',     sockets: 2 },
-  { id: 'base_arcane_1',    name: 'Novice Arcane Bolt', type: 'Spells',     subType: 'Arcane',    sockets: 2 },
-  { id: 'base_death_1',     name: 'Novice Death Coil',  type: 'Spells',     subType: 'Death',     sockets: 2 },
-  { id: 'base_offhand_1',   name: 'Novice Focus Orb',   type: 'OffHands',   subType: 'OffHand',   sockets: 1 },
-]
+// ─── ITEMS (src/data/baseItems.ts; editable in the God Editor) ─
 const SLOT_MODS: Record<string, any> = {
   Armor: { prop: 1.00, stat: 'AC' }, Helmet: { prop: 0.75, stat: 'AC' }, Boots: { prop: 0.75, stat: 'AC' },
   Leggings: { prop: 0.50, stat: 'AC', hitBonus: 0.10 }, Gauntlets: { prop: 0.50, stat: 'AC', classBonus: 0.15 },
@@ -367,7 +342,7 @@ if (MAINTENANCE_MODE) {
     let newPlayer = applyTurnResult({...current,inventory:[...(current.inventory||[])],equipment:{...(current.equipment||{})},gems:[...(current.gems||[])]},result)
     if (result.itemDrop) {
       const dropped = rollItemDrop(newPlayer.race, romanToInt(zd.gear))
-      if (dropped&&newPlayer.inventory.length<INVENTORY_CAP) {
+      if (dropped&&newPlayer.inventory.length<ECONOMY.INVENTORY_CAP) {
         newPlayer = {...newPlayer,inventory:[...newPlayer.inventory,dropped]}
         const droppedBase = BASE_ITEMS.find(b=>b.id===dropped.baseItemId)
         setLastItem(`${droppedBase?.name||'Item'} T${dropped.tier}`); setLastItemColor(RARITY_COLORS['Uncommon'])
@@ -375,14 +350,14 @@ if (MAINTENANCE_MODE) {
     }
     if (result.specialDrop?.kind==='gem') {
       const gId=rollGemId()
-      if (newPlayer.gems.length<GEM_POUCH_CAP) {
+      if (newPlayer.gems.length<gemPouchCap()) {
         newPlayer={...newPlayer,gems:[...newPlayer.gems,{id:gId,grade:result.specialDrop.grade||1}]}
         setLastGem(`${gemInfo(gId).name} G${result.specialDrop.grade||1}`); setLastGemColor(RARITY_COLORS['Rare'])
       }
     }
     if (result.specialDrop?.kind==='shadow') {
       const shadow=generateShadowItem(newPlayer,BASE_ITEMS)
-      if (shadow&&newPlayer.inventory.length<INVENTORY_CAP) {
+      if (shadow&&newPlayer.inventory.length<ECONOMY.INVENTORY_CAP) {
         newPlayer={...newPlayer,inventory:[...newPlayer.inventory,shadow]}
         const sb=BASE_ITEMS.find(b=>b.id===shadow.baseItemId)
         setLastItem(`${itemDisplayName(shadow,sb)} T${shadow.tier}`); setLastItemColor(RARITY_COLORS[shadow.type])

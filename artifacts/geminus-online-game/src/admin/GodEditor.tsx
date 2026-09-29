@@ -13,6 +13,8 @@ import {
   ZonesEditor, GemsEditor, EnchantmentsEditor,
 } from './sections'
 import { RolesPanel, HistoryPanel, SectionHeader } from './panels'
+import { EconomyEditor, SoulforgeEditor, SalvageEditor } from './economy'
+import { RaceStartsEditor, ZoneMonstersEditor, ItemsEditor } from './content'
 
 type PageId = SectionId | 'roles' | 'history' | 'backup'
 
@@ -22,9 +24,11 @@ const NAV: { group: string; items: { id: PageId; label: string }[] }[] = [
     { id: 'shadowLadder', label: 'Shadow Ladder' }, { id: 'pureGemFarms', label: 'Gem Farms' },
   ] },
   { group: 'World', items: [
-    { id: 'zones', label: 'Zones' }, { id: 'starterMonsters', label: 'Starter Monsters' }, { id: 'forge', label: 'Monster Forge' },
+    { id: 'zones', label: 'Zones' }, { id: 'starterMonsters', label: 'Starter Monsters' }, { id: 'zoneMonsters', label: 'Zone Monsters' },
+    { id: 'forge', label: 'Monster Forge' }, { id: 'raceStarts', label: 'Races' },
   ] },
-  { group: 'Items', items: [{ id: 'gems', label: 'Gems' }, { id: 'enchantments', label: 'Enchantments' }] },
+  { group: 'Items', items: [{ id: 'baseItems', label: 'Items' }, { id: 'gems', label: 'Gems' }, { id: 'enchantments', label: 'Enchantments' }] },
+  { group: 'Buildings', items: [{ id: 'economy', label: 'Shops & Services' }, { id: 'soulforge', label: 'Soulforge' }, { id: 'salvage', label: 'Gem Salvage' }] },
   { group: 'Admin', items: [{ id: 'roles', label: 'Roles' }, { id: 'history', label: 'History' }, { id: 'backup', label: 'Backup' }] },
 ]
 const TITLES: Record<string, string> = Object.fromEntries(NAV.flatMap(g => g.items.map(i => [i.id, i.label])))
@@ -134,6 +138,12 @@ export default function GodEditor({ uid }: { uid: string }) {
       case 'forge': return <ForgeEditor {...props} />
       case 'gems': return <GemsEditor {...props} />
       case 'enchantments': return <EnchantmentsEditor {...props} />
+      case 'economy': return <EconomyEditor {...props} />
+      case 'soulforge': return <SoulforgeEditor {...props} />
+      case 'salvage': return <SalvageEditor {...props} />
+      case 'raceStarts': return <RaceStartsEditor {...props} />
+      case 'zoneMonsters': return <ZoneMonstersEditor {...props} />
+      case 'baseItems': return <ItemsEditor {...props} />
     }
   }
 

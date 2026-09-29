@@ -1,6 +1,7 @@
 // src/game/components/CombatPanel.tsx
 // HP bar, XP bar, last item drop, last gem drop
 // Sits between PlayerHUD and CombatConsole
+import { ECONOMY, gemPouchCap } from '../../systems/services'
 
 interface CombatPanelProps {
   hp: number
@@ -68,11 +69,11 @@ export default function CombatPanel({
         <div style={{ ...divider, paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={row}>
             <span style={{ minWidth: 0 }}><span style={label}>Last Gem:</span> <span style={{ color: lastGemColor, fontWeight: 700 }}>{lastGem}</span></span>
-            <span style={{ flexShrink: 0 }}><span style={label}>Gem Pouch:</span> <span style={num}>{gemCount}/200</span></span>
+            <span style={{ flexShrink: 0 }}><span style={label}>Gem Pouch:</span> <span style={num}>{gemCount}/{gemPouchCap()}</span></span>
           </div>
           <div style={row}>
             <span style={{ minWidth: 0 }}><span style={label}>Last Item:</span> <span style={{ color: lastItemColor, fontWeight: 700 }}>{lastItem}</span></span>
-            <span style={{ flexShrink: 0 }}><span style={label}>Inventory:</span> <span style={num}>{inventoryCount}/200</span></span>
+            <span style={{ flexShrink: 0 }}><span style={label}>Inventory:</span> <span style={num}>{inventoryCount}/{ECONOMY.INVENTORY_CAP}</span></span>
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@
 import ItemIcon, { itemQuality } from './ItemIcon'
 import GemIcon from './GemIcon'
 import AccordionItem from './AccordionItem'
-import { gemInfo, gemEffectText, itemDisplayName, enchantmentLines } from '../../systems/services'
+import { gemInfo, gemEffectText, itemDisplayName, enchantmentLines, gemPouchCap } from '../../systems/services'
 
 function fmt(n: number): string {
   if (!n || isNaN(n)) return '0'
@@ -109,7 +109,7 @@ export default function InlinePanel({
             </AccordionItem>
           )
         })}
-        <AccordionItem title={<span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#fff' }}>💎 Gem Pouch <span style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'monospace' }}>({player.gems.length}/200)</span></span>}>
+        <AccordionItem title={<span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: '#fff' }}>💎 Gem Pouch <span style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'monospace' }}>({player.gems.length}/{gemPouchCap()})</span></span>}>
           <div className="gem-pouch-grid">
             {player.gems.length === 0
               ? <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '16px', color: '#71717a', fontSize: '11px' }}>No gems stored</div>

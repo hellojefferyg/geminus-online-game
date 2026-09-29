@@ -10,7 +10,10 @@
 
 import { supabase } from '../supabase'
 import { GDD, DROPPER_TIERS, ZONE_TYPES, SHADOW_LADDER, PURE_GEM_FARMS } from '../gdd.js'
-import { FORGE } from './services'
+import { FORGE, ECONOMY, SOULFORGE, SALVAGE } from './services'
+import { BASE_ITEMS } from '../data/baseItems'
+import { BASE_STATS } from '../data/raceStarts'
+import ZONE_MONSTERS from '../data/zoneMonsters.json'
 import ZONES_DATA from '../data/zones.json'
 import BESTIARY_DATA from '../data/bestiary.json'
 import GEMS_DATA from '../data/gems.json'
@@ -22,6 +25,7 @@ export const DRAFT_STORAGE_KEY = 'g_balance_draft'
 export type SectionId =
   | 'gdd' | 'dropperTiers' | 'zoneTypes' | 'shadowLadder' | 'pureGemFarms'
   | 'zones' | 'starterMonsters' | 'forge' | 'gems' | 'enchantments'
+  | 'economy' | 'soulforge' | 'salvage' | 'raceStarts' | 'zoneMonsters' | 'baseItems'
 
 export type Balance = Partial<Record<SectionId, any>>
 
@@ -37,7 +41,16 @@ const TARGETS: Record<SectionId, () => any> = {
   forge: () => FORGE,
   gems: () => GEMS_DATA,
   enchantments: () => (ENCHANT_DATA as any).enchantments,
+  economy: () => ECONOMY,
+  soulforge: () => SOULFORGE,
+  salvage: () => SALVAGE,
+  raceStarts: () => BASE_STATS,
+  zoneMonsters: () => ZONE_MONSTERS,
+  baseItems: () => BASE_ITEMS,
 }
+
+const RANKS = ['Minion', 'Standard', 'Elite', 'Boss']
+const STATS = ['STR', 'DEX', 'VIT', 'NTL', 'WIS']
 
 export const SECTION_IDS = Object.keys(TARGETS) as SectionId[]
 
@@ -99,6 +112,48 @@ export function validateSection(id: SectionId, v: any): string | null {
     case 'enchantments':
       if (!Array.isArray(v)) return 'must be a list'
       for (const e of v) for (const [k, arr] of Object.entries<any>(e?.stats || {})) if (!Array.isArray(arr) || arr.length !== 9 || !arr.every(isNum)) return `${e?.id ?? '?'}.${k} needs 9 numbers`
+      return null
+    case 'economy':
+      if (!isObj(v)) return 'must be an object'
+      for (const k of Object.keys(def)) if (!isNum(v[k]) || v[k] < 0) return `${k} must be a number, 0 or more`
+      if (v.SELL_RATE > 1 || v.ITEM_DROP_CHANCE > 1) return 'sell rate and drop chance are fractions (0-1)'
+      if (v.INVENTORY_CAP < 1) return 'inventory size must be at least 1'
+      return null
+    case 'soulforge':
+      if (!isObj(v)) return 'must be an object'
+      for (const k of Object.keys(def)) if (k !== 'SHATTER_MULT' && k !== 'REROLL_ESSENCE' && (!isNum(v[k]) || v[k] < 0)) return `${k} must be a number, 0 or more`
+      if (!isObj(v.SHATTER_MULT) || !isNum(v.SHATTER_MULT.Shadow) || !isNum(v.SHATTER_MULT.Echo)) return 'shatter multipliers must be numbers'
+      if (!Array.isArray(v.REROLL_ESSENCE) || v.REROLL_ESSENCE.length !== 20 || !v.REROLL_ESSENCE.every(isNum)) return 'reroll essence needs 20 numbers (tiers 1-20)'
+      if (v.CRIT_CHANCE > 1) return 'crit chance is a fraction (0-1)'
+      return null
+    case 'salvage':
+      if (!isObj(v) || !isObj(v.DUST) || !isObj(v.MASS_LEVEL)) return 'must have dust and mass-salvage tables'
+      for (let g = 1; g <= 9; g++) {
+        const d = v.DUST[g]
+        if (!Array.isArray(d) || d.length !== 2 || !d.every(isNum) || d[0] < 0 || d[1] < d[0]) return `G${g} dust must be min ≤ max`
+        if (!isNum(v.MASS_LEVEL[g])) return `G${g} mass-salvage level must be a number`
+      }
+      return null
+    case 'raceStarts':
+      if (!isObj(v)) return 'must be an object'
+      for (const r of Object.keys(def)) for (const st of STATS) if (!isNum(v[r]?.[st]) || v[r][st] < 0) return `${r}.${st} must be a number, 0 or more`
+      return null
+    case 'zoneMonsters':
+      if (!isObj(v)) return 'must be an object'
+      for (const z of Object.keys(def)) {
+        if (z.startsWith('_')) continue
+        if (!Array.isArray(v[z]) || v[z].length !== def[z].length) return `${z} must keep ${def[z].length} monster slots`
+        for (const m of v[z]) if (m !== null && (typeof m?.name !== 'string' || !m.name.trim() || !RANKS.includes(m.rank))) return `${z}: every monster needs a name and a rank`
+      }
+      return null
+    case 'baseItems':
+      if (!Array.isArray(v) || v.length !== def.length) return `must keep all ${def.length} items`
+      for (let i = 0; i < v.length; i++) {
+        const it = v[i], d = def[i]
+        if (it?.id !== d.id || it.type !== d.type || it.subType !== d.subType) return `${d.id}: id, type and slot can't change`
+        if (typeof it.name !== 'string' || !it.name.trim()) return `${d.id} needs a name`
+        if (!Number.isInteger(it.sockets) || it.sockets < 0 || it.sockets > 6) return `${d.id} sockets must be 0-6`
+      }
       return null
   }
 }
