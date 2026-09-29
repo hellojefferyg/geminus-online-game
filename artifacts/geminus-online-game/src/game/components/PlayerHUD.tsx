@@ -2,7 +2,7 @@
 // Player name, level, race, archetype, stats, gold, bank, minimap, dpad, zone info, logout, menu
 import { useRef, useEffect, useState } from 'react'
 import DPad from './DPad'
-import { type MapMode, type Stamp, drawLattice, loadBuildingArt } from '../map/lattice'
+import { type MapMode, type Stamp, drawLattice, loadAvatar, loadBuildingArt } from '../map/lattice'
 import { romanToInt } from '../../systems/services'
 
 const hudBtn = (color: string): React.CSSProperties => ({
@@ -44,6 +44,8 @@ interface PlayerHUDProps {
   /** Same stamp either way: squares in text mode, hexes (over the zone painting) in graphic mode */
   mapMode: MapMode
   zoneBg: HTMLImageElement | null
+  avatarGender: 'male' | 'female'
+  onSetMapMode: (mode: MapMode) => void
   onMove: (dx: number, dy: number) => void
   onEnter: () => void
   onLogout: () => void
@@ -56,7 +58,7 @@ interface PlayerHUDProps {
 
 export default function PlayerHUD({
   player, zone, zoneId, stamp, activeTile, menuOpen, mapOverlay,
-  freeLevels, races, mapMode, zoneBg, onMove, onEnter, onLogout, onSetMenuOpen,
+  freeLevels, races, mapMode, zoneBg, avatarGender, onSetMapMode, onMove, onEnter, onLogout, onSetMenuOpen,
   onSetActiveTab, onSetMapOverlay, onTileEnter, onEstate,
 }: PlayerHUDProps) {
   const miniMapRef = useRef<HTMLCanvasElement>(null)
@@ -66,6 +68,15 @@ export default function PlayerHUD({
   const [artTick, setArtTick] = useState(0)
   useEffect(() => { if (mapMode === 'graphic') loadBuildingArt(() => setArtTick(t => t + 1)) }, [mapMode])
 
+  // Your race's character walks the hexes in graphic mode
+  const [avatar, setAvatar] = useState<HTMLImageElement | null>(null)
+  useEffect(() => {
+    if (mapMode !== 'graphic' || !player.race) { setAvatar(null); return }
+    let live = true
+    const img = loadAvatar(player.race, avatarGender, () => { if (live) setAvatar(img) })
+    return () => { live = false }
+  }, [mapMode, player.race, avatarGender])
+
   const px = player.pos?.x ?? stamp.spawn[0]
   const py = player.pos?.y ?? stamp.spawn[1]
   const graphic = mapMode === 'graphic'
@@ -73,12 +84,12 @@ export default function PlayerHUD({
   const popupOnTop = py < stamp.size / 2
 
   useEffect(() => {
-    if (miniMapRef.current) drawLattice(miniMapRef.current, { stamp, mode: mapMode, px, py, big: false, bg: zoneBg })
-  }, [stamp, mapMode, px, py, zoneBg, artTick])
+    if (miniMapRef.current) drawLattice(miniMapRef.current, { stamp, mode: mapMode, px, py, big: false, bg: zoneBg, avatar })
+  }, [stamp, mapMode, px, py, zoneBg, artTick, avatar])
 
   useEffect(() => {
-    if (zoneCanvasRef.current && mapOverlay) drawLattice(zoneCanvasRef.current, { stamp, mode: mapMode, px, py, big: true, bg: zoneBg })
-  }, [stamp, mapMode, px, py, zoneBg, artTick, mapOverlay])
+    if (zoneCanvasRef.current && mapOverlay) drawLattice(zoneCanvasRef.current, { stamp, mode: mapMode, px, py, big: true, bg: zoneBg, avatar })
+  }, [stamp, mapMode, px, py, zoneBg, artTick, avatar, mapOverlay])
 
   return (
     <>
@@ -169,6 +180,13 @@ export default function PlayerHUD({
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px' }}>
               <DPad onMove={onMove} onEnter={onEnter} />
+            </div>
+            {/* Map style, right under the D-pad */}
+            <div style={{ display: 'flex', gap: '6px', marginTop: '8px', padding: '3px', borderRadius: '10px', background: 'rgba(0,8,14,0.6)', border: '1px solid rgba(62,224,255,0.2)' }}>
+              {(['text', 'graphic'] as const).map(m => (
+                <button key={m} onClick={() => onSetMapMode(m)} className={`footer-tab-button${mapMode === m ? ' active' : ''}`}
+                  style={{ flex: 1, padding: '7px 0', fontSize: '11px', fontWeight: 800 }}>{m === 'text' ? 'Text' : 'Graphics'}</button>
+              ))}
             </div>
           </section>
         </div>

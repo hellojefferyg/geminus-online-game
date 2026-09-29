@@ -46,8 +46,8 @@ interface InlinePanelProps {
   onResetSave: () => void
   onUpdateName: (name: string) => void
   onToggleTheme: () => void
-  mapMode: 'graphic' | 'text'
-  onSetMapMode: (mode: 'graphic' | 'text') => void
+  avatarGender: 'male' | 'female'
+  onSetAvatarGender: (g: 'male' | 'female') => void
 }
 
 export default function InlinePanel({
@@ -55,7 +55,7 @@ export default function InlinePanel({
   BASE_ITEMS, DROPPER_TIERS, SLOT_MODS,
   onSetActiveTab, onSetFilterState, onSetEquipPopup,
   onEquipItem, onUnequipItem, onResetSave, onUpdateName, onToggleTheme,
-  mapMode, onSetMapMode,
+  avatarGender, onSetAvatarGender,
 }: InlinePanelProps) {
 
   const renderInventoryBags = () => {
@@ -254,10 +254,10 @@ export default function InlinePanel({
                 <button className="footer-tab-button" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={onToggleTheme}>{theme === 'onyx' ? 'On' : 'Off'}</button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '10px' }}>
-                <div><div style={{ color: '#e4e4e7' }}>Map Mode</div><div style={{ fontSize: '10px', color: '#71717a' }}>{mapMode === 'graphic' ? 'Painted zone maps you walk around' : 'Simple lettered grid'}</div></div>
+                <div><div style={{ color: '#e4e4e7' }}>Map Character</div><div style={{ fontSize: '10px', color: '#71717a' }}>Your race on the Graphics map</div></div>
                 <div style={{ display: 'flex', gap: '4px' }}>
-                  {(['graphic', 'text'] as const).map(m => (
-                    <button key={m} className={`footer-tab-button${mapMode === m ? ' active' : ''}`} style={{ padding: '6px 10px', fontSize: '11px' }} onClick={() => onSetMapMode(m)}>{m === 'graphic' ? 'Graphic' : 'Text'}</button>
+                  {(['male', 'female'] as const).map(g => (
+                    <button key={g} className={`footer-tab-button${avatarGender === g ? ' active' : ''}`} style={{ padding: '6px 10px', fontSize: '11px' }} onClick={() => onSetAvatarGender(g)}>{g === 'male' ? 'Male' : 'Female'}</button>
                   ))}
                 </div>
               </div>

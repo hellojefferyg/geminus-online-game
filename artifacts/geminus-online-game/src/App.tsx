@@ -175,6 +175,7 @@ if (MAINTENANCE_MODE) {
   const [activeTile, setActiveTile] = useState<{ tile:string; service:any; x:number; y:number } | null>(null)
   const [activeService, setActiveService] = useState<any>(null)
   const [mapMode, setMapMode] = useState<'graphic'|'text'>(() => { try { return localStorage.getItem('g_mapmode')==='text' ? 'text' : 'graphic' } catch { return 'graphic' } })
+  const [avatarGender, setAvatarGender] = useState<'male'|'female'>(() => { try { return localStorage.getItem('g_avatar')==='female' ? 'female' : 'male' } catch { return 'male' } })
   const [zoneBg, setZoneBg] = useState<HTMLImageElement|null>(null)
   const [role, setRole] = useState<Role>('player')
   const [devOpen, setDevOpen] = useState(false)
@@ -506,7 +507,7 @@ if (MAINTENANCE_MODE) {
                 player={player} zone={zone} zoneId={zoneId} stamp={stamp}
                 activeTile={activeTile} menuOpen={menuOpen} mapOverlay={mapOverlay}
                 freeLevels={freeLevels} races={races}
-                mapMode={mapMode} zoneBg={zoneBg}
+                mapMode={mapMode} zoneBg={zoneBg} avatarGender={avatarGender} onSetMapMode={setMapMode}
                 onMove={move} onEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } else showToast('Nothing to interact with here.') }}
                 onLogout={handleLogout} onSetMenuOpen={setMenuOpen} onSetActiveTab={setActiveTab}
                 onSetMapOverlay={setMapOverlay} onTileEnter={()=>{ if (activeTile) { setMapOverlay(false); setActiveService(activeTile.service) } }}
@@ -523,7 +524,7 @@ if (MAINTENANCE_MODE) {
                 onSetActiveTab={setActiveTab} onSetFilterState={setFilterState}
                 onSetEquipPopup={setEquipPopup} onEquipItem={equipItem} onUnequipItem={unequipItem}
                 onResetSave={resetSave} onUpdateName={updateName}
-                mapMode={mapMode} onSetMapMode={m=>{ setMapMode(m); showToast(m==='graphic'?'Graphic map on':'Text map on') }}
+                avatarGender={avatarGender} onSetAvatarGender={g=>{ setAvatarGender(g); try { localStorage.setItem('g_avatar', g) } catch {} }}
                 onToggleTheme={()=>{ const next=theme==='onyx'?'aether':'onyx'; setTheme(next); showToast(next==='onyx'?'Dark Mode on -- Onyx HUD':'Aether glass restored') }}
               />
             )}
