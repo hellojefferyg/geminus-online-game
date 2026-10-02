@@ -37,6 +37,7 @@ Every file the live game actually uses, with what it does. All game code is insi
 
 ## The file tree
 
+
 ```
 artifacts/geminus-online-game/
 ├── index.html                  1
