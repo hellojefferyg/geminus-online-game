@@ -643,3 +643,86 @@ export function travelTo(p: any, zoneId: string, cost = 0): ServiceResult {
     msg: `Arrived at ${zoneId}: ${zone.name}${cost ? ` (-${cost.toLocaleString()} gold)` : ''}.`,
   }
 }
+
+// ─── ADDED FROM JOSH ──────────────────────────────────────────────
+// Josh's MerchantManager.js (buyback), VaultManager.js. Safety Lock, Upgrade Advisor and
+// Artisan XP are not in Josh's files; they follow GDD 3.5 / 3.7 / Appendix N.
+
+// ADDED FROM JOSH
+/** GDD 3.7: buyback recovers the last 5 sold items at sold price. Josh's JS kept 10; GDD says 5. */
+export const BUYBACK_LIMIT = 5
+
+// ADDED FROM JOSH
+/** Sell + record in p.buyback (newest first). Respects Safety Lock. */
+export function sellItemWithBuyback(p: any, instanceId: string): ServiceResult {
+  const item = (p.inventory || []).find((i: any) => i.instanceId === instanceId)
+  if (item && isItemLocked(p, item)) return fail('Item is locked.')
+  const res = sellItem(p, instanceId)
+  if (!res.ok) return res
+  const price = sellPrice(item)
+  const buyback = [{ ...item, buybackPrice: price }, ...(p.buyback || [])].slice(0, BUYBACK_LIMIT)
+  return { ...res, player: { ...res.player, buyback } }
+}
+
+// ADDED FROM JOSH
+export function buybackItem(p: any, index: number): ServiceResult {
+  const entry = (p.buyback || [])[index]
+  if (!entry) return fail('Item not found.')
+  if ((p.gold || 0) < entry.buybackPrice) return fail('Insufficient gold for buyback.')
+  if ((p.inventory || []).length >= ECONOMY.INVENTORY_CAP) return fail('Inventory is full.')
+  const { buybackPrice, ...clean } = entry
+  const next = clonePlayer(p)
+  next.gold = (p.gold || 0) - buybackPrice
+  next.inventory.push(clean)
+  next.buyback = (p.buyback || []).filter((_: any, i: number) => i !== index)
+  return { ok: true, player: next, msg: `Recovered ${clean.name || 'item'}.` }
+}
+
+// ADDED FROM JOSH
+/** GDD 3.7: players lock items against sale; equipped items lock automatically. */
+export function isItemLocked(p: any, item: any): boolean {
+  return !!item?.locked || Object.values(p.equipment || {}).includes(item?.instanceId)
+}
+
+// ADDED FROM JOSH
+export function toggleItemLock(p: any, instanceId: string): ServiceResult {
+  const item = (p.inventory || []).find((i: any) => i.instanceId === instanceId)
+  if (!item) return fail('Item not found.')
+  const next = clonePlayer(p)
+  next.inventory = next.inventory.map((i: any) => (i.instanceId === instanceId ? { ...i, locked: !i.locked } : i))
+  return { ok: true, player: next, msg: item.locked ? 'Item unlocked.' : 'Item locked.' }
+}
+
+// ADDED FROM JOSH
+/** GDD 3.7: per equipped slot, the best affordable, level-eligible tier above the current one. */
+export function upgradeAdvisor(p: any, BASE_ITEMS: any[]): { slot: string; baseItemId: string; tier: number; cost: number }[] {
+  const out: { slot: string; baseItemId: string; tier: number; cost: number }[] = []
+  for (const [slot, instId] of Object.entries(p.equipment || {})) {
+    const cur = (p.inventory || []).find((i: any) => i.instanceId === instId)
+    if (!cur || cur.type !== 'Dropper') continue
+    const base = BASE_ITEMS.find(b => b.id === cur.baseItemId)
+    if (!base) continue
+    const better = DROPPER_TIERS
+      .filter(t => t.tier > (cur.tier || 1) && (p.level || 1) >= t.levelReq && (p.gold || 0) >= t.gold)
+      .sort((a, b) => b.tier - a.tier)[0]
+    if (better) out.push({ slot, baseItemId: base.id, tier: better.tier, cost: better.gold })
+  }
+  return out
+}
+
+// ADDED FROM JOSH
+/** GDD Appendix N: XP Required for Level N = 100 * 1.5^(N-1). */
+export const ARTISAN_XP = { socket: 10, unsocket: 5, fuse: 25, crucible: 25, salvage: 2 } as const
+export const artisanXpRequired = (level: number) => Math.floor(100 * Math.pow(1.5, level - 1))
+
+// ADDED FROM JOSH
+/** Adds Artisan XP (permanent, account-wide) and levels up. Returns a new player. */
+export function addArtisanXp(p: any, action: keyof typeof ARTISAN_XP): any {
+  let level = p.artisanLevel || 1
+  let xp = (p.artisanXp || 0) + ARTISAN_XP[action]
+  while (xp >= artisanXpRequired(level)) {
+    xp -= artisanXpRequired(level)
+    level++
+  }
+  return { ...p, artisanLevel: level, artisanXp: xp }
+}

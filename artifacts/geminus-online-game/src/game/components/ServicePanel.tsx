@@ -23,7 +23,8 @@ import { Sanctuary as SanctuaryScreen } from './screens/Sanctuary'
 import { Bank as GrandVaultScreen } from './screens/GrandVault'
 import { ArmoryShop as ArmoryScreen } from './screens/ArmoryShop'
 import { ArcanumShop as ArcanumScreen } from './screens/ArcanumShop'
-import { GemcutterWorkshop as GemcutterScreen } from './screens/GemcutterWorkshop'
+import { GemcutterWorkshop as GemcutterScreen, GemcutterErrorBoundary } from './screens/GemcutterWorkshop'
+import { toGemcutterPlayer, gemcutterHandlers } from './screens/gemcutterBridge'
 import { Soulforge as SoulforgeScreen } from './screens/Soulforge'
 import { TeleportHub as TeleportScreen } from './screens/TeleporterScreen'
 
@@ -102,12 +103,13 @@ export default function ServicePanel({ service, player, BASE_ITEMS, onResult, on
   }
   if (act === 'gemcutter') {
     return (
-      <GemcutterScreen
-        player={player}
-        BASE_ITEMS={BASE_ITEMS}
-        onResult={run}
-        onClose={onClose}
-      />
+      <GemcutterErrorBoundary>
+        <GemcutterScreen
+          player={toGemcutterPlayer(player, BASE_ITEMS)}
+          {...gemcutterHandlers(player, BASE_ITEMS, run)}
+          onClose={onClose}
+        />
+      </GemcutterErrorBoundary>
     )
   }
   if (act === 'soulforge') {
