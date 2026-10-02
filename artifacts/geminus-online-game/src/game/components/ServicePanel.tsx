@@ -18,6 +18,15 @@ import {
   salvageGems, salvageRange, MASS_SALVAGE_LEVEL, crucibleFuse, crucibleCost,
 } from '../../systems/services'
 
+// ─── Gemini-built screen imports ──────────────────────────────────
+import { Sanctuary as SanctuaryScreen } from './screens/Sanctuary'
+import { Bank as GrandVaultScreen } from './screens/GrandVault'
+import { ArmoryShop as ArmoryScreen } from './screens/ArmoryShop'
+import { ArcanumShop as ArcanumScreen } from './screens/ArcanumShop'
+import { GemcutterWorkshop as GemcutterScreen } from './screens/GemcutterWorkshop'
+import { Soulforge as SoulforgeScreen } from './screens/Soulforge'
+import { TeleportHub as TeleportScreen } from './screens/TeleporterScreen'
+
 function fmt(n: number): string {
   if (!n || isNaN(n)) return '0'
   const a = Math.abs(n)
@@ -26,7 +35,6 @@ function fmt(n: number): string {
   if (a >= 1e3) return (n / 1e3).toFixed(1) + 'K'
   return Math.floor(n).toLocaleString()
 }
-
 
 const card: React.CSSProperties = { padding: '10px', borderRadius: '12px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.12)' }
 const label: React.CSSProperties = { fontSize: '10px', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }
@@ -50,26 +58,90 @@ export default function ServicePanel({ service, player, BASE_ITEMS, onResult, on
   const act = service.action
   const run = (result: ServiceResult) => onResult(result, act)
 
+  // ─── Gemini screens: full viewport, bypass wrapper header ────────
+  if (act === 'sanctuary') {
+    return (
+      <SanctuaryScreen
+        player={player}
+        onRevive={(strategy) => run(sanctuaryRest(player, strategy))}
+        onClose={onClose}
+      />
+    )
+  }
+  if (act === 'vault') {
+    return (
+      <GrandVaultScreen
+        player={player}
+        onDeposit={(amt: number) => run(depositGold(player, amt))}
+        onWithdraw={(amt: number) => run(withdrawGold(player, amt))}
+        onClose={onClose}
+      />
+    )
+  }
+  if (act === 'armory') {
+    return (
+      <ArmoryScreen
+        player={player}
+        BASE_ITEMS={BASE_ITEMS}
+        onBuy={(itemId: string, tier: number) => run(buyItem(player, itemId, tier, BASE_ITEMS))}
+        onSell={(instanceId: string) => run(sellItem(player, instanceId))}
+        onClose={onClose}
+      />
+    )
+  }
+  if (act === 'arcanium') {
+    return (
+      <ArcanumScreen
+        player={player}
+        BASE_ITEMS={BASE_ITEMS}
+        onBuy={(itemId: string, tier: number) => run(buyItem(player, itemId, tier, BASE_ITEMS))}
+        onSell={(instanceId: string) => run(sellItem(player, instanceId))}
+        onClose={onClose}
+      />
+    )
+  }
+  if (act === 'gemcutter') {
+    return (
+      <GemcutterScreen
+        player={player}
+        BASE_ITEMS={BASE_ITEMS}
+        onResult={run}
+        onClose={onClose}
+      />
+    )
+  }
+  if (act === 'soulforge') {
+    return (
+      <SoulforgeScreen
+        player={player}
+        BASE_ITEMS={BASE_ITEMS}
+        onResult={run}
+        onClose={onClose}
+      />
+    )
+  }
+  if (act === 'portal' || act === 'teleport') {
+    return (
+      <TeleportScreen
+        player={player}
+        onWarp={(zone: any, cost: number) => run(travelTo(player, zone.id, cost))}
+        onClose={onClose}
+      />
+    )
+  }
+
+  // ─── Fallback wrapper for screens not yet converted ──────────────
   return (
     <div className="glass-panel" style={{ padding: '10px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexShrink: 0 }}>
         <div>
           <div style={{ fontSize: '14px', fontWeight: 800, color: service.color, letterSpacing: '0.04em' }}>{service.label}</div>
-          <div style={{ fontSize: '10.5px', color: '#FFD60A', fontFamily: 'monospace' }}>Gold {fmt(player.gold)} · Bank {fmt(player.bank)}
-            {act === 'gemcutter' && <span style={{ color: '#5AC8FA' }}> · Dust {fmt(player.gemDust)}</span>}
-            {act === 'soulforge' && <span style={{ color: '#BF5AF2' }}> · Essence {fmt(player.essence)}</span>}
-          </div>
+          <div style={{ fontSize: '10.5px', color: '#FFD60A', fontFamily: 'monospace' }}>Gold {fmt(player.gold)} · Bank {fmt(player.bank)}</div>
         </div>
         <button onClick={onClose} style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'black', border: '1px solid rgba(255,255,255,0.2)', color: '#d4d4d8', fontSize: '18px', cursor: 'pointer' }}>×</button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', maxHeight: '480px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {act === 'sanctuary' && <Sanctuary player={player} run={run} />}
-        {act === 'vault' && <Vault player={player} run={run} />}
-        {(act === 'armory' || act === 'arcanium') && <Merchant shop={act} player={player} BASE_ITEMS={BASE_ITEMS} run={run} />}
-        {act === 'gemcutter' && <Gemcutter player={player} BASE_ITEMS={BASE_ITEMS} run={run} />}
-        {(act === 'portal' || act === 'teleport') && <Travel mode={act} player={player} run={run} />}
-        {act === 'soulforge' && <Soulforge player={player} BASE_ITEMS={BASE_ITEMS} run={run} />}
-        {!['sanctuary', 'vault', 'armory', 'arcanium', 'gemcutter', 'portal', 'teleport', 'soulforge'].includes(act) && <div style={muted}>{service.label} -- coming soon!</div>}
+        <div style={muted}>{service.label} -- coming soon!</div>
       </div>
     </div>
   )
@@ -77,7 +149,7 @@ export default function ServicePanel({ service, player, BASE_ITEMS, onResult, on
 
 type Run = (r: ServiceResult) => void
 
-// ─── Sanctuary ────────────────────────────────────────────────────
+// ─── Sanctuary (legacy fallback -- kept for reference) ─────────────
 function Sanctuary({ player, run }: { player: any; run: Run }) {
   const max = player.derivedStats?.maxHp ?? 100
   const hp = Math.round(player.hp ?? max)
@@ -90,7 +162,7 @@ function Sanctuary({ player, run }: { player: any; run: Run }) {
   )
 }
 
-// ─── Gilded Vault ─────────────────────────────────────────────────
+// ─── Gilded Vault (legacy fallback -- kept for reference) ──────────
 function Vault({ player, run }: { player: any; run: Run }) {
   const [amount, setAmount] = useState('')
   const amt = Number(amount.replace(/[^\d]/g, '')) || 0
@@ -110,7 +182,7 @@ function Vault({ player, run }: { player: any; run: Run }) {
   )
 }
 
-// ─── Armory / Arcanium ────────────────────────────────────────────
+// ─── Armory / Arcanium (legacy fallback -- kept for reference) ─────
 function Merchant({ shop, player, BASE_ITEMS, run }: { shop: string; player: any; BASE_ITEMS: any[]; run: Run }) {
   const [tab, setTab] = useState<'buy' | 'sell'>('buy')
   const [tier, setTier] = useState(1)
@@ -170,7 +242,7 @@ function Merchant({ shop, player, BASE_ITEMS, run }: { shop: string; player: any
   )
 }
 
-// ─── Exits + Teleporter ───────────────────────────────────────────
+// ─── Exits + Teleporter (legacy fallback -- kept for reference) ────
 const TYPE_COLORS: Record<string, string> = {
   starter: '#3EE0FF', xp: '#30D158', gold: '#FFD60A', shadow: '#BF5AF2', gem: '#5AC8FA', prestige: '#FF9500',
 }
@@ -218,7 +290,7 @@ function Travel({ mode, player, run }: { mode: string; player: any; run: Run }) 
   )
 }
 
-// ─── Soulforge ────────────────────────────────────────────────────
+// ─── Soulforge (legacy fallback -- kept for reference) ─────────────
 function Soulforge({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]; run: Run }) {
   const [tab, setTab] = useState<'infuse' | 'reroll' | 'shatter'>('infuse')
   const [itemId, setItemId] = useState<string | null>(null)
@@ -289,7 +361,7 @@ function Soulforge({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
   )
 }
 
-// ─── Gemcutter ────────────────────────────────────────────────────
+// ─── Gemcutter (legacy fallback -- kept for reference) ─────────────
 function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]; run: Run }) {
   const [tab, setTab] = useState<'socket' | 'upgrade' | 'fuse' | 'salvage' | 'crucible'>('socket')
   const [crucible, setCrucible] = useState<number[]>([])
@@ -308,7 +380,6 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
           <button key={k} className={`hud-nav-pill${tab === k ? ' tab-active' : ''}`} style={{ flex: 1, textAlign: 'center', fontSize: '10px', padding: '2px 4px' }} onClick={() => { setTab(k); setCrucible([]) }}>{k.charAt(0).toUpperCase() + k.slice(1)}</button>
         ))}
       </div>
-
       {tab === 'socket' && (
         <>
           <div style={card}>
@@ -323,7 +394,6 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
             {item && (
               <>
                 <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                  {/* Extra gems (sockets lowered in the God Editor) stay visible so they can be removed */}
                   {Array.from({ length: Math.max(socketCapacity(item, BASE_ITEMS), (item.socketedGems || []).length) }, (_, s) => {
                     const g = (item.socketedGems || [])[s]
                     const gi = g ? gemInfo(g.id) : null
@@ -360,7 +430,6 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
           </AccordionItem>
         </>
       )}
-
       {tab === 'upgrade' && (
         <div style={card}>
           <span style={label}>Combine 3 identical gems → next grade</span>
@@ -378,7 +447,6 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
           })}
         </div>
       )}
-
       {tab === 'fuse' && (
         <div style={card}>
           <span style={label}>Fuse two gems of the same grade</span>
@@ -402,7 +470,6 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
           })}
         </div>
       )}
-
       {tab === 'salvage' && (
         <div style={card}>
           <span style={label}>Break gems down into Gem Dust</span>
@@ -431,7 +498,6 @@ function Gemcutter({ player, BASE_ITEMS, run }: { player: any; BASE_ITEMS: any[]
           )}
         </div>
       )}
-
       {tab === 'crucible' && (
         <div style={card}>
           <span style={label}>Two gems of the same grade + dust → a random gem</span>
