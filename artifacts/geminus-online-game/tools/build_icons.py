@@ -90,10 +90,9 @@ def main() -> None:
             continue
         # Jewelry/ holds the ring and necklace art; equipment/ copies are the fallback
         dest = OUT / "items" / quality / f"{slot}.webp"
-        if dest.exists() and top != "jewelry":
-            continue
-        save_icon(f, dest)
         manifest["items"].setdefault(quality, [])
+        if not (dest.exists() and top != "jewelry"):
+            save_icon(f, dest)
         if slot not in manifest["items"][quality]:
             manifest["items"][quality].append(slot)
 
