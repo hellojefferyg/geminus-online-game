@@ -11,7 +11,7 @@ export class ZoneManager {
     this.MapRenderer = deps.MapRenderer;
     this.MapDataStore = deps.MapDataStore;
     this.WorldMapManager = null; // Set later via setManagers
-    this.UIManager = null; // Set later
+    this.UIManager = null; // Set later 
     this.CombatManager = null; // Set later
     this.isInitialized = false;
     this.mapRenderer = null;
