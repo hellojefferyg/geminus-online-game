@@ -16,6 +16,19 @@
  *   Flat shadow 1/150
  */
 import GEMS_DATA from './data/gems.json'
+// ADDED FROM JOSH — new data files
+import { alignmentData } from './data/alignmentData.js'
+import { arcanumData } from './data/arcanumData.js'
+import { armoryData } from './data/armoryData.js'
+import { bestiaryData } from './data/bestiaryData.js'
+import { clanData } from './data/clanData.js'
+import { dropTableData as dropTables } from './data/dropTables.js'
+import { GDD_INITIAL_DATA as gdd_seed } from './data/gdd_seed.js'
+import { jewelryData } from './data/jewelryData.js'
+import { masteryData } from './data/masteryData.js'
+import { monsterTitles as monsterTitlesData } from './data/monsterTitles.js'
+import { resourceData } from './data/resourceData.js'
+import { soulforgeData } from './data/soulforgeData.js'
 
 export const GDD_VERSION = '3.4-live-2026-09-26'
 
@@ -965,6 +978,20 @@ export const equipmentSlotConfig = [
 
 // ADDED FROM JOSH
 export const progression = formulas.progression
+
+// ADDED FROM JOSH — engine-facing data exports
+export const alignment = alignmentData
+export const arcanum = arcanumData
+export const armory = armoryData
+export const bestiary = bestiaryData
+export const clans = clanData
+export const drops = dropTables
+export const seed = gdd_seed
+export const jewelry = jewelryData
+export const mastery = masteryData
+export const monsterTitles = monsterTitlesData
+export const resources = resourceData
+export const soulforge = soulforgeData
 
 // ADDED FROM JOSH
 // Master item registry builder. Josh's version imported armory/arcanum/jewelry/gems data

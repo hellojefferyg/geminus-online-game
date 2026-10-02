@@ -1,7 +1,7 @@
 // src/admin/GodEditor.tsx
 // Geminus God Editor (/admin): edit live game balance without code. Devs only.
 // Edits build a draft; Publish writes it to Supabase game_config and every player gets it on next load.
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabase'
 import {
   DEFAULTS, SECTION_IDS, fetchMyRole, fetchPublishedBalance, publishBalance, validateSection,
@@ -16,7 +16,18 @@ import { RolesPanel, HistoryPanel, SectionHeader } from './panels'
 import { EconomyEditor, SoulforgeEditor, SalvageEditor } from './economy'
 import { RaceStartsEditor, ZoneMonstersEditor, ItemsEditor } from './content'
 
-type PageId = SectionId | 'roles' | 'history' | 'backup'
+// ADDED FROM JOSH — new admin panels
+const JOSH_PANELS: Record<string, { label: string; Comp: React.LazyExoticComponent<React.ComponentType<any>> }> = {
+  bestiaryEditor: { label: 'Bestiary', Comp: lazy(() => import('./BestiaryEditor.jsx')) },
+  alignmentEditor: { label: 'Alignment', Comp: lazy(() => import('./AlignmentEditor.jsx')) },
+  masteryEditor: { label: 'Mastery', Comp: lazy(() => import('./MasteryEditor.jsx')) },
+  questBuilder: { label: 'Quest Builder', Comp: lazy(() => import('./QuestBuilder.jsx')) },
+  titleBalancer: { label: 'Title Balancer', Comp: lazy(() => import('./TitleBalancer.jsx')) },
+  dropTableEditor: { label: 'Drop Tables', Comp: lazy(() => import('./DropTableEditor.jsx')) },
+  resurrectionEditor: { label: 'Resurrection', Comp: lazy(() => import('./ResurrectionEditor.jsx')) },
+}
+
+type PageId = SectionId | 'roles' | 'history' | 'backup' | keyof typeof JOSH_PANELS
 
 const NAV: { group: string; items: { id: PageId; label: string }[] }[] = [
   { group: 'Core', items: [
@@ -29,6 +40,8 @@ const NAV: { group: string; items: { id: PageId; label: string }[] }[] = [
   ] },
   { group: 'Items', items: [{ id: 'baseItems', label: 'Items' }, { id: 'gems', label: 'Gems' }, { id: 'enchantments', label: 'Enchantments' }] },
   { group: 'Buildings', items: [{ id: 'economy', label: 'Shops & Services' }, { id: 'soulforge', label: 'Soulforge' }, { id: 'salvage', label: 'Gem Salvage' }] },
+  // ADDED FROM JOSH
+  { group: 'Josh Panels', items: Object.entries(JOSH_PANELS).map(([id, p]) => ({ id: id as PageId, label: p.label })) },
   { group: 'Admin', items: [{ id: 'roles', label: 'Roles' }, { id: 'history', label: 'History' }, { id: 'backup', label: 'Backup' }] },
 ]
 const TITLES: Record<string, string> = Object.fromEntries(NAV.flatMap(g => g.items.map(i => [i.id, i.label])))
@@ -209,6 +222,8 @@ export default function GodEditor({ uid }: { uid: string }) {
               {sectionEditor(id)}
             </>
           })()}
+          {/* ADDED FROM JOSH */}
+          {page in JOSH_PANELS && (() => { const P = JOSH_PANELS[page as string].Comp; return <Suspense fallback={<div>Loading…</div>}><P /></Suspense> })()}
           {page === 'roles' && <><SectionHeader title="Roles" changedFromPublished={false} overridden={false} onReset={() => {}} /><RolesPanel myUid={uid} notify={notify} /></>}
           {page === 'history' && <><SectionHeader title="History" changedFromPublished={false} overridden={false} onReset={() => {}} />
             <HistoryPanel names={names} onLoad={(d, v) => { setDraft(JSON.parse(JSON.stringify(d))); notify(`Version ${v} loaded into the editor. Publish to make it live.`) }} /></>}
