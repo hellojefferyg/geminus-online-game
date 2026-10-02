@@ -1,4 +1,5 @@
--- NOT YET APPLIED. Apply after api/player/save.js is deployed.
+-- Applied to the live project on 2026-10-02 (via SQL editor; trigger created without the drop).
+-- Rollback: drop trigger players_guard on public.players;
 -- Progression is written only by api/player/save.js (service role). Browsers may still:
 --   * insert their own row at SignUp (progression forced to defaults)
 --   * set race / stats once at RaceSelect (while race is blank)
