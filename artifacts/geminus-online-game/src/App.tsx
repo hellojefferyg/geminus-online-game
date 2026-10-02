@@ -1,13 +1,13 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from './supabase'
-import { spendAttributeBank, calcDerived as gddCalcDerived, races, GDD, DROPPER_TIERS, xpToLevel, getAttributeFocusOrder } from './gdd'
+import { spendAttributeBank, calcDerived as gddCalcDerived, races, GDD, DROPPER_TIERS, xpToLevel, getAttributeFocusOrder, applyLiveRow } from './gdd'
 import ZONES_DATA from './data/zones.json'
 import STAMPS_DATA from './data/stamps.json'
 import { BASE_ITEMS } from './data/baseItems'
 import BESTIARY_DATA from './data/bestiary.json'
 import { runTurn, applyTurnResult, getDefaultAction } from './managers/CombatManager'
-import { savePlayerNow } from './lib/saveQueue'
+import { savePlayerNow, flush as flushSaves, recordKill, onServerCorrection } from './lib/saveQueue'
 import { fetchMyRole, loadLiveBalance, type Role } from './systems/balance'
 import { LIVE_CHANNELS, isLiveChannel, loadRecent, subscribeChat, sendChat, deleteChat, type ChatLine } from './lib/chat'
 import PlayerHUD from './game/components/PlayerHUD'
@@ -157,8 +157,21 @@ if (MAINTENANCE_MODE) {
   const [balanceInfo, setBalanceInfo] = useState<{ version: number | null; draft: boolean }>({ version: null, draft: false })
   const smokeRef = useRef<HTMLCanvasElement>(null)
   const playerRef = useRef<any>(null)
+  const fightTurnsRef = useRef(0)
 
   const showToast = useCallback((msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2800) }, [])
+
+  // Server is authoritative: when api/player/save.js rejects part of a save, adopt its canonical row
+  useEffect(() => {
+    onServerCorrection((row) => {
+      const cur = playerRef.current; if (!cur) return
+      const p = applyLiveRow({ ...cur }, row)
+      p.xpToNextLevel = xpToLevel(p.level)
+      gddCalcDerived(p, BASE_ITEMS); playerRef.current = p; setPlayer(p)
+      showToast('Progress re-synced with the server.')
+    })
+    return () => onServerCorrection(null)
+  }, [showToast])
   useEffect(() => { playerRef.current = player }, [player])
 
   useEffect(() => {
@@ -288,6 +301,7 @@ if (MAINTENANCE_MODE) {
   const handleLogout = async () => {
     if (!window.confirm('Log out of Geminus?')) return
     await savePlayerNow(playerRef.current,'logout')
+    await flushSaves()
     await supabase.auth.signOut(); window.location.reload()
   }
 
@@ -319,7 +333,7 @@ if (MAINTENANCE_MODE) {
       const targets = zoneTargets(player.pos?.zoneId||'Z01', BESTIARY_DATA.starter)
       const t = targets.find((x:any) => x.id===selectedTargetId)||targets[0]
       if (!t) { showToast('Select target first.'); return }
-      setCombatMonster({...t,currentHP:t.hp}); setEnemyCurrentHP(t.hp); setCombatLog([]); setEngaged(true)
+      setCombatMonster({...t,currentHP:t.hp}); setEnemyCurrentHP(t.hp); setCombatLog([]); setEngaged(true); fightTurnsRef.current=0
     } else { setEngaged(false); setEnemyCurrentHP(null); setCombatLog([]) }
   }
 
@@ -332,6 +346,7 @@ if (MAINTENANCE_MODE) {
     const isDev = role === 'dev'
     const turnPlayer = isDev && devFlags.oneHit ? { ...current, derivedStats: { ...current.derivedStats, hitChance: 100, WC: 1e12, SC: 1e12 } } : current
     const result = runTurn(turnPlayer, combatMonster, action, {id:zoneId,type:zd.type,gemMin:zd.gemMin,gemMax:zd.gemMax})
+    fightTurnsRef.current += 1
     if (isDev && devFlags.noDamage) { result.monsterDmg = 0; result.playerHp = current.hp; if (result.status === 'DEFEAT') result.status = 'ONGOING' }
     if (isDev && devFlags.forceDrop && result.status === 'VICTORY') {
       result.specialDrop = devFlags.forceDrop === 'gem' ? { kind: 'gem', grade: zd.gemMax || 1 } : { kind: 'shadow' }
@@ -364,6 +379,7 @@ if (MAINTENANCE_MODE) {
       }
     }
     if (result.status==='VICTORY') {
+      recordKill({ monsterId: String(combatMonster.id), zoneId, turns: fightTurnsRef.current, at: Date.now() })
       setCombatLog([{text:`You hit ${combatMonster.name} for ${Math.round(result.playerDmg)}!`,color:result.crit?'#FFD60A':'#fff'},{text:'Enemy is DEAD!',color:'#30D158'},{text:`+${result.xpGained} XP  +${result.goldGained} Gold`,color:'#FFD60A'}])
       setEngaged(false); setEnemyCurrentHP(null)
       if (result.leveledUp) { showToast(`⬆ Level Up! Level ${result.newLevel}`); setBattleStats(prev=>({...prev,levels:prev.levels+1})) }
@@ -448,7 +464,7 @@ if (MAINTENANCE_MODE) {
       {loadError
         ? (<><p style={{ color:'#f87171', fontSize:'13px', textAlign:'center', maxWidth:'320px', lineHeight:1.5, margin:0 }}>{loadError}</p><button onClick={()=>window.location.reload()} style={{ padding:'10px 24px', borderRadius:'10px', background:'rgba(62,224,255,0.1)', border:'1px solid rgba(62,224,255,0.4)', color:'#3EE0FF', fontSize:'13px', fontWeight:700, cursor:'pointer' }}>Retry</button></>)
         : <p style={{ color:'#64748b', fontSize:'12px', letterSpacing:'0.08em', margin:0 }}>Loading your character...</p>}
-      <button onClick={async()=>{ try{await supabase.auth.signOut()}catch{} try{localStorage.clear()}catch{} window.location.replace(window.location.origin) }}
+      <button onClick={async()=>{ try{await flushSaves()}catch{} try{await supabase.auth.signOut()}catch{} try{localStorage.clear()}catch{} window.location.replace(window.location.origin) }}
         style={{ marginTop:'8px', background:'rgba(255,55,95,0.1)', border:'1px solid rgba(255,55,95,0.3)', borderRadius:'8px', color:'#f87171', fontSize:'13px', fontWeight:700, cursor:'pointer', padding:'10px 28px' }}>Sign Out</button>
     </div>
   )
