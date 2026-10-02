@@ -21,7 +21,7 @@ import { LATTICE_VERSION, getStampById, loadZoneBackground, resolvePos, stepOn, 
 import { type ServiceResult, rollGemId, gemInfo, generateShadowItem, itemDisplayName, zoneTargets, romanToInt, ECONOMY, gemPouchCap } from './systems/services'
 
 // ─── ZONE HELPERS ─────────────────────────────────────────────
-const MAINTENANCE_MODE = false;
+const MAINTENANCE_MODE = true;
 const ZONES: Record<string, any> = ZONES_DATA
 const STAMPS: Record<string, any> = STAMPS_DATA
 function getZone(zoneId: string) { return ZONES[zoneId] || ZONES['Z01'] }
