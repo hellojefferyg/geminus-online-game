@@ -66,6 +66,8 @@ def main() -> None:
         if not f.is_file() or f.suffix.lower() != ".png":
             continue
         kind, _, name = f.stem.partition(":")
+        if not name:                      # no "Kind:" prefix, e.g. "Sanguine_Heart .PNG"
+            kind, name = "", kind
         key = norm(name)
         top = f.relative_to(ASSETS).parts[0].lower()
 
@@ -88,10 +90,9 @@ def main() -> None:
             continue
         # Jewelry/ holds the ring and necklace art; equipment/ copies are the fallback
         dest = OUT / "items" / quality / f"{slot}.webp"
-        if dest.exists() and top != "jewelry":
-            continue
-        save_icon(f, dest)
         manifest["items"].setdefault(quality, [])
+        if not (dest.exists() and top != "jewelry"):
+            save_icon(f, dest)
         if slot not in manifest["items"][quality]:
             manifest["items"][quality].append(slot)
 
