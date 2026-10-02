@@ -1,5 +1,5 @@
 import React from 'react';
-import { useStudioStore } from '../../stores/StudioStore';
+import { useStudioStore } from '../data/StudioStore.js';
 import { Save, HeartPulse, Skull, ShieldAlert, Coins, MessageSquare } from 'lucide-react';
 import './admin.css';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useStudioStore } from '../../stores/StudioStore';
+import { useStudioStore } from '../data/StudioStore.js';
 import { Save, Skull, Sparkles, Zap, Shield, TrendingUp, Ghost } from 'lucide-react';
 import './admin.css';
 

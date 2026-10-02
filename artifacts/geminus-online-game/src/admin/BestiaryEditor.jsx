@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useStudioStore } from '../../stores/StudioStore';
+import { useStudioStore } from '../data/StudioStore.js';
 import { Save, Plus, Trash2, Skull, Sword, Shield, Coins, Check } from "lucide-react";import './admin.css';
-import { getScaledMobStats } from "../../utils/combatUtils";
+import { getScaledMobStats } from "../data/combatUtils.js";
 // Difficulty Tiers
 const TIERS = ["Minion", "Standard", "Elite", "Mini-Boss", "Boss", "God"];
 const TIER_COLORS = {

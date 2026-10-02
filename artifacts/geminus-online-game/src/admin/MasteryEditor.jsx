@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useStudioStore } from '../../stores/StudioStore';
+import { useStudioStore } from '../data/StudioStore.js';
 import { Save, GraduationCap, Zap, TrendingUp, Target, Users } from 'lucide-react';
 import './admin.css';
 

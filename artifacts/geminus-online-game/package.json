@@ -10,10 +10,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    
-     "@supabase/supabase-js": "^2.45.0",
-  
-    "@vercel/node": "^3.0.0"
+    "@supabase/supabase-js": "^2.45.0",
+    "@vercel/node": "^3.0.0",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",

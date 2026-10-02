@@ -1,5 +1,5 @@
 import React from 'react';
-import { useStudioStore } from '../../stores/StudioStore';
+import { useStudioStore } from '../data/StudioStore.js';
 import { Save, Scale, Sun, Moon, Sparkles, ChevronRight } from 'lucide-react';
 import './admin.css';
 

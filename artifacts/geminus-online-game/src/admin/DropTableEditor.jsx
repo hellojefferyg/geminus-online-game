@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useStudioStore } from '../../stores/StudioStore';
+import { useStudioStore } from '../data/StudioStore.js';
 import { Save, Package, GitMerge, Trash2, Plus, Sword, Shield, Gem } from 'lucide-react';
 import './admin.css';
 

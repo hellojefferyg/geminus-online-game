@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useStudioStore } from '../../stores/StudioStore';
+import { useStudioStore } from '../data/StudioStore.js';
 import { 
     Save, Plus, Trash2, Scroll, Target, Clock, 
     Trophy, Sword, Skull, Search, Gem, Sparkles, Coins 
