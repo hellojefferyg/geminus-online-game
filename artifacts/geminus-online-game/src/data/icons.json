@@ -13,6 +13,7 @@
     "dullstone",
     "echoingcore",
     "harvestercore",
+    "juggernautseye",
     "leechrite",
     "loreheart",
     "lorestone",
@@ -26,6 +27,7 @@
     "mindstone",
     "obsidianheart",
     "sagerite",
+    "sanguineheart",
     "sapstone",
     "shadowcore",
     "shadowtreasure",
@@ -51,6 +53,8 @@
     "lorestone",
     "shadowlore",
     "shadowwar",
+    "titancore",
+    "vampiricessence",
     "warlite",
     "warmidas",
     "warstone"
@@ -161,8 +165,5 @@
       "sword"
     ]
   },
-  "missingGems": [
-    "juggernautseye",
-    "sanguineheart"
-  ]
+  "missingGems": []
 }
