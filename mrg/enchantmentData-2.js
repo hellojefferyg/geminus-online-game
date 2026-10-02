@@ -16,7 +16,7 @@ export const enchantmentData = {
         4,
         5
       ]
-    },
+    }, 
     "ENCH-LORE-HRT": {
       "id": "ENCH-LORE-HRT",
       "name": "LoreHeart Enchanted",
